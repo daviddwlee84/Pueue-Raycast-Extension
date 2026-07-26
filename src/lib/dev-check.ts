@@ -40,6 +40,15 @@ import fixture from "./fixtures/state.json";
 import stderrFixture from "./fixtures/stderr.json";
 import { argvFor, longFlagsOf, subcommandOf } from "./pueue/argv";
 import { applyMutation } from "./optimistic";
+import {
+  parallelLabel,
+  progressBar,
+  progressPercent,
+  summarizeAll,
+  summarizeGroup,
+  summarizeGroups,
+  summaryLine,
+} from "./group-summary";
 import type { Mutation } from "./pueue/transport";
 import {
   classify,
@@ -680,6 +689,140 @@ check(
     return JSON.stringify(state) === before;
   })(),
   true,
+);
+
+console.log("\ngroup summaries — the numbers a batch is judged by");
+// A fixed clock, so "elapsed" is a value rather than a moving target.
+const gnow = Date.parse("2026-07-26T09:15:00.000+08:00");
+const allTasks = taskList(state.tasks);
+const sums = summarizeGroups(state.groups, allTasks, gnow);
+const g = (name: string) => sums.find((x) => x.name === name)!;
+
+check(
+  "one summary per group, sorted",
+  sums.map((x) => x.name),
+  ["build", "default", "gpu"],
+);
+check(
+  "default counts every task in the group",
+  [g("default").total, g("default").finished, g("default").progress],
+  [8, 4, 0.5],
+);
+check(
+  "finished means Done, whatever the result — a failure is finished",
+  [g("default").succeeded, g("default").failed],
+  [1, 3],
+);
+check(
+  "failed ids come out ascending, ready to name in a confirmation",
+  g("default").failedIds,
+  [7, 8, 9],
+);
+check(
+  "the live states are split rather than lumped",
+  [
+    g("default").running,
+    g("default").queued,
+    g("default").paused,
+    g("default").stashed,
+  ],
+  [1, 0, 1, 2],
+);
+// Task 5 is Locked wrapping Done{Failed:127}. Reading the outer tag would file
+// it under "locked" and leave the group looking permanently unfinished.
+check(
+  "a Locked task counts as what it is underneath",
+  [g("build").finished, g("build").failed, g("build").failedIds],
+  [1, 1, [5]],
+);
+check(
+  "the average is over finished tasks only",
+  g("default").avgMs,
+  (1250 + 10 + 10000 + 0) / 4,
+);
+check(
+  "a running task contributes no duration sample",
+  g("default").avgMs !== undefined &&
+    g("default").avgMs! < gnow - Date.parse("2026-07-26T09:03:01.000+08:00"),
+  true,
+);
+// 2 pending (1 running + 1 paused) x 2815 ms / 1 slot. Were the two stashed
+// tasks counted, this would be 11260 — a queue that is waiting on a person
+// would report an ETA as though it were waiting on itself.
+check(
+  "the ETA covers pending work and skips the stash",
+  g("default").etaMs,
+  5630,
+);
+check(
+  "one finished task is not enough to estimate from",
+  [g("build").avgMs, g("build").etaMs],
+  [30000, undefined],
+);
+check(
+  "unlimited parallelism does not divide by zero",
+  summarizeGroup(
+    "default",
+    { status: "Running", parallel_tasks: 0 },
+    allTasks,
+    gnow,
+  ).etaMs,
+  5630,
+);
+check(
+  "elapsed runs to now while something is still going",
+  g("default").elapsedMs,
+  gnow - Date.parse("2026-07-26T09:03:01.000+08:00"),
+);
+check(
+  "and freezes at the last end when nothing is",
+  g("build").elapsedMs,
+  30000,
+);
+check(
+  "an empty group is 0 %, never NaN",
+  (() => {
+    const empty = summarizeGroup(
+      "io",
+      { status: "Running", parallel_tasks: 2 },
+      [],
+      gnow,
+    );
+    return [empty.total, empty.progress, empty.avgMs, empty.etaMs];
+  })(),
+  [0, 0, undefined, undefined],
+);
+check("the overall rolls up every group", summarizeAll(sums), {
+  total: 12,
+  finished: 6,
+  failed: 5,
+  running: 1,
+  progress: 0.5,
+});
+
+console.log("\ngroup summary presentation");
+check("a bar fills proportionally", progressBar(0.5, 10), "█████░░░░░");
+check("empty", progressBar(0, 10), "░░░░░░░░░░");
+check("full", progressBar(1, 10), "██████████");
+check(
+  "out of range clamps rather than repeating a negative",
+  progressBar(-1, 4),
+  "░░░░",
+);
+check("percent is rounded", progressPercent(0.3999), "40%");
+check("0 parallelism reads as unlimited", parallelLabel(0), "∞");
+check("a real limit reads as itself", parallelLabel(4), "4");
+check(
+  "the summary line drops the zero terms",
+  summaryLine(g("default")),
+  "4/8 done · 1 running · 1 paused · 2 stashed · 3 failed",
+);
+check(
+  "an empty group has nothing to report and says so",
+  summaryLine(
+    summarizeGroup("io", { status: "Running", parallel_tasks: 1 }, [], gnow),
+  ),
+  "no tasks",
 );
 
 console.log("\nconnection parsing");
