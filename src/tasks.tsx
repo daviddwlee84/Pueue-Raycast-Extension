@@ -19,6 +19,7 @@ import {
   getPreferenceValues,
   type LaunchProps,
   Keyboard,
+  useNavigation,
 } from "@raycast/api";
 import { useCachedPromise, useCachedState } from "@raycast/utils";
 
@@ -75,29 +76,56 @@ import {
 export default function Command(
   props: LaunchProps<{
     arguments: Arguments.Tasks;
-    launchContext?: { group?: string };
+    launchContext?: {
+      group?: string;
+      logTaskId?: number;
+      connectionName?: string;
+    };
   }>,
 ) {
   const prefs = getPreferenceValues<Preferences.Tasks>();
   const query = props.arguments?.query ?? "";
 
+  const conn = useConnection();
+  const { push } = useNavigation();
+
+  // A caller that names a connection wins over the remembered one, for the
+  // same reason the group context does: it asked for a specific thing.
+  const contextConnection = props.launchContext?.connectionName;
+  useEffect(() => {
+    if (contextConnection) conn.setName(contextConnection);
+  }, [contextConnection]);
+
+  // The remembered group filter is keyed by connection.
+  //
+  // Groups belong to a daemon, and the dropdown deliberately keeps an unknown
+  // value selectable rather than silently resetting it — so a single shared key
+  // meant switching to another machine left the list filtered by a group that
+  // only exists elsewhere, showing nothing. Observed. Scoping the key makes the
+  // mistake unrepresentable instead of merely corrected.
+  const [group, setGroup] = useCachedState(
+    `tasks.group:${conn.connection.name}`,
+    props.launchContext?.group ?? ALL_GROUPS,
+  );
   // The Groups view launches this command with a group in its context; that
   // choice must win over the remembered filter, or "Show Tasks in Group" would
   // silently show a different group.
-  const [group, setGroup] = useCachedState(
-    "tasks.group",
-    props.launchContext?.group ?? ALL_GROUPS,
-  );
   const contextGroup = props.launchContext?.group;
   useEffect(() => {
     if (contextGroup) setGroup(contextGroup);
   }, [contextGroup]);
+
   const [showDetail, setShowDetail] = useCachedState(
     "tasks.showDetail",
     prefs.showDetail,
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const conn = useConnection();
+
+  // The menu bar can hand us a task to open the log for. Wait for the state to
+  // arrive before pushing, and push only once — a re-render on every poll must
+  // not stack log views on the navigation stack.
+  const pushedLog = useRef(false);
+  const logTaskId = props.launchContext?.logTaskId;
 
   // Separate controllers: a superseded state read must not cancel an in-flight
   // group read, and vice versa.
@@ -170,6 +198,20 @@ export default function Command(
     state.revalidate();
     groupState.revalidate();
   };
+
+  useEffect(() => {
+    if (pushedLog.current || logTaskId === undefined) return;
+    // Wait for the requested connection to actually become active. Setting it
+    // is asynchronous, and task ids are per-daemon — pushing early opens
+    // whichever daemon was selected before, which looks like it worked and
+    // shows someone else's task with the same id. Observed, not theorised.
+    if (contextConnection && conn.connection.name !== contextConnection) return;
+
+    const target = state.data?.tasks[String(logTaskId)];
+    if (!target) return;
+    pushedLog.current = true;
+    push(<TaskLogView task={target} connection={conn.connection} />);
+  }, [logTaskId, contextConnection, state.data, conn.connection, push]);
 
   // A failed first read has nothing to show alongside the error, so the error
   // takes the whole screen.

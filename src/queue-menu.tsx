@@ -40,6 +40,8 @@ import { useCachedPromise } from "@raycast/utils";
 import { describeError } from "./lib/error-states";
 import { statusTag } from "./lib/format";
 import {
+  defaultConnection,
+  hasEverRun,
   isFailed,
   isPaused,
   isQueued,
@@ -74,6 +76,28 @@ export default function Command() {
       },
     },
   );
+
+  /**
+   * Open the Tasks command on this task's log.
+   *
+   * The menu bar can show that something failed but not *why*, and "Restart" or
+   * "Remove" isn't a decision anyone can make without reading the error first.
+   * This is the way out of the menu into the detail.
+   */
+  function showLog(taskId: number) {
+    launchCommand({
+      name: "tasks",
+      type: LaunchType.UserInitiated,
+      // The connection has to travel with the id. Tasks remembers whichever
+      // daemon you last selected, and the menu bar always reads the default —
+      // so without this, a task id from one daemon gets looked up on another
+      // and the log silently fails to open.
+      context: {
+        logTaskId: taskId,
+        connectionName: defaultConnection().name,
+      },
+    }).catch(() => {});
+  }
 
   /** Run a mutation from a menu item. No window, so feedback is a HUD. */
   async function run(m: Mutation, done: string) {
@@ -133,6 +157,7 @@ export default function Command() {
         title="Running"
         tasks={running}
         limit={perSection}
+        onShowLog={showLog}
         actionsFor={(task) => [
           {
             title: "Kill",
@@ -155,6 +180,7 @@ export default function Command() {
         title="Queued"
         tasks={queued}
         limit={perSection}
+        onShowLog={showLog}
         actionsFor={(task) => [
           {
             title: "Start Now",
@@ -183,6 +209,7 @@ export default function Command() {
         title="Failed"
         tasks={failed}
         limit={perSection}
+        onShowLog={showLog}
         actionsFor={(task) => [
           // Two genuinely different operations, verified against the daemon:
           // --not-in-place mints a new task id and keeps the old log; --in-place
@@ -346,6 +373,7 @@ function TaskSection(props: {
   limit: number;
   actionsFor: (task: Task) => ItemAction[];
   run: (m: Mutation, done: string) => void;
+  onShowLog: (taskId: number) => void;
 }) {
   if (props.tasks.length === 0) return null;
   const shown = props.tasks.slice(0, props.limit);
@@ -364,6 +392,15 @@ function TaskSection(props: {
         >
           <MenuBarExtra.Item title={statusTag(task)} />
           <MenuBarExtra.Section>
+            {/* First, because deciding what to do about a failure requires
+                seeing it. hasEverRun keeps it off tasks with no log at all. */}
+            {hasEverRun(task) ? (
+              <MenuBarExtra.Item
+                title="Show Log…"
+                icon={Icon.Text}
+                onAction={() => props.onShowLog(task.id)}
+              />
+            ) : null}
             {props
               .actionsFor(task)
               .map((a) =>
