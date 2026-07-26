@@ -27,6 +27,7 @@ import {
   firstLine,
   isBadQuery,
   isBinaryMissing,
+  isHostUnreachable,
   isDaemonDown,
   isBrewManagedDaemon,
   PueueError,
@@ -227,6 +228,55 @@ export function describeError(
           title: "Open Extension Preferences",
           icon: Icon.Gear,
           run: openExtensionPreferences,
+        },
+      ],
+      structural: true,
+    };
+  }
+
+  if (isHostUnreachable(error)) {
+    const host = connection?.name ?? "the remote host";
+    return {
+      icon: Icon.Globe,
+      title: `Can't reach ${host}`,
+      shortTitle: "Host unreachable",
+      description:
+        "SSH could not connect. This is a network or SSH problem, not a pueue one.",
+      markdown: [
+        `# Can't reach ${host}`,
+        "",
+        "SSH could not open a connection, so nothing pueue-related has been",
+        "attempted yet. The daemon may be perfectly healthy.",
+        "",
+        "### What pueue's SSH attempt reported",
+        "",
+        fence(detail),
+        "",
+        "### Things to check",
+        "",
+        "- Is the host reachable at all? `ssh " + (connection?.name ?? "your-host") + " true`",
+        "- Is the name right? The connection's host field is passed to `ssh`",
+        "  verbatim, so a `~/.ssh/config` alias works — but a typo looks exactly",
+        "  like an unreachable machine.",
+        "- Is key or agent auth set up? The extension passes `BatchMode=yes`, so a",
+        "  password prompt fails immediately rather than hanging with nowhere to type.",
+        "- Is the machine asleep, or on a network you're no longer on?",
+        "",
+        "The connection attempt is capped at five seconds, so this is a fast",
+        "failure rather than a hang.",
+      ].join("\n"),
+      actions: [
+        {
+          id: "prefs",
+          title: "Open Extension Preferences",
+          icon: Icon.Gear,
+          run: openExtensionPreferences,
+        },
+        {
+          id: "copy-test",
+          title: "Copy an SSH Test Command",
+          icon: Icon.Clipboard,
+          copy: `ssh -o BatchMode=yes -o ConnectTimeout=5 ${connection?.name ?? "your-host"} 'pueue status'`,
         },
       ],
       structural: true,

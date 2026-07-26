@@ -74,6 +74,56 @@ export function multiplexArgs(): string[] {
 }
 
 /**
+ * How long to wait for the TCP connection, in seconds.
+ *
+ * Without this ssh does not give up at all: a host that black-holes packets
+ * (no RST, no ICMP) left ssh still trying after 45 seconds, and only our own
+ * exec timeout ended it — 30 seconds during which the menu bar command is
+ * blocked and its own menu items don't respond. Measured; with
+ * ConnectTimeout=5 the same host fails in 5.1 s.
+ *
+ * Five seconds is generous for a LAN box or a reachable server, and short
+ * enough that a wrong hostname feels like an error rather than a hang.
+ */
+const CONNECT_TIMEOUT_S = 5;
+
+/**
+ * Bound a connection that opens and then stalls mid-command.
+ *
+ * ConnectTimeout only covers the TCP handshake. A link that drops after the
+ * session is established would otherwise hang until the exec timeout, so ask
+ * for keepalives and give up after three missed ones.
+ */
+const ALIVE_INTERVAL_S = 5;
+const ALIVE_COUNT_MAX = 3;
+
+/** Options that stop an unreachable host from hanging the UI. */
+export function reachabilityArgs(): string[] {
+  return [
+    "-o",
+    `ConnectTimeout=${CONNECT_TIMEOUT_S}`,
+    "-o",
+    `ServerAliveInterval=${ALIVE_INTERVAL_S}`,
+    "-o",
+    `ServerAliveCountMax=${ALIVE_COUNT_MAX}`,
+  ];
+}
+
+/**
+ * True when ssh could not reach the host at all, as opposed to pueue failing.
+ *
+ * Worth separating: the remedy is "check the host, the tunnel, or your
+ * network", which has nothing to do with pueue or the daemon. Left
+ * unclassified these arrive as a bare ssh diagnostic under a "Pueue command
+ * failed" heading, which points the reader at the wrong thing entirely.
+ */
+export function isSshUnreachable(stderr: string): boolean {
+  return /(ssh: connect to host|Operation timed out|Connection timed out|No route to host|Could not resolve hostname|Network is unreachable|Connection refused|Host key verification failed|Permission denied \(publickey)/i.test(
+    stderr,
+  );
+}
+
+/**
  * The full `ssh` argv for running a pueue command on a remote host.
  *
  * `BatchMode=yes` fails fast instead of blocking on a password prompt — there
@@ -96,6 +146,7 @@ export function sshArgv(
   return [
     "-o",
     "BatchMode=yes",
+    ...reachabilityArgs(),
     ...multiplexArgs(),
     host,
     [binary, shellJoin(pueueArgv)].filter(Boolean).join(" "),

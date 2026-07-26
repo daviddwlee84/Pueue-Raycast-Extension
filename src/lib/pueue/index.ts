@@ -32,6 +32,7 @@ export {
   isBadQuery,
   isBinaryMissing,
   isDaemonDown,
+  isHostUnreachable,
 } from "./errors";
 export type { PueueErrorKind } from "./errors";
 export {

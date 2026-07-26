@@ -184,3 +184,4 @@ canonicalise。從這裡對遠端 daemon 送出任務，會用三種方式失敗
 | 任務都變成 `FailedToSpawn` | 工作目錄問題。在連線設定裡加上 SSH 主機。 |
 | log 顯示的是別的輸出 | `read_local_logs` 不是 `false`。 |
 | `command not found: pueue` | ssh 用的是非互動式 shell。把遠端路徑加成第三個欄位。 |
+| 無法連線到 <host> | SSH 連不上——主機名稱打錯、機器睡著了，或你已經不在那個網路上。連線嘗試上限為 5 秒，所以會很快失敗而不是卡住。 |

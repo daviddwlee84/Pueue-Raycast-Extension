@@ -197,3 +197,4 @@ through a real shell.
 | tasks land as `FailedToSpawn` | The working directory. Add an SSH host to the connection. |
 | logs show the wrong output | `read_local_logs` is not `false`. |
 | `command not found: pueue` | ssh uses a non-interactive shell. Add the remote path as a third field. |
+| Can't reach <host> | SSH could not connect — a wrong hostname, a sleeping machine, or a network you're no longer on. The attempt is capped at 5 seconds, so it fails fast rather than hanging. |

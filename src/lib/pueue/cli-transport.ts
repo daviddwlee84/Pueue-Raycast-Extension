@@ -33,8 +33,8 @@ import {
   submitsOverSsh,
   type Connection,
 } from "./connections";
-import { isRemoteBinaryMissing, sshArgv } from "./ssh";
-import { fromExecError, PueueError } from "./errors";
+import { isRemoteBinaryMissing, isSshUnreachable, sshArgv } from "./ssh";
+import { cleanStderr, fromExecError, PueueError } from "./errors";
 import { readLogTail, type LogTail } from "./logfile";
 import type {
   ConnectionOption,
@@ -50,8 +50,15 @@ const pexecFile = promisify(execFile);
 
 const READ_TIMEOUT_MS = 10_000;
 const WRITE_TIMEOUT_MS = 15_000;
-/** SSH adds a connection handshake, and BatchMode fails rather than prompting. */
-const SSH_TIMEOUT_MS = 30_000;
+/**
+ * Backstop for an ssh call, above ssh's own ConnectTimeout.
+ *
+ * Was 30 s, which is how long the menu bar sat blocked — and unresponsive to
+ * its own menu items — whenever a configured host was unreachable. ssh now
+ * gives up on the connection in 5 s (see reachabilityArgs), so this only has
+ * to cover a connection that succeeds and then runs slowly.
+ */
+const SSH_TIMEOUT_MS = 15_000;
 
 /**
  * `status --json` carries a full env snapshot per task — upstream cites ~2 MB
@@ -155,6 +162,15 @@ async function runOverSsh(
     return stdout;
   } catch (e) {
     const stderr = String((e as { stderr?: string }).stderr ?? "");
+    if (isSshUnreachable(stderr)) {
+      // Not a pueue problem at all — say so, rather than filing an ssh
+      // diagnostic under "Pueue command failed" and sending the reader to
+      // look at their daemon.
+      throw new PueueError(
+        "host-unreachable",
+        `Could not reach ${host} over SSH.\n\n${cleanStderr(stderr)}`,
+      );
+    }
     if (isRemoteBinaryMissing(stderr)) {
       throw new PueueError(
         "binary-not-found",

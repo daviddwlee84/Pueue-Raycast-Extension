@@ -63,6 +63,7 @@ import {
 } from "./pueue/connections";
 import {
   isRemoteBinaryMissing,
+  isSshUnreachable,
   quoteRemotePath,
   shellQuote,
   sshArgv,
@@ -925,6 +926,45 @@ check(
 check(
   "nor does a socket connection whose config we cannot read",
   readsLocalLogs(socketConn),
+  false,
+);
+
+console.log("\nssh reachability bounds");
+// Without ConnectTimeout ssh does not give up: a black-holed host (192.0.2.1,
+// TEST-NET-1) was still trying after 45 s and only our exec timeout ended it —
+// 30 s of a blocked, unresponsive menu bar. With ConnectTimeout=5 it failed in
+// 5.1 s. Both measured.
+check(
+  "every ssh call caps the connect attempt",
+  sshArgv("h", ["status"]).includes("ConnectTimeout=5"),
+  true,
+);
+check(
+  "and bounds a connection that stalls after opening",
+  ["ServerAliveInterval=5", "ServerAliveCountMax=3"].every((o) =>
+    sshArgv("h", ["status"]).includes(o),
+  ),
+  true,
+);
+
+console.log("\nunreachable host is not a pueue failure");
+for (const [name, text] of [
+  ["connect timeout", "ssh: connect to host 192.0.2.1 port 22: Operation timed out"],
+  ["dns failure", "ssh: Could not resolve hostname nope.invalid: nodename nor servname provided"],
+  ["no route", "ssh: connect to host 10.0.0.9 port 22: No route to host"],
+  ["refused", "ssh: connect to host box port 22: Connection refused"],
+  ["auth", "daviddwlee84@host: Permission denied (publickey)."],
+] as [string, string][]) {
+  check(`  ${name}`, isSshUnreachable(text), true);
+}
+check(
+  "a pueue failure is NOT mistaken for an unreachable host",
+  isSshUnreachable("Pueue: The task to be followed doesn't exist."),
+  false,
+);
+check(
+  "nor is a missing remote binary",
+  isSshUnreachable("zsh: command not found: pueue"),
   false,
 );
 

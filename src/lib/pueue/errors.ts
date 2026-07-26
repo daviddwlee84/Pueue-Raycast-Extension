@@ -19,6 +19,8 @@ export type PueueErrorKind =
   | "config-missing"
   /** pueue is installed but pueued isn't reachable — never started, or stopped. */
   | "daemon-not-running"
+  /** ssh could not reach the remote host. Nothing to do with pueue. */
+  | "host-unreachable"
   /** The status query DSL didn't parse. User error, and the diagnostic is good. */
   | "bad-query"
   /** clap rejected our argv. Always an extension bug — surface it verbatim. */
@@ -61,6 +63,9 @@ export const isDaemonDown = (e: unknown): boolean =>
 
 export const isBadQuery = (e: unknown): boolean =>
   e instanceof PueueError && e.kind === "bad-query";
+
+export const isHostUnreachable = (e: unknown): boolean =>
+  e instanceof PueueError && e.kind === "host-unreachable";
 
 // eslint-disable-next-line no-control-regex -- color_eyre emits raw SGR even when stderr is a pipe
 const ANSI_SGR = /\u001b\[[0-9;]*m/g;
