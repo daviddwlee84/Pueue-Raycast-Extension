@@ -13,13 +13,16 @@
 
 import type { State, TaskStatus } from "./pueue/types";
 import {
+  cleanLogOutput,
   durationMs,
   endedAt,
   enqueuedAt,
   exitCode,
+  hasEverRun,
   isActive,
   isFailed,
   isLocked,
+  isPueueErrorOutput,
   isSuccess,
   parseTs,
   spawnError,
@@ -467,6 +470,34 @@ for (const m of MUTATIONS) {
   helpChecked += 1;
 }
 check("every mutation variant was checked", helpChecked, MUTATIONS.length);
+
+console.log("\nlog output — pueue hides its own errors in the output field");
+// Captured verbatim from `pueue log 1 --json` on a stashed task (exit code 0).
+const PUEUE_ERROR_OUTPUT =
+  '(Pueue error) Failed to get log file handle: I/O error at path "/Users/david/Library/Application Support/pueue/task_logs/1.log" while getting log file handle:\nNo such file or directory (os error 2)';
+check(
+  "a pueue error in the output field is recognised",
+  isPueueErrorOutput(PUEUE_ERROR_OUTPUT),
+  true,
+);
+check(
+  "and is not passed off as task output",
+  cleanLogOutput(PUEUE_ERROR_OUTPUT),
+  undefined,
+);
+check("real output survives", cleanLogOutput("hello\nworld\n"), "hello\nworld");
+check("whitespace-only output is nothing", cleanLogOutput("  \n\n"), undefined);
+check("empty output is nothing", cleanLogOutput(""), undefined);
+check("undefined output is nothing", cleanLogOutput(undefined), undefined);
+check(
+  "output that merely mentions the phrase is kept",
+  cleanLogOutput("building (Pueue error) handling\n"),
+  "building (Pueue error) handling",
+);
+check("a stashed task cannot have a log", hasEverRun(t(0)), false);
+check("a queued task cannot have a log", hasEverRun(t(2)), false);
+check("a running task can", hasEverRun(t(3)), true);
+check("a finished task can, even through a lock", hasEverRun(t(5)), true);
 
 console.log(
   failures === 0

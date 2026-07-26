@@ -128,6 +128,39 @@ export function isActive(t: Task): boolean {
   return k !== "done" && k !== "stashed";
 }
 
+/**
+ * Whether this task has ever been started, and so could have a log at all.
+ *
+ * Asking `pueue log` about a task that never ran does not fail — it returns
+ * exit 0 with pueue's own error message sitting in the `output` field (see
+ * `isPueueErrorOutput`). Checking first avoids both the bogus text and a
+ * pointless subprocess spawn.
+ */
+export function hasEverRun(t: Task): boolean {
+  return startedAt(t.status) !== undefined;
+}
+
+/* -- log output ---------------------------------------------------------- */
+
+/**
+ * True when `output` is pueue reporting a problem rather than the task's own
+ * output.
+ *
+ * `pueue log <id> --json` exits 0 and embeds its failure in the output string,
+ * e.g. when the log file is missing because the task never ran or the file was
+ * cleaned away underneath it. There is no other signal to branch on.
+ */
+export function isPueueErrorOutput(output: string | undefined): boolean {
+  return (output ?? "").trimStart().startsWith("(Pueue error)");
+}
+
+/** The task's real output, or undefined when there isn't any. */
+export function cleanLogOutput(output: string | undefined): string | undefined {
+  if (!output || isPueueErrorOutput(output)) return undefined;
+  const trimmed = output.replace(/\s+$/, "");
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 /* -- timestamps ---------------------------------------------------------- */
 
 /**

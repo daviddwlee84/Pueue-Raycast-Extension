@@ -10,6 +10,7 @@ import {
   readLogFromDisk,
   readTaskEnvs,
 } from "./cli-transport";
+import { cleanLogOutput } from "./normalize";
 import type {
   FollowHandlers,
   LogOptions,
@@ -89,7 +90,12 @@ export async function snapshot(o?: StatusOptions): Promise<Snapshot> {
 
 /**
  * A task's captured output, preferring the on-disk file and falling back to
- * the CLI. Returns undefined when there is genuinely no output yet.
+ * the CLI. Returns undefined when there is genuinely no output.
+ *
+ * `pueue log` reports a missing log file by putting its own error text in the
+ * `output` field and exiting 0, so that has to be filtered out here rather than
+ * caught — otherwise a task that never ran renders a Rust I/O error as if the
+ * task had printed it.
  */
 export async function readLogText(
   id: number,
@@ -103,8 +109,8 @@ export async function readLogText(
     [id],
     o.full ? { full: true } : { lines: o.lines ?? 20 },
   );
-  const entry = map[String(id)];
-  return entry ? { text: entry.output, truncated: !o.full } : undefined;
+  const text = cleanLogOutput(map[String(id)]?.output);
+  return text === undefined ? undefined : { text, truncated: !o.full };
 }
 
 /**
