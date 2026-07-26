@@ -297,6 +297,7 @@ export default function Command(
                   }
                   logLoading={preview.isLoading && canHaveLog}
                   logLines={logLines}
+                  tasks={snap?.state.tasks ?? {}}
                   onToggleDetail={() => setShowDetail((v) => !v)}
                   onReload={reload}
                   onAct={(mutation, options) =>
@@ -322,6 +323,8 @@ function TaskItem(props: {
   logText: string | undefined;
   logLoading: boolean;
   logLines: number;
+  /** The whole queue, so the detail can resolve `dependencies[]`. */
+  tasks: Record<string, Task>;
   onToggleDetail: () => void;
   onReload: () => void;
   onAct: (mutation: Mutation, options: ActOptions) => Promise<boolean>;
@@ -596,6 +599,8 @@ function TaskDetail(props: {
   logText: string | undefined;
   logLoading: boolean;
   logLines: number;
+  /** The whole queue, so `dependencies[]` can be resolved to live statuses. */
+  tasks: Record<string, Task>;
 }) {
   const { task } = props;
   const result = taskResult(task.status);
@@ -663,11 +668,27 @@ function TaskDetail(props: {
               text={String(task.priority)}
             />
           ) : null}
+          {/* Tagged with each dependency's live status rather than listed as
+              bare ids. "Depends on #3, #7" does not tell you whether this task
+              is about to run, is waiting on something slow, or is already
+              doomed — a failed dependency yields DependencyFailed. The whole
+              state is in hand, so this is a lookup, not a fetch. */}
           {task.dependencies.length > 0 ? (
-            <List.Item.Detail.Metadata.Label
-              title="Depends on"
-              text={task.dependencies.map((d) => `#${d}`).join(", ")}
-            />
+            <List.Item.Detail.Metadata.TagList title="Depends on">
+              {task.dependencies.map((id) => {
+                const dep = props.tasks[String(id)];
+                return (
+                  <List.Item.Detail.Metadata.TagList.Item
+                    key={id}
+                    text={dep ? `#${id} ${statusTag(dep)}` : `#${id} (gone)`}
+                    // A dependency that has been removed or cleaned away is
+                    // greyed rather than dropped: pueue still holds the id, and
+                    // silently omitting it would hide why a task is stuck.
+                    color={dep ? statusColor(dep) : Color.SecondaryText}
+                  />
+                );
+              })}
+            </List.Item.Detail.Metadata.TagList>
           ) : null}
           <List.Item.Detail.Metadata.Label title="Directory" text={task.path} />
           <List.Item.Detail.Metadata.Separator />

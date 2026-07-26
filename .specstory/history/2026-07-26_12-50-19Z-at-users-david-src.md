@@ -74758,3 +74758,219 @@ all assertions passed
 ready  - built extension successfully
 ```
 </details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:54:07Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit step 9
+
+```bash
+git add -A && git commit -q -F - <<'EOF'
+Show every daemon's counts on its own row, if you ask for it
+
+"2 local · 5 lab" wants to be somewhere, but not in the menu bar title: one
+number there is unambiguous and `2·5·0` is a puzzle. It goes on the Connection
+rows instead, as a subtitle, where the name it belongs to is already printed.
+
+Off by default. It costs one read per connection per refresh, which is only
+worth paying if you actually watch more than one machine — affordable at all
+because ssh multiplexing brought a remote read to 10–30 ms.
+
+`Promise.allSettled`, not `all`: a dead host has to degrade its own row and
+nothing else, so an unreachable `nas` shows "Host unreachable" beside its name
+while `lab` still shows its counts. Kept in a separate read from the selected
+connection's for the same reason.
+
+The counts appear in the error menu too, where they are most useful — they say
+which machine is still answering before you switch to it.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+EOF
+git log --oneline -1
+```
+
+```text
+311cbdd Show every daemon's counts on its own row, if you ask for it
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:54:11Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #30 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:54:11Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #31 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:54:16Z)**_
+
+Step 10 — the dependency graph in the task detail:
+
+_**Agent (claude-opus-5 2026-07-26 20:54:16Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Find the dependency row
+
+`grep -n "Depends on" -B 4 -A 8 src/tasks.tsx`
+
+```text
+664-            />
+665-          ) : null}
+666-          {task.dependencies.length > 0 ? (
+667-            <List.Item.Detail.Metadata.Label
+668:              title="Depends on"
+669-              text={task.dependencies.map((d) => `#${d}`).join(", ")}
+670-            />
+671-          ) : null}
+672-          <List.Item.Detail.Metadata.Label title="Directory" text={task.path} />
+673-          <List.Item.Detail.Metadata.Separator />
+674-          {created ? (
+675-            <List.Item.Detail.Metadata.Label
+676-              title="Created"
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:54:31Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Tag dependencies with live status
+
+```bash
+python3 - <<'PY'
+p='src/tasks.tsx'
+s=open(p).read()
+
+old = '''          {task.dependencies.length > 0 ? (
+            <List.Item.Detail.Metadata.Label
+              title="Depends on"
+              text={task.dependencies.map((d) => `#${d}`).join(", ")}
+            />
+          ) : null}'''
+new = '''          {/* Tagged with each dependency's live status rather than listed as
+              bare ids. "Depends on #3, #7" does not tell you whether this task
+              is about to run, is waiting on something slow, or is already
+              doomed — a failed dependency yields DependencyFailed. The whole
+              state is in hand, so this is a lookup, not a fetch. */}
+          {task.dependencies.length > 0 ? (
+            <List.Item.Detail.Metadata.TagList title="Depends on">
+              {task.dependencies.map((id) => {
+                const dep = props.tasks[String(id)];
+                return (
+                  <List.Item.Detail.Metadata.TagList.Item
+                    key={id}
+                    text={
+                      dep ? `#${id} ${statusTag(dep)}` : `#${id} (gone)`
+                    }
+                    // A dependency that has been removed or cleaned away is
+                    // greyed rather than dropped: pueue still holds the id, and
+                    // silently omitting it would hide why a task is stuck.
+                    color={dep ? statusColor(dep) : Color.SecondaryText}
+                  />
+                );
+              })}
+            </List.Item.Detail.Metadata.TagList>
+          ) : null}'''
+assert s.count(old)==1
+s=s.replace(old,new)
+
+old2 = '''function TaskDetail(props: {
+  task: Task;
+  logText: string | undefined;
+  logLoading: boolean;
+  logLines: number;
+}) {'''
+new2 = '''function TaskDetail(props: {
+  task: Task;
+  logText: string | undefined;
+  logLoading: boolean;
+  logLines: number;
+  /** The whole queue, so `dependencies[]` can be resolved to live statuses. */
+  tasks: Record<string, Task>;
+}) {'''
+assert s.count(old2)==1
+s=s.replace(old2,new2)
+
+old3 = '''      detail={props.showDetail ? <TaskDetail {...props} /> : undefined}'''
+assert s.count(old3)==1
+open(p,'w').write(s)
+print('ok')
+PY
+grep -n "TaskDetail {...props}\|logLines={logLines}\|logLines: number;" src/tasks.tsx
+```
+
+```text
+ok
+299:                  logLines={logLines}
+324:  logLines: number;
+364:      detail={props.showDetail ? <TaskDetail {...props} /> : undefined}
+598:  logLines: number;
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:54:45Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Thread the task map into the detail
+
+```bash
+python3 - <<'PY'
+p='src/tasks.tsx'
+s=open(p).read()
+pairs=[
+ ('''                  logLines={logLines}''',
+  '''                  logLines={logLines}
+                  tasks={snap?.state.tasks ?? {}}'''),
+ ('''  logLines: number;
+  onToggleDetail: () => void;''',
+  '''  logLines: number;
+  /** The whole queue, so the detail can resolve `dependencies[]`. */
+  tasks: Record<string, Task>;
+  onToggleDetail: () => void;'''),
+]
+for a,b in pairs:
+    assert s.count(a)==1,(a,s.count(a))
+    s=s.replace(a,b)
+open(p,'w').write(s)
+print('ok')
+PY
+just typecheck 2>&1 | tail -8
+```
+
+```text
+ok
+([ -d node_modules ] || npm install) && npx tsc --noEmit -p tsconfig.json
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:55:17Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Format and gate
+
+`just fix >/dev/null 2>&1; just check 2>&1 | grep -E "FAIL|error|✖|assertions passed|built extension" | tail -5`
+
+```text
+error predicates
+log output — pueue hides its own errors in the output field
+  ok   a pueue error in the output field is recognised
+all assertions passed
+ready  - built extension successfully
+```
+</details></tool-use>
