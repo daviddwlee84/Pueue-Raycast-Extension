@@ -26,6 +26,42 @@ shape isn't decided yet and there's a note in [`backlog/`](backlog/).
 - `[S]` **Dependency graph in the task detail** — render `dependencies[]` as
   rows with their live status instead of a comma-separated list of ids.
 
+## v0.3.0 candidates
+
+Connection UX is done; these are the next layer.
+
+- `[M]` **Group progress bars** — `pqsum` already shows `done/total`, a bar, and
+  an ETA per group, and the same numbers would read well as a `List.Item`
+  accessory or in the Groups detail. Everything needed is already in `State`:
+  done vs total per group, and `durationMs` over finished tasks gives the
+  average for an ETA. See `~/.local/share/chezmoi/docs/tools/pueue.md`.
+- `[L]` **A fleet view — all connections at once** — the equivalent of
+  `fleet pueue`: one row per (connection, group), read concurrently. Now cheap,
+  because SSH mode multiplexes at 10–30 ms per call, so N hosts is N parallel
+  reads rather than N handshakes. Needs a decision on failure isolation: one
+  unreachable host must degrade its own row, never the view.
+- `[S]` **Per-connection menu bar counts** — the menu bar follows one connection
+  today. Showing `2 local · 5 lab` would need a read per connection on every
+  interval, which is affordable now but should be opt-in.
+
+## v0.3.0 candidates
+
+Connection UX is done; these are the next layer.
+
+- `[M]` **Group progress bars** — `pqsum` already shows `done/total`, a bar, and
+  an ETA per group, and the same numbers would read well as a `List.Item`
+  accessory or in the Groups detail. Everything needed is already in `State`:
+  done vs total per group, and `durationMs` over finished tasks gives the
+  average for an ETA. See `~/.local/share/chezmoi/docs/tools/pueue.md`.
+- `[L]` **A fleet view — all connections at once** — the equivalent of
+  `fleet pueue`: one row per (connection, group), read concurrently. Only
+  practical now because SSH mode multiplexes at 10–30 ms per call, so N hosts is
+  N parallel reads rather than N handshakes. Needs a decision on failure
+  isolation: one unreachable host must degrade its own row, never the view.
+- `[S]` **Per-connection menu bar counts** — the menu bar follows one connection
+  today. Showing `2 local · 5 lab` would need a read per connection on every
+  interval; affordable now, but should be opt-in.
+
 ## Later
 
 - `[M]` **`pueue edit`** — round-trip pueue's TOML edit payload through a Form.
