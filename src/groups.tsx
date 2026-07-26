@@ -59,8 +59,17 @@ import {
   type Mutation,
 } from "./lib/pueue";
 
-/** Offered in the parallelism submenu. 0 is pueue's "unlimited". */
-const PARALLEL_CHOICES = [1, 2, 3, 4, 6, 8, 12, 0];
+/**
+ * Offered in the parallelism submenu. 0 is pueue's "unlimited".
+ *
+ * A list rather than a number field because picking 4 should be one keystroke,
+ * and it stops at 32 because past that you are better served by the `Custom…`
+ * item than by a longer menu. Deliberately not seeded from
+ * `os.cpus().length`: for a remote connection that is this machine's core
+ * count, not the daemon's, and a plausible wrong number is worse than a static
+ * list.
+ */
+const PARALLEL_CHOICES = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 0];
 
 export default function Command() {
   const prefs = getPreferenceValues<Preferences.Groups>();
@@ -313,6 +322,27 @@ function GroupItem(props: {
                   }
                 />
               ))}
+              {/* A preset list is a compromise, and on a machine with enough
+                  cores it is the wrong one. The current value appears here too
+                  when it is off-list, so the submenu never looks like it has
+                  silently lost your setting. */}
+              <Action
+                title={
+                  PARALLEL_CHOICES.includes(s.parallel)
+                    ? "Custom…"
+                    : `Custom… (currently ${parallelLabel(s.parallel)})`
+                }
+                icon={Icon.Pencil}
+                onAction={() =>
+                  push(
+                    <ParallelismForm
+                      name={name}
+                      current={s.parallel}
+                      onAct={onAct}
+                    />,
+                  )
+                }
+              />
             </ActionPanel.Submenu>
           </ActionPanel.Section>
 
@@ -602,6 +632,67 @@ function GroupDetail({ summary: s }: { summary: GroupSummary }) {
         </List.Item.Detail.Metadata>
       }
     />
+  );
+}
+
+/**
+ * A number field for a parallelism the preset list doesn't cover.
+ *
+ * pueue takes any non-negative integer, and a 64-core workstation has every
+ * right to ask for 48. The presets stay because they answer the common case in
+ * one keystroke; this is the escape hatch, not the default path.
+ */
+function ParallelismForm(props: {
+  name: string;
+  current: number;
+  onAct: (mutation: Mutation, options: ActOptions) => Promise<boolean>;
+}) {
+  const { pop } = useNavigation();
+  const [value, setValue] = useState(String(props.current));
+  const [error, setError] = useState<string | undefined>();
+
+  return (
+    <Form
+      navigationTitle={`Parallelism for ${props.name}`}
+      actions={
+        <ActionPanel>
+          <Action.SubmitForm
+            title="Set Parallelism"
+            icon={Icon.BulletPoints}
+            onSubmit={async () => {
+              const trimmed = value.trim();
+              if (!/^\d+$/.test(trimmed)) {
+                setError("Whole numbers only, 0 for unlimited");
+                return;
+              }
+              const count = Number(trimmed);
+              const ok = await props.onAct(
+                { op: "parallel", count, group: props.name },
+                {
+                  verb: `Setting ${props.name} parallelism`,
+                  done: `${props.name} runs ${count === 0 ? "unlimited" : count} at a time`,
+                },
+              );
+              if (ok) pop();
+            }}
+          />
+        </ActionPanel>
+      }
+    >
+      <Form.TextField
+        id="parallel"
+        title="Parallel Tasks"
+        placeholder="16"
+        autoFocus
+        value={value}
+        error={error}
+        onChange={(v) => {
+          setValue(v);
+          if (error) setError(undefined);
+        }}
+        info="How many tasks this group runs at once. 0 means unlimited — pueue never holds one back, which is what you want for a group of quick, non-competing jobs."
+      />
+    </Form>
   );
 }
 

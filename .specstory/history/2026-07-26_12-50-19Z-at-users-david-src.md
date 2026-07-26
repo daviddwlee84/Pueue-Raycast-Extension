@@ -74249,3 +74249,183 @@ all assertions passed
 ready  - built extension successfully
 ```
 </details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:50:24Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit step 6 and 8
+
+```bash
+git add -A && git commit -q -F - <<'EOF'
+Give a group's failures a single action, and its progress a place in the menu
+
+"Six tasks failed" used to mean opening the queue and restarting six tasks one
+at a time. pueue has had `restart --failed-in-group` and `clean --group` the
+whole time; nothing exposed them.
+
+Both flag combinations were run against a live 4.0.4 daemon before the UI was
+written, because `--help` lists the flags without saying how they interact:
+
+  --in-place --failed-in-group      reused ids 1 and 2, left the success alone
+  --not-in-place --failed-in-group  minted 4 and 5, left 1 and 2 as they were
+  --failed-in-group <no failures>   exit 0, no output, no action
+  --failed-in-group <no such group> exit 0, no output, no action
+
+That last pair is why the actions are hidden rather than disabled when there is
+nothing to restart: an always-visible action that silently does nothing is worse
+than one that isn't there. Confirmations name the ids — "6 tasks" and
+"#4, #5 and #6" are different things to agree to.
+
+The menu bar's group rows change from `name — running (0/1)` to
+`wf · 6/6 · 5 failed`, with a progress ring and a disabled bar row carrying the
+percentage, the slot count, and the ETA.
+
+Reset joins the menu bar, but behind an ⌥ that does NOT answer to the
+confirmations preference — the one exception, and deliberately not the one
+removed from Remove and Clean last session. The Groups view already treats reset
+as categorically worse, asking every time with no "don't show this again". It
+kills every task in the group, deletes them, and deletes their logs. "Open
+Groups…" and "Show Tasks in Group" sit alongside it for anyone who would rather
+have the real alert.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+EOF
+git log --oneline -1
+```
+
+```text
+932ebd0 Give a group's failures a single action, and its progress a place in the menu
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:50:29Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #27 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:50:29Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #29 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:50:30Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #28 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:50:37Z)**_
+
+Step 7 — parallelism beyond the presets:
+
+_**Agent (claude-opus-5 2026-07-26 20:50:37Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="Read"><details>
+<summary>Tool use: **Read**</summary>
+ `./src/groups.tsx`
+
+```text
+288	                  )
+289	                }
+290	              />
+291	            ) : null}
+292	          </ActionPanel.Section>
+293	
+294	          <ActionPanel.Section title="Parallelism">
+295	            <ActionPanel.Submenu
+296	              title="Set Parallelism"
+297	              icon={Icon.BulletPoints}
+298	              shortcut={{ modifiers: ["cmd", "shift"], key: "l" }}
+299	            >
+300	              {PARALLEL_CHOICES.map((n) => (
+301	                <Action
+302	                  key={n}
+303	                  title={n === 0 ? "Unlimited" : String(n)}
+304	                  icon={n === s.parallel ? Icon.Checkmark : Icon.Circle}
+305	                  onAction={() =>
+306	                    onAct(
+307	                      { op: "parallel", count: n, group: name },
+308	                      {
+309	                        verb: `Setting ${name} parallelism`,
+310	                        done: `${name} runs ${n === 0 ? "unlimited" : n} at a time`,
+311	                      },
+312	                    )
+313	                  }
+314	                />
+315	              ))}
+316	            </ActionPanel.Submenu>
+317	          </ActionPanel.Section>
+318	
+319	          <ActionPanel.Section title="Batch">
+320	            {/* Only offered when there is something to restart: pueue accepts
+321	                `--failed-in-group` on a group with no failures and exits 0
+322	                without a word, so an always-visible action would silently do
+323	                nothing. Verified against 4.0.4. */}
+324	            {s.failed > 0 ? (
+325	              <Action
+326	                title={`Restart ${s.failed} Failed (New Tasks)`}
+327	                icon={Icon.Redo}
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:50:50Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/src/groups.tsx has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:51:01Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/src/groups.tsx has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:51:13Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/src/groups.tsx has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:51:52Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Format and gate
+
+`just fix >/dev/null 2>&1; just check 2>&1 | grep -E "FAIL|error|✖|assertions passed|built extension" | tail -5`
+
+```text
+error predicates
+log output — pueue hides its own errors in the output field
+  ok   a pueue error in the output field is recognised
+all assertions passed
+ready  - built extension successfully
+```
+</details></tool-use>

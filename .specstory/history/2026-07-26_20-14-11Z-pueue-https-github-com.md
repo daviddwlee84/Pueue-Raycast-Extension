@@ -30883,3 +30883,233 @@ sqlite3 "$DB"  2>&1  0.06s user 0.08s system 49% cpu 0.282 total
 tail -2  0.00s user 0.00s system 2% cpu 0.279 total
 ```
 </details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:46:02Z)**_
+
+<think><details><summary>Thought Process</summary>
+Looking at the performance benchmarks, the rank-only query on that 7.36MB row completes in 20ms, but adding snippet retrieval jumps it to 1144ms—a massive 57× slowdown that validates the Plan agent's concern. The full typeahead rank query with joins and fanout takes 282ms total including the sqlite3 spawn overhead, which is actually higher than the claimed 22-65ms range.
+
+Now I need to lock in the key decisions with the user before moving forward. The most consequential questions are around the repo name, v0.1 scope (sticking with search + live only, deferring quota to v0.3), whether this is store-publishable or personal-only (which changes the design significantly), and the quota approach. Let me ask these four questions concisely.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 20:46:02Z)**_
+
+Everything verified with hard numbers. The decisive measurement: on the largest matching session (7.36 MB body), rank-only is **20 ms** but `snippet()` is **1144 ms** — a 57× gap. And I confirmed `gemini-2.5-pro` responses really are recorded inside Claude Code's own transcripts, which undermines any "Anthropic quota" gauge on this machine.
+
+Four decisions before I write the plan.
+
+_**Agent (claude-opus-5 2026-07-26 20:50:47Z)**_
+
+<tool-use data-tool-type="generic" data-tool-name="AskUserQuestion"><details>
+<summary>Tool use: **AskUserQuestion**</summary>
+**What should the new repo (and Raycast extension) be called?**
+
+Options:
+- **Agent-Deck-Raycast-Extension** - Extension title "Agent Deck". Flight-deck / control-deck metaphor — reads as observability, not as another agent. Short, no collision with herdr / CodexBar / ClaudeCast, and matches your Pueue-Raycast-Extension convention.
+- **Raycast-AI-Agent-Extension** - Your original suggestion. Descriptive but inverted vs. the sibling's <Thing>-Raycast-Extension convention, and "AI Agent" is generic on the store.
+- **Agent-Roost-Raycast-Extension** - Extension title "Roost" — where the flock rests; pairs with herdr's herding metaphor. Memorable but less searchable.
+- **Agent-Switchboard-Raycast-Extension** - Extension title "Agent Switchboard". Most literal about the routing/jumping job. Long name, slightly dated word.
+
+**Is this for the Raycast Store, or personal/private use? This changes a lot — optional-dependency handling, fixture redaction, bilingual docs, store preflight.**
+
+Options:
+- **Store-bound eventually** - Build it store-shaped from day one: herdr/specstory/codexbar are all OPTIONAL with structural error screens, fixtures redacted (ray publish copies the directory, not the git index), bilingual docs + just preflight. Costs ~25% more work but matches how you shipped Pueue.
+- **Personal only** - Assume herdr + specstory + sqlite3 are always present. Much less error-state code, no redaction, no bilingual docs. Faster to a working tool; hard to publish later without rework.
+- **Personal now, keep the door open** - Ship personal-first but keep the transport seams and ErrorDescriptor structure so store-hardening is additive later. Fallbacks stubbed, not implemented.
+
+**The plan recommends a ruthless v0.1: search + live state only, read-and-navigate, no mutations. Quota deferred to v0.3, peon/pueue to v0.2. Agree?**
+
+Options:
+- **Yes — search + live only** - v0.1 = Search Agent Sessions, Live Agents, Agents Menu Bar, Focus Agent. Read-only, so optimistic.tsx/actions.tsx stay stubs and herdr's unmeasured reconcile latency blocks nothing. This is ~70% of the value.
+- **Add peon + pueue to v0.1** - Fold the small-tool toggles in early — peon is ~40 lines (parse `peon status`), pueue wakeup reuses code you already wrote. Low risk, rounds out the "quick menu" feel sooner.
+- **Add usage to v0.1 too** - Do all four capabilities up front. Note the risk: codexbar isn't installed here, and the localhost:4142 proxy + gemini-in-Claude-transcripts means an Anthropic quota % would be a confidently-wrong number.
+
+**How should usage/quota work when you do build it (v0.3 or earlier)?**
+
+Options:
+- **CodexBar client + local cost, confidence-tagged** - Shell out to `codexbar usage --json` exactly like the sibling shells out to pueue (one place to log in, one place to blame). Plus an auth-free local token/cost rollup from transcripts. Every bucket tagged "via localhost:4142" when a proxy is detected. Command named "Agent Usage", not "Quota".
+- **Local cost rollup only** - Skip provider quota entirely. Just count tokens and cost per model per day from local transcripts — always true, no auth, no keychain, no 429s, and honest under a proxy. Needs an incremental index (24h = 121 files / 222 MB).
+- **Skip usage entirely** - Leave it to CodexBar's own menu bar app (brew install --cask codexbar) and don't duplicate it. Record the reasoning in TODO.md "Won't do".
+
+
+**Answer:** Agent-Deck-Raycast-Extension" selected preview:
+repo:  Agent-Deck-Raycast-Extension
+name:  agent-deck
+title: Agent Deck
+
+Commands
+  Agents Menu Bar        (menu-bar)
+  Search Agent Sessions  (view)
+  Live Agents            (view)
+  Focus Agent            (no-view), Store-bound eventually" selected preview:
+Implications
+  • herdr absent  → falls back to ~/.claude/sessions
+  • specstory absent → falls back to claude-fs scan
+  • every fixture redacted before commit
+  • docs/ en + .zh-TW.md, just preflight
+  • LICENSE, metadata/, screenshots notes: Better support not only claude session but also codex, opencode etc., Yes — search + live only" selected preview:
+v0.1  search · live · menubar · focus
+v0.2  send-prompt, wait, peon, pueue wakeup,
+      ⭐ review inbox
+v0.3  Agent Usage (codexbar + local rollup)
+v0.4  herdr socket events, opencode index, CodexBar client + local cost, confidence-tagged" selected preview:
+Primary   codexbar usage --provider X --source cli --json
+Fallback  local rollup from ~/.claude/projects/**.jsonl
+          (auth-free, needs incremental index)
+Always    confidence tag: direct | proxied | unknown
+
+Absent codexbar → structural install screen
+  brew install --cask codexbar notes: 我們會有許多類似的external tools依賴 這些最好都是optional的 如果沒有就fallback 或是功能暫時顯示disable之類的 提示安裝這樣 不強迫安裝. Read the answers carefully — they may request clarification, changes, or that you not proceed — and follow what they actually say.
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:51:03Z)**_
+
+<think><details><summary>Thought Process</summary>
+The user is emphasizing that multi-agent support beyond Claude is essential—we need to handle Codex, OpenCode, and similar tools. Additionally, all external tool dependencies should be optional with graceful fallbacks; if something isn't installed, we should either disable that feature with an install prompt or provide an alternative, rather than forcing installation.
+
+I'm realizing this requires a capability registry design where each external tool gets probed at startup, and the UI adapts accordingly—showing disabled features with helpful hints instead of errors. Looking at the actual session storage across these agents: SpecStory's sessions.db covers Claude, Codex, and Gemini, but OpenCode and Cursor store their sessions elsewhere (OpenCode uses ~/.local/share/opencode/opencode.db, Codex uses JSONL files, Cursor uses SQLite in ~/.cursor/chats). So for true multi-agent search, I need multiple SessionIndex providers rather than relying solely on SpecStory—and the tv channel's agent-sessions.py already shows how to implement this pattern.
+
+Now I need to verify the OpenCode database schema and Codex session index structure to make sure my plan actually works.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 20:51:03Z)**_
+
+Two important constraints from your notes. Let me verify the multi-agent source situation before writing the plan.
+
+_**Agent (claude-opus-5 2026-07-26 20:51:08Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Inspect opencode DB schema
+
+```bash
+echo "=== opencode.db schema (session/message tables) ==="
+sqlite3 "file:$HOME/.local/share/opencode/opencode.db?mode=ro" ".tables" 2>&1 | head -5
+sqlite3 "file:$HOME/.local/share/opencode/opencode.db?mode=ro" "select sql from sqlite_master where type='table' and name in ('session','message','part');" 2>&1 | head -40
+echo "=== opencode session count + sample ==="
+sqlite3 "file:$HOME/.local/share/opencode/opencode.db?mode=ro" "select count(*) from session;" 2>&1
+sqlite3 -header "file:$HOME/.local/share/opencode/opencode.db?mode=ro" "select id, directory, title, time_updated from session where time_archived is null order by time_updated desc limit 3;" 2>&1
+echo "=== does opencode have FTS? ==="
+sqlite3 "file:$HOME/.local/share/opencode/opencode.db?mode=ro" "select name from sqlite_master where name like '%fts%' or type='table';" 2>&1 | head -20
+```
+
+```text
+=== opencode.db schema (session/message tables) ===
+__drizzle_migrations   event_sequence         session              
+account                message                session_context_epoch
+account_state          migration              session_input        
+control_account        part                   session_message      
+credential             permission             session_share        
+CREATE TABLE `message` (
+	`id` text PRIMARY KEY,
+	`session_id` text NOT NULL,
+	`time_created` integer NOT NULL,
+	`time_updated` integer NOT NULL,
+	`data` text NOT NULL,
+	CONSTRAINT `fk_message_session_id_session_id_fk` FOREIGN KEY (`session_id`) REFERENCES `session`(`id`) ON DELETE CASCADE
+)
+CREATE TABLE `part` (
+	`id` text PRIMARY KEY,
+	`message_id` text NOT NULL,
+	`session_id` text NOT NULL,
+	`time_created` integer NOT NULL,
+	`time_updated` integer NOT NULL,
+	`data` text NOT NULL,
+	CONSTRAINT `fk_part_message_id_message_id_fk` FOREIGN KEY (`message_id`) REFERENCES `message`(`id`) ON DELETE CASCADE
+)
+CREATE TABLE `session` (
+	`id` text PRIMARY KEY,
+	`project_id` text NOT NULL,
+	`parent_id` text,
+	`slug` text NOT NULL,
+	`directory` text NOT NULL,
+	`title` text NOT NULL,
+	`version` text NOT NULL,
+	`share_url` text,
+	`summary_additions` integer,
+	`summary_deletions` integer,
+	`summary_files` integer,
+	`summary_diffs` text,
+	`revert` text,
+	`permission` text,
+	`time_created` integer NOT NULL,
+	`time_updated` integer NOT NULL,
+	`time_compacting` integer,
+	`time_archived` integer, `workspace_id` text, `path` text, `agent` text, `model` text, `cost` real DEFAULT 0 NOT NULL, `tokens_input` integer DEFAULT 0 NOT NULL, `tokens_output` integer DEFAULT 0 NOT NULL, `tokens_reasoning` integer DEFAULT 0 NOT NULL, `tokens_cache_read` integer DEFAULT 0 NOT NULL, `tokens_cache_write` integer DEFAULT 0 NOT NULL, `metadata` text,
+	CONSTRAINT `fk_session_project_id_project_id_fk` FOREIGN KEY (`project_id`) REFERENCES `project`(`id`) ON DELETE CASCADE
+)
+=== opencode session count + sample ===
+93
+id|directory|title|time_updated
+ses_0618bc2fcffeB6IJAtpRXLS35D|/Users/david/Documents/Program/tarlin-infra|Amend latest commit|1785071161239
+ses_0aa338254ffeoS5cVLaJ34yUpn|/Users/david/.local/share/chezmoi|try 指令如何安裝到專案|1783850983213
+ses_0aa33527effeVhEF14albvbSbc|/Users/david/.local/share/chezmoi|Find try-cli install config (@explore subagent)|1783850964294
+=== does opencode have FTS? ===
+__drizzle_migrations
+project
+message
+part
+session
+todo
+session_share
+control_account
+account
+account_state
+event_sequence
+event
+workspace
+session_message
+data_migration
+migration
+permission
+sqlite_sequence
+session_input
+session_context_epoch
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:51:09Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check codex, cursor, and specstory provider coverage
+
+```bash
+echo "=== codex sessions on disk ==="
+find ~/.codex/sessions -name "rollout-*.jsonl" 2>/dev/null | wc -l
+echo "--- codex session_index.jsonl? ---"; ls -la ~/.codex/session_index.jsonl ~/.codex/history.jsonl 2>&1 | head -3
+head -1 ~/.codex/session_index.jsonl 2>&1 | head -c 300; echo
+echo "=== cursor chats ==="; ls ~/.cursor/chats 2>/dev/null | head -3; find ~/.cursor/chats -name store.db 2>/dev/null | wc -l
+echo "=== specstory: which providers indexed vs supported ==="
+sqlite3 "file:$HOME/.specstory/sessions.db?mode=ro" "select agent, count(*) from sessions group by 1;" 2>&1
+echo "--- specstory supported providers ---"; specstory list --help 2>&1 | grep -iA3 "provider\|agent" | head -12
+```
+
+```text
+=== codex sessions on disk ===
+      19
+--- codex session_index.jsonl? ---
+"/Users/david/.codex/session_index.jsonl": No such file or directory (os error 2)
+.rw-------@ 84k david 26 Jul 14:57 /Users/david/.codex/history.jsonl
+head: /Users/david/.codex/session_index.jsonl: No such file or directory
+
+=== cursor chats ===
+       0
+=== specstory: which providers indexed vs supported ===
+claude|451
+codex|18
+gemini|1
+--- specstory supported providers ---
+  By default, lists sessions from all registered providers that have activity.                                          
+  Provide a specific agent ID to list sessions from only that provider.                                                 
+                                                                                                                        
+  Available provider IDs: antigravity (Antigravity CLI), claude (Claude Code), codex (Codex CLI), cursor (Cursor CLI),  
+  cursoride (Cursor IDE), deepseek (DeepSeek TUI), droid (Factory Droid CLI), gemini (Gemini CLI).                      
+         
+  USAGE  
+--
+    specstory list [provider-id] [--flags]   
+            
+  EXAMPLES
+```
+</details></tool-use>
