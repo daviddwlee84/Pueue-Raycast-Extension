@@ -1,0 +1,233 @@
+{
+  "tasks": {
+    "0": {
+      "id": 0,
+      "created_at": "2026-07-26T09:00:00.123456+08:00",
+      "original_command": "echo stashed",
+      "command": "echo stashed",
+      "path": "/Users/david/work",
+      "envs": { "SECRET_TOKEN": "must-never-be-cached", "PATH": "/usr/bin" },
+      "group": "default",
+      "dependencies": [],
+      "priority": 0,
+      "label": null,
+      "status": { "Stashed": { "enqueue_at": null } }
+    },
+    "1": {
+      "id": 1,
+      "created_at": "2026-07-26T09:01:00.000000+08:00",
+      "original_command": "backup.sh",
+      "command": "backup.sh",
+      "path": "/Users/david",
+      "envs": {},
+      "group": "default",
+      "dependencies": [],
+      "priority": 0,
+      "label": "nightly",
+      "status": {
+        "Stashed": { "enqueue_at": "2026-07-27T03:00:00.000000+08:00" }
+      }
+    },
+    "2": {
+      "id": 2,
+      "created_at": "2026-07-26T09:02:00.000000+08:00",
+      "original_command": "cargo build --release",
+      "command": "cargo build --release",
+      "path": "/Users/david/src/thing",
+      "envs": {},
+      "group": "build",
+      "dependencies": [3],
+      "priority": 5,
+      "label": null,
+      "status": {
+        "Queued": { "enqueued_at": "2026-07-26T09:02:01.500000+08:00" }
+      }
+    },
+    "3": {
+      "id": 3,
+      "created_at": "2026-07-26T09:03:00.000000+08:00",
+      "original_command": "sleep 300",
+      "command": "sleep 300",
+      "path": "/Users/david",
+      "envs": {},
+      "group": "default",
+      "dependencies": [],
+      "priority": 0,
+      "label": null,
+      "status": {
+        "Running": {
+          "enqueued_at": "2026-07-26T09:03:00.500000+08:00",
+          "start": "2026-07-26T09:03:01.000000+08:00"
+        }
+      }
+    },
+    "4": {
+      "id": 4,
+      "created_at": "2026-07-26T09:04:00.000000+08:00",
+      "original_command": "rsync -a src/ dst/",
+      "command": "rsync -a src/ dst/",
+      "path": "/Users/david",
+      "envs": {},
+      "group": "default",
+      "dependencies": [],
+      "priority": 0,
+      "label": "sync",
+      "status": {
+        "Paused": {
+          "enqueued_at": "2026-07-26T09:04:00.500000+08:00",
+          "start": "2026-07-26T09:04:02.000000+08:00"
+        }
+      }
+    },
+    "5": {
+      "id": 5,
+      "created_at": "2026-07-26T09:05:00.000000+08:00",
+      "original_command": "make test",
+      "command": "make test",
+      "path": "/Users/david/src/thing",
+      "envs": {},
+      "group": "build",
+      "dependencies": [],
+      "priority": 0,
+      "label": null,
+      "status": {
+        "Locked": {
+          "previous_status": {
+            "Done": {
+              "enqueued_at": "2026-07-26T09:05:00.500000+08:00",
+              "start": "2026-07-26T09:05:01.000000+08:00",
+              "end": "2026-07-26T09:05:31.000000+08:00",
+              "result": { "Failed": 127 }
+            }
+          }
+        }
+      }
+    },
+    "6": {
+      "id": 6,
+      "created_at": "2026-07-26T09:06:00.000000+08:00",
+      "original_command": "echo ok",
+      "command": "echo ok",
+      "path": "/Users/david",
+      "envs": {},
+      "group": "default",
+      "dependencies": [],
+      "priority": 0,
+      "label": null,
+      "status": {
+        "Done": {
+          "enqueued_at": "2026-07-26T09:06:00.500000+08:00",
+          "start": "2026-07-26T09:06:01.000000+08:00",
+          "end": "2026-07-26T09:06:02.250000+08:00",
+          "result": "Success"
+        }
+      }
+    },
+    "7": {
+      "id": 7,
+      "created_at": "2026-07-26T09:07:00.000000+08:00",
+      "original_command": "nonexistent-binary",
+      "command": "nonexistent-binary",
+      "path": "/nope",
+      "envs": {},
+      "group": "default",
+      "dependencies": [],
+      "priority": 0,
+      "label": null,
+      "status": {
+        "Done": {
+          "enqueued_at": "2026-07-26T09:07:00.500000+08:00",
+          "start": "2026-07-26T09:07:01.000000+08:00",
+          "end": "2026-07-26T09:07:01.010000+08:00",
+          "result": {
+            "FailedToSpawn": "No such file or directory (os error 2)"
+          }
+        }
+      }
+    },
+    "8": {
+      "id": 8,
+      "created_at": "2026-07-26T09:08:00.000000+08:00",
+      "original_command": "sleep 9999",
+      "command": "sleep 9999",
+      "path": "/Users/david",
+      "envs": {},
+      "group": "default",
+      "dependencies": [],
+      "priority": 0,
+      "label": null,
+      "status": {
+        "Done": {
+          "enqueued_at": "2026-07-26T09:08:00.500000+08:00",
+          "start": "2026-07-26T09:08:01.000000+08:00",
+          "end": "2026-07-26T09:08:11.000000+08:00",
+          "result": "Killed"
+        }
+      }
+    },
+    "9": {
+      "id": 9,
+      "created_at": "2026-07-26T09:09:00.000000+08:00",
+      "original_command": "deploy.sh",
+      "command": "deploy.sh",
+      "path": "/Users/david",
+      "envs": {},
+      "group": "default",
+      "dependencies": [5],
+      "priority": 0,
+      "label": null,
+      "status": {
+        "Done": {
+          "enqueued_at": "2026-07-26T09:09:00.500000+08:00",
+          "start": "2026-07-26T09:09:01.000000+08:00",
+          "end": "2026-07-26T09:09:01.000000+08:00",
+          "result": "DependencyFailed"
+        }
+      }
+    },
+    "10": {
+      "id": 10,
+      "created_at": "2026-07-26T09:10:00.000000+08:00",
+      "original_command": "weird.sh",
+      "command": "weird.sh",
+      "path": "/Users/david",
+      "envs": {},
+      "group": "gpu",
+      "dependencies": [],
+      "priority": -3,
+      "label": null,
+      "status": {
+        "Done": {
+          "enqueued_at": "2026-07-26T09:10:00.500000+08:00",
+          "start": "2026-07-26T09:10:01.000000+08:00",
+          "end": "2026-07-26T09:10:05.000000+08:00",
+          "result": "Errored"
+        }
+      }
+    },
+    "11": {
+      "id": 11,
+      "created_at": "2026-07-26T09:11:00.000000+08:00",
+      "original_command": "train.py",
+      "command": "train.py",
+      "path": "/Users/david/ml",
+      "envs": {},
+      "group": "gpu",
+      "dependencies": [],
+      "priority": 10,
+      "label": "experiment-7",
+      "status": {
+        "Locked": {
+          "previous_status": {
+            "Queued": { "enqueued_at": "2026-07-26T09:11:00.500000+08:00" }
+          }
+        }
+      }
+    }
+  },
+  "groups": {
+    "default": { "status": "Running", "parallel_tasks": 1 },
+    "build": { "status": "Paused", "parallel_tasks": 4 },
+    "gpu": { "status": "Running", "parallel_tasks": 0 }
+  }
+}
