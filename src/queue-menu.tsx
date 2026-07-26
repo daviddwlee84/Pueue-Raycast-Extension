@@ -185,9 +185,22 @@ export default function Command() {
   const allPaused =
     groups.length > 0 && groups.every(([, g]) => g.status === "Paused");
 
+  // Data for this connection, but the latest read failed. What is on screen is
+  // not a moment old — it is a snapshot of a queue we can no longer see, and
+  // Raycast's failure toast is a line at the bottom of a window that isn't
+  // open. The view commands say so with StaleBannerItem; this is that.
+  const staleError =
+    error !== undefined && describeError(error, connection).structural
+      ? error
+      : undefined;
+
   return (
     <MenuBarExtra
-      icon={menuIcon({ failed: failed.length, allPaused })}
+      icon={menuIcon({
+        failed: failed.length,
+        allPaused,
+        stale: staleError !== undefined,
+      })}
       title={menuTitle(
         prefs.titleCounts,
         running.length,
@@ -200,9 +213,16 @@ export default function Command() {
         failed.length,
         data.fetchedAt,
         connection,
+        staleError,
       )}
       isLoading={isLoading}
     >
+      <StaleSection
+        error={staleError}
+        onRetry={revalidate}
+        connection={connection}
+      />
+
       <TaskSection
         title="Running"
         tasks={running}
@@ -410,8 +430,17 @@ export default function Command() {
       </MenuBarExtra.Section>
 
       <MenuBarExtra.Section>
-        {/* No onAction: a disabled row, used as a staleness label. */}
-        <MenuBarExtra.Item title={`Updated ${clock(data.fetchedAt)}`} />
+        {/* No onAction: a disabled row, used as a staleness label. Raycast
+            restores a menu bar item from its database rather than by re-running
+            the command, so a stale render can outlive a restart — this is what
+            makes that visible instead of misleading. */}
+        <MenuBarExtra.Item
+          title={
+            staleError !== undefined
+              ? `Frozen at ${clock(data.fetchedAt)}`
+              : `Updated ${clock(data.fetchedAt)}`
+          }
+        />
         <MenuBarExtra.Item
           title="Refresh"
           icon={Icon.ArrowClockwise}
@@ -556,6 +585,54 @@ function ConnectionSection({
   );
 }
 
+/**
+ * A header saying the queue below it can no longer be reached.
+ *
+ * The counterpart to `StaleBannerItem` in the view commands. Without it a dead
+ * daemon renders as a live queue for as long as the cache survives, which is
+ * worse than rendering nothing — the whole value of a menu bar item is that you
+ * trust it at a glance.
+ */
+function StaleSection({
+  error,
+  onRetry,
+  connection,
+}: {
+  error: unknown;
+  onRetry: () => void;
+  connection: Connection;
+}) {
+  if (error === undefined) return null;
+  const d = describeError(error, connection);
+  return (
+    <MenuBarExtra.Section>
+      <MenuBarExtra.Item
+        title={d.shortTitle}
+        subtitle="showing cached data"
+        icon={{ source: Icon.Warning, tintColor: Color.Red }}
+        tooltip={d.description}
+      />
+      <MenuBarExtra.Item
+        title="Retry"
+        icon={Icon.ArrowClockwise}
+        onAction={onRetry}
+      />
+      {d.actions.map((a) => (
+        <MenuBarExtra.Item
+          key={a.id}
+          title={a.title}
+          icon={a.icon}
+          onAction={() => {
+            if (a.copy !== undefined) Clipboard.copy(a.copy);
+            else if (a.url !== undefined) open(a.url);
+            else a.run?.();
+          }}
+        />
+      ))}
+    </MenuBarExtra.Section>
+  );
+}
+
 function ErrorMenu({
   error,
   onRetry,
@@ -615,8 +692,16 @@ function sectionIcon(title: string): Image.ImageLike {
 /**
  * One glyph, four tints — the shape never moves in the menu bar, only its
  * colour. The asset is a monochrome template so it reads on light and dark.
+ *
+ * Stale wins over everything else: when the numbers can't be trusted, saying
+ * "one task failed" in red is a claim we are in no position to make.
  */
-function menuIcon(s: { failed: number; allPaused: boolean }): Image.ImageLike {
+function menuIcon(s: {
+  failed: number;
+  allPaused: boolean;
+  stale: boolean;
+}): Image.ImageLike {
+  if (s.stale) return { source: MENU_ICON, tintColor: Color.SecondaryText };
   if (s.failed > 0) return { source: MENU_ICON, tintColor: Color.Red };
   if (s.allPaused) return { source: MENU_ICON, tintColor: Color.Orange };
   return { source: MENU_ICON, tintColor: Color.PrimaryText };
@@ -654,10 +739,15 @@ function tooltip(
   failed: number,
   fetchedAt: number,
   connection: Connection,
+  staleError: unknown,
 ): string {
+  const where = connection.remote ? connection.name : "Pueue";
+  // Don't recite counts we can't stand behind — lead with why they're frozen.
+  if (staleError !== undefined) {
+    return `${where} — ${describeError(staleError, connection).shortTitle} · showing ${clock(fetchedAt)}`;
+  }
   const parts = [`${running} running`, `${queued} queued`];
   if (failed > 0) parts.push(`${failed} failed`);
-  const where = connection.remote ? connection.name : "Pueue";
   return `${where} — ${parts.join(", ")} · updated ${clock(fetchedAt)}`;
 }
 
