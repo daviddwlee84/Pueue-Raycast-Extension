@@ -14,6 +14,7 @@
  * into intent — which is not a seam, it is a shell.
  */
 
+import type { Connection } from "./connections";
 import type { GroupMap, LogMap, State } from "./types";
 
 export type Mutation =
@@ -78,14 +79,19 @@ export type Mutation =
   | { op: "send"; id: number; input: string }
   | { op: "reset"; groups?: string[] };
 
-export interface StatusOptions {
+/** Every call carries the connection it applies to; omitted means the default. */
+export interface ConnectionOption {
+  connection?: Connection;
+}
+
+export interface StatusOptions extends ConnectionOption {
   group?: string;
   /** The client-side query DSL, e.g. `status=failed order_by id desc first 20`. */
   query?: string;
   signal?: AbortSignal;
 }
 
-export interface LogOptions {
+export interface LogOptions extends ConnectionOption {
   /** Trailing lines. pueue's own default is 15 when neither this nor `full` is set. */
   lines?: number;
   /** The whole file. pueue's help warns this can exhaust RAM on a big log. */
@@ -103,13 +109,22 @@ export interface PueueTransport {
   /** `status --json` — the only call returning tasks and groups together. */
   readState(o?: StatusOptions): Promise<State>;
   /** `group --json` — a *different* top-level shape; never share a parser with readState. */
-  readGroups(signal?: AbortSignal): Promise<GroupMap>;
+  readGroups(
+    o?: ConnectionOption & { signal?: AbortSignal },
+  ): Promise<GroupMap>;
   /** `log --json` — task metadata plus captured output, per id. */
   readLogs(ids: number[], o?: LogOptions): Promise<LogMap>;
   /** Exit-code-only. Returns the new task id for `add`, otherwise void. */
-  mutate(m: Mutation): Promise<number | void>;
+  mutate(m: Mutation, o?: ConnectionOption): Promise<number | void>;
   /** The only streaming surface pueue offers. Returns a cancel function. */
-  followLog(id: number, lines: number, h: FollowHandlers): () => void;
+  followLog(
+    id: number,
+    lines: number,
+    h: FollowHandlers,
+    o?: ConnectionOption,
+  ): () => void;
   /** Version and reachability, for onboarding and the v4 guard. */
-  probe(): Promise<{ version: string; major: number; reachable: boolean }>;
+  probe(
+    o?: ConnectionOption,
+  ): Promise<{ version: string; major: number; reachable: boolean }>;
 }

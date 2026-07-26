@@ -15,6 +15,12 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { getPreferenceValues } from "@raycast/api";
 
+import {
+  expandTilde,
+  LOCAL_CONNECTION_NAME,
+  parseConnections,
+  type Connection,
+} from "./connections";
 import { PueueError } from "./errors";
 
 /**
@@ -106,10 +112,37 @@ export function baseEnv(): NodeJS.ProcessEnv {
   return { ...process.env, HOME: process.env.HOME ?? homedir() };
 }
 
-/** The `--config` path, if the user pinned one. */
+/** The `--config` path for the local connection, if the user pinned one. */
 export function configPath(): string | undefined {
   const p = prefs().configPath?.trim();
-  return p ? p : undefined;
+  return p ? expandTilde(p) : undefined;
+}
+
+/**
+ * Every connection, the implicit local one first.
+ *
+ * The local entry still honours the `configPath` preference — someone may keep
+ * a non-default local config — but is never treated as remote.
+ */
+export function connections(): Connection[] {
+  return [
+    {
+      name: LOCAL_CONNECTION_NAME,
+      configPath: configPath(),
+      remote: false,
+    },
+    ...parseConnections(prefs().connections),
+  ];
+}
+
+export function defaultConnection(): Connection {
+  return connections()[0];
+}
+
+/** Look a connection up by name, falling back to local rather than throwing. */
+export function connectionByName(name: string | undefined): Connection {
+  const all = connections();
+  return all.find((c) => c.name === name) ?? all[0];
 }
 
 /**

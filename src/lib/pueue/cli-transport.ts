@@ -21,10 +21,18 @@ import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 
 import { argvFor } from "./argv";
-import { baseEnv, configPath, resolvePueue, taskLogPath } from "./binary";
+import {
+  baseEnv,
+  defaultConnection,
+  resolvePueue,
+  taskLogPath,
+} from "./binary";
+import { readsLocalLogs, type Connection } from "./connections";
+import { sshArgv } from "./ssh";
 import { fromExecError, PueueError } from "./errors";
 import { readLogTail, type LogTail } from "./logfile";
 import type {
+  ConnectionOption,
   FollowHandlers,
   LogOptions,
   Mutation,
@@ -37,6 +45,8 @@ const pexecFile = promisify(execFile);
 
 const READ_TIMEOUT_MS = 10_000;
 const WRITE_TIMEOUT_MS = 15_000;
+/** SSH adds a connection handshake, and BatchMode fails rather than prompting. */
+const SSH_TIMEOUT_MS = 30_000;
 
 /**
  * `status --json` carries a full env snapshot per task — upstream cites ~2 MB
@@ -51,22 +61,32 @@ const BIG_BUFFER = 64 * 1024 * 1024;
  * `--color never` does nothing for stderr (that is color_eyre, which ignores
  * it) but does clean up the prose stdout of the mutation commands, which we
  * surface in toasts.
+ *
+ * `--config` is how a connection is selected: pueue's own client reads the
+ * socket path, secret, and TLS material from there, which is why driving a
+ * remote daemon needs no protocol code in this extension.
  */
-function globalArgs(): string[] {
-  const cfg = configPath();
+function globalArgs(connection: Connection): string[] {
+  const cfg = connection.configPath;
   return ["--color", "never", ...(cfg ? ["--config", cfg] : [])];
+}
+
+function connectionOf(o: ConnectionOption | undefined): Connection {
+  return o?.connection ?? defaultConnection();
 }
 
 interface RunOptions {
   timeout?: number;
   maxBuffer?: number;
   signal?: AbortSignal;
+  connection?: Connection;
 }
 
 /** Every subprocess call funnels through here so failures classify uniformly. */
 async function run(args: string[], o: RunOptions = {}): Promise<string> {
+  const connection = o.connection ?? defaultConnection();
   const bin = resolvePueue();
-  const argv = [...globalArgs(), ...args];
+  const argv = [...globalArgs(connection), ...args];
   try {
     const { stdout } = await pexecFile(bin, argv, {
       timeout: o.timeout ?? READ_TIMEOUT_MS,
@@ -77,6 +97,36 @@ async function run(args: string[], o: RunOptions = {}): Promise<string> {
     return stdout;
   } catch (e) {
     throw fromExecError(e, [bin, ...argv]);
+  }
+}
+
+/**
+ * Run a pueue command on a remote host over SSH.
+ *
+ * Used only for submission. pueue canonicalises a task's working directory on
+ * whichever machine the *client* runs on, so submitting a remote job from here
+ * fails in one of three ways — a local path that doesn't exist there, a remote
+ * path the local client refuses to canonicalise, or macOS silently rewriting
+ * /tmp to /private/tmp. Running the client on the far side removes the problem
+ * entirely rather than working around it.
+ *
+ * Reads and control commands keep using the forwarded socket, which is faster
+ * and needs no second authentication.
+ */
+async function runOverSsh(
+  host: string,
+  pueueArgs: readonly string[],
+): Promise<string> {
+  const argv = sshArgv(host, pueueArgs);
+  try {
+    const { stdout } = await pexecFile("ssh", argv, {
+      timeout: SSH_TIMEOUT_MS,
+      maxBuffer: 1024 * 1024,
+      env: baseEnv(),
+    });
+    return stdout;
+  } catch (e) {
+    throw fromExecError(e, ["ssh", ...argv]);
   }
 }
 
@@ -117,6 +167,7 @@ export function createCliTransport(): PueueTransport {
       const stdout = await run(args, {
         maxBuffer: BIG_BUFFER,
         signal: o.signal,
+        connection: connectionOf(o),
       });
       const raw = parseJson<{
         tasks: Record<string, RawTask>;
@@ -133,8 +184,13 @@ export function createCliTransport(): PueueTransport {
       return { tasks: stripEnvs(raw.tasks), groups: raw.groups ?? {} };
     },
 
-    async readGroups(signal?: AbortSignal): Promise<GroupMap> {
-      const stdout = await run(["group", "--json"], { signal });
+    async readGroups(
+      o: ConnectionOption & { signal?: AbortSignal } = {},
+    ): Promise<GroupMap> {
+      const stdout = await run(["group", "--json"], {
+        signal: o.signal,
+        connection: connectionOf(o),
+      });
       const parsed = parseJson<GroupMap | { groups: GroupMap }>(
         stdout,
         "pueue group",
@@ -155,20 +211,33 @@ export function createCliTransport(): PueueTransport {
       const stdout = await run(args, {
         maxBuffer: BIG_BUFFER,
         signal: o.signal,
+        connection: connectionOf(o),
       });
       // An unknown id is `{}` with exit 0 — an empty result, not an error.
       return parseJson<LogMap>(stdout, "pueue log");
     },
 
-    async mutate(m: Mutation): Promise<number | void> {
-      const stdout = await run(argvFor(m), { timeout: WRITE_TIMEOUT_MS });
+    async mutate(m: Mutation, o?: ConnectionOption): Promise<number | void> {
+      const connection = connectionOf(o);
+      const stdout = connection.sshHost
+        ? await runOverSsh(connection.sshHost, argvFor(m))
+        : await run(argvFor(m), {
+            timeout: WRITE_TIMEOUT_MS,
+            connection,
+          });
       if (m.op !== "add") return;
       // --print-task-id makes stdout just the integer.
       const id = Number.parseInt(stdout.trim(), 10);
       return Number.isNaN(id) ? undefined : id;
     },
 
-    followLog(id: number, lines: number, h: FollowHandlers): () => void {
+    followLog(
+      id: number,
+      lines: number,
+      h: FollowHandlers,
+      o?: ConnectionOption,
+    ): () => void {
+      const connection = connectionOf(o);
       let bin: string;
       try {
         bin = resolvePueue();
@@ -179,7 +248,13 @@ export function createCliTransport(): PueueTransport {
 
       const child = spawn(
         bin,
-        [...globalArgs(), "follow", String(id), "--lines", String(lines)],
+        [
+          ...globalArgs(connection),
+          "follow",
+          String(id),
+          "--lines",
+          String(lines),
+        ],
         {
           env: baseEnv(),
         },
@@ -204,8 +279,11 @@ export function createCliTransport(): PueueTransport {
       };
     },
 
-    async probe() {
-      const stdout = await run(["--version"], { timeout: 5_000 });
+    async probe(o?: ConnectionOption) {
+      const stdout = await run(["--version"], {
+        timeout: 5_000,
+        connection: connectionOf(o),
+      });
       // Never infer capability from an exit code — parse the shape. `pueue`
       // prints "pueue 4.0.4".
       const m = /^pueue\s+(\d+)\.(\d+)/i.exec(stdout.trim());
@@ -234,8 +312,12 @@ export function createCliTransport(): PueueTransport {
  */
 export async function readTaskEnvs(
   id: number,
+  connection: Connection = defaultConnection(),
 ): Promise<Record<string, string> | undefined> {
-  const stdout = await run(["status", "--json"], { maxBuffer: BIG_BUFFER });
+  const stdout = await run(["status", "--json"], {
+    maxBuffer: BIG_BUFFER,
+    connection,
+  });
   const raw = parseJson<{ tasks: Record<string, RawTask> }>(
     stdout,
     "pueue status",
@@ -253,7 +335,14 @@ export async function readTaskEnvs(
 export async function readLogFromDisk(
   id: number,
   maxBytes = 512 * 1024,
+  connection: Connection = defaultConnection(),
 ): Promise<LogTail | undefined> {
+  // The guard that matters. A remote daemon's logs are not on this disk — but
+  // the *local* log directory usually exists, so an unguarded read returns a
+  // different task's output under the same id instead of failing. Silently
+  // wrong beats loudly wrong only for the person who wrote the bug.
+  if (!readsLocalLogs(connection)) return undefined;
+
   const path = taskLogPath(id);
   return path ? readLogTail(path, maxBytes) : undefined;
 }

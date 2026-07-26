@@ -107,7 +107,7 @@ export default function Command(
   );
 
   const groupState = useCachedPromise(
-    () => readGroups(groupsAbort.current?.signal),
+    () => readGroups({ signal: groupsAbort.current?.signal }),
     [],
     {
       keepPreviousData: true,

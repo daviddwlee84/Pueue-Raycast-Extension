@@ -149,6 +149,14 @@
       "placeholder": "/Users/you/Library/Application Support/pueue/pueue.yml"
     },
     {
+      "name": "connections",
+      "title": "Remote Connections",
+      "description": "One per line: name | client config path | ssh host (optional). The SSH host is used only to submit tasks, because pueue resolves a task's working directory on whichever machine the client runs on. Example: gpu-box | ~/.config/pueue/remote/client.yml | gpu.example.com",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "gpu-box | ~/.config/pueue/remote/client.yml | gpu.example.com"
+    },
+    {
       "name": "confirmDestructive",
       "title": "Confirmations",
       "label": "Confirm kill, remove, clean, and reset",

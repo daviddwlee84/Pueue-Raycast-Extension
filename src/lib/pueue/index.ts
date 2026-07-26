@@ -11,7 +11,9 @@ import {
   readTaskEnvs,
 } from "./cli-transport";
 import { cleanLogOutput } from "./normalize";
+import type { Connection } from "./connections";
 import type {
+  ConnectionOption,
   FollowHandlers,
   LogOptions,
   Mutation,
@@ -22,6 +24,7 @@ import type { GroupMap, LogMap, Snapshot, State } from "./types";
 
 export * from "./types";
 export * from "./normalize";
+export * from "./connections";
 export {
   PueueError,
   cleanStderr,
@@ -32,6 +35,9 @@ export {
 } from "./errors";
 export type { PueueErrorKind } from "./errors";
 export {
+  connectionByName,
+  connections,
+  defaultConnection,
   isBrewManagedDaemon,
   pueueDirectory,
   resolveBrew,
@@ -62,18 +68,22 @@ export function setTransport(t: PueueTransport | undefined): void {
 
 export const status = (o?: StatusOptions): Promise<State> =>
   transport().readState(o);
-export const groups = (signal?: AbortSignal): Promise<GroupMap> =>
-  transport().readGroups(signal);
+export const groups = (
+  o?: ConnectionOption & { signal?: AbortSignal },
+): Promise<GroupMap> => transport().readGroups(o);
 export const logs = (ids: number[], o?: LogOptions): Promise<LogMap> =>
   transport().readLogs(ids, o);
-export const mutate = (m: Mutation): Promise<number | void> =>
-  transport().mutate(m);
+export const mutate = (
+  m: Mutation,
+  o?: ConnectionOption,
+): Promise<number | void> => transport().mutate(m, o);
 export const follow = (
   id: number,
   lines: number,
   h: FollowHandlers,
-): (() => void) => transport().followLog(id, lines, h);
-export const probe = () => transport().probe();
+  o?: ConnectionOption,
+): (() => void) => transport().followLog(id, lines, h, o);
+export const probe = (o?: ConnectionOption) => transport().probe(o);
 
 /**
  * A timestamped read.
@@ -99,15 +109,19 @@ export async function snapshot(o?: StatusOptions): Promise<Snapshot> {
  */
 export async function readLogText(
   id: number,
-  o: { lines?: number; full?: boolean } = {},
+  o: { lines?: number; full?: boolean; connection?: Connection } = {},
 ): Promise<{ text: string; truncated: boolean; path?: string } | undefined> {
   if (o.full) {
-    const disk = await readLogFromDisk(id);
+    // Only ever reads local files when the connection says that is where this
+    // task's log actually lives. See readLogFromDisk.
+    const disk = await readLogFromDisk(id, undefined, o.connection);
     if (disk) return disk;
   }
   const map = await logs(
     [id],
-    o.full ? { full: true } : { lines: o.lines ?? 20 },
+    o.full
+      ? { full: true, connection: o.connection }
+      : { lines: o.lines ?? 20, connection: o.connection },
   );
   const text = cleanLogOutput(map[String(id)]?.output);
   return text === undefined ? undefined : { text, truncated: !o.full };
@@ -120,6 +134,9 @@ export async function readLogText(
  * strips from every parsed task precisely so it cannot reach Raycast's
  * disk-backed cache. Only fetch it when a user explicitly asks to see it.
  */
-export async function taskEnvs(id: number): Promise<Record<string, string>> {
-  return (await readTaskEnvs(id)) ?? {};
+export async function taskEnvs(
+  id: number,
+  connection?: Connection,
+): Promise<Record<string, string>> {
+  return (await readTaskEnvs(id, connection)) ?? {};
 }

@@ -12,6 +12,8 @@ type ExtensionPreferences = {
   "pueuePath"?: string,
   /** Pueue Config Path - Absolute path to pueue.yml. Empty = let pueue use its default (~/Library/Application Support/pueue/pueue.yml on macOS). Also used to locate the task_logs directory. */
   "configPath"?: string,
+  /** Remote Connections - One per line: name | client config path | ssh host (optional). The SSH host is used only to submit tasks, because pueue resolves a task's working directory on whichever machine the client runs on. Example: gpu-box | ~/.config/pueue/remote/client.yml | gpu.example.com */
+  "connections"?: string,
   /** Confirmations - Ask before destructive actions in the view commands. Menu bar destructive actions are always behind ⌥ regardless of this setting. */
   "confirmDestructive": boolean
 }

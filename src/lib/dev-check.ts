@@ -52,9 +52,11 @@ import {
 } from "./pueue/errors";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { readLogTail } from "./pueue/logfile";
+import { parseConnections, readsLocalLogs } from "./pueue/connections";
+import { shellQuote, sshArgv } from "./pueue/ssh";
 
 /**
  * The live `--help` check needs a real binary. binary.ts can't be imported here
@@ -720,6 +722,85 @@ check(
     return JSON.stringify(groups) === before;
   })(),
   true,
+);
+
+console.log("\nconnection parsing");
+check("empty means no remote connections", parseConnections(""), []);
+check("undefined is fine", parseConnections(undefined), []);
+check(
+  "name | config | ssh host",
+  parseConnections(
+    "gpu-box | ~/.config/pueue/remote/client.yml | gpu.example.com",
+  ),
+  [
+    {
+      name: "gpu-box",
+      configPath: `${homedir()}/.config/pueue/remote/client.yml`,
+      sshHost: "gpu.example.com",
+      remote: true,
+    },
+  ],
+);
+check(
+  "the ssh host is optional",
+  parseConnections("laptop | /tmp/client.yml")[0].sshHost,
+  undefined,
+);
+check(
+  "blank lines and # comments are skipped",
+  parseConnections("\n# a comment\n\nbox | /tmp/c.yml\n").length,
+  1,
+);
+check(
+  "a line without a config path is ignored rather than half-parsed",
+  parseConnections("just-a-name"),
+  [],
+);
+check(
+  "several connections, order preserved",
+  parseConnections("a | /tmp/a.yml\nb | /tmp/b.yml | h").map((c) => c.name),
+  ["a", "b"],
+);
+
+console.log("\nlocal log reads are refused for anything remote");
+check(
+  "a plain local connection reads local logs",
+  readsLocalLogs({ name: "Local", remote: false }),
+  true,
+);
+check(
+  "an ssh-backed connection never does",
+  readsLocalLogs({
+    name: "gpu",
+    remote: true,
+    configPath: "/tmp/nope.yml",
+    sshHost: "h",
+  }),
+  false,
+);
+check(
+  "nor does a remote one whose config we cannot read",
+  readsLocalLogs({ name: "gpu", remote: true, configPath: "/tmp/nope.yml" }),
+  false,
+);
+
+console.log("\nssh quoting (the command must survive the remote shell)");
+check("plain word", shellQuote("hello"), "'hello'");
+check("spaces", shellQuote("a b"), "'a b'");
+check(
+  "an embedded single quote is closed, escaped, reopened",
+  shellQuote("it's"),
+  "'it'\\''s'",
+);
+check(
+  "shell metacharacters are inert inside single quotes",
+  shellQuote("$HOME && rm -rf / `whoami`"),
+  "'$HOME && rm -rf / `whoami`'",
+);
+check(
+  "the whole pueue command becomes one ssh argument",
+  sshArgv("myhost", ["add", "--", "echo hi"]),
+  ["-o", "BatchMode=yes", "myhost", "'pueue' 'add' '--' 'echo hi'"],
 );
 
 async function checkLogTail() {

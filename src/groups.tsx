@@ -51,7 +51,7 @@ export default function Command() {
   // supplies the per-group task counts. Separate controllers so a superseded
   // read of one can't cancel the other.
   const groupState = useCachedPromise(
-    () => readGroups(groupsAbort.current?.signal),
+    () => readGroups({ signal: groupsAbort.current?.signal }),
     [],
     {
       keepPreviousData: true,

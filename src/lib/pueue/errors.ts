@@ -66,6 +66,23 @@ export const isBadQuery = (e: unknown): boolean =>
 const ANSI_SGR = /\u001b\[[0-9;]*m/g;
 
 /**
+ * Noise pueue prints alongside real errors.
+ *
+ * A client talking to a daemon on a different patch version prints
+ *
+ *     Different protocol version detected '0.30.1'. Consider updating and
+ *     restarting the daemon.
+ *
+ * on **every command**, and then works normally. It is on stderr, so on a
+ * successful call we never see it — but on a failing one it lands first, and
+ * `firstLine()` would make it the toast title, hiding the actual error behind
+ * a warning about something else entirely.
+ *
+ * (Verified in a macOS 4.0.4 client against a Linux 4.0.2 daemon.)
+ */
+const NOISE_PATTERNS = [/^Different protocol version detected/i];
+
+/**
  * Reduce a color_eyre report to the part that means something.
  *
  * Everything after `Location:` is a Rust source path and two RUST_BACKTRACE
@@ -81,6 +98,7 @@ export function cleanStderr(raw: string): string {
     if (/^Location:\s*$/.test(line)) break;
     if (/^Backtrace omitted/.test(line)) break;
     if (/^Run with RUST_BACKTRACE/.test(line)) continue;
+    if (NOISE_PATTERNS.some((re) => re.test(line.trim()))) continue;
     kept.push(line);
   }
   return kept
