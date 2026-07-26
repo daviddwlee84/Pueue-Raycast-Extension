@@ -32,7 +32,7 @@
           "name": "showDetail",
           "title": "Detail Pane",
           "label": "Show the detail pane by default",
-          "description": "Show task metadata and a log preview beside the list. Toggle at any time with ⌘⇧D.",
+          "description": "Show task metadata and a log preview beside the list. Toggle at any time with ⌘I.",
           "type": "checkbox",
           "required": false,
           "default": true
@@ -91,7 +91,7 @@
           "name": "showDetail",
           "title": "Detail Pane",
           "label": "Show the detail pane by default",
-          "description": "Show each group's full breakdown — progress, average duration, estimated remaining, elapsed, and the ids that failed — beside the list. Toggle at any time with ⌘⇧D.",
+          "description": "Show each group's full breakdown — progress, average duration, estimated remaining, elapsed, and the ids that failed — beside the list. Toggle at any time with ⌘I.",
           "type": "checkbox",
           "required": false,
           "default": true

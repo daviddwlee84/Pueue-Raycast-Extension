@@ -24,7 +24,7 @@ declare type Preferences = ExtensionPreferences
 declare namespace Preferences {
   /** Preferences accessible in the `tasks` command */
   export type Tasks = ExtensionPreferences & {
-  /** Detail Pane - Show task metadata and a log preview beside the list. Toggle at any time with ⌘⇧D. */
+  /** Detail Pane - Show task metadata and a log preview beside the list. Toggle at any time with ⌘I. */
   "showDetail": boolean,
   /** Log Preview Lines - How many trailing log lines to show in the detail pane for the selected task. Higher values cost one extra `pueue log` call per selection change. */
   "detailLogLines": string
@@ -35,7 +35,7 @@ declare namespace Preferences {
   export type QuickAdd = ExtensionPreferences & {}
   /** Preferences accessible in the `groups` command */
   export type Groups = ExtensionPreferences & {
-  /** Detail Pane - Show each group's full breakdown — progress, average duration, estimated remaining, elapsed, and the ids that failed — beside the list. Toggle at any time with ⌘⇧D. */
+  /** Detail Pane - Show each group's full breakdown — progress, average duration, estimated remaining, elapsed, and the ids that failed — beside the list. Toggle at any time with ⌘I. */
   "showDetail": boolean
 }
   /** Preferences accessible in the `queue-menu` command */

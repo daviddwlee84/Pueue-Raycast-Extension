@@ -58,10 +58,10 @@ This is the single most likely "it's broken" report, and it isn't a bug in the e
 | `⌘L` | Follow output (running tasks) |
 | `⌘⇧R` | Restart as a new task |
 | `⌘⌥R` | Restart in place — same id, **overwrites the log** |
-| `⌘⇧P` | Pause · `⌘⇧S` Resume / Start now |
+| `⌘⇧P` | Pause · `⌘D` Resume / Start now |
 | `⌘⇧T` | Stash · `⌘⇧E` Enqueue |
-| `⌘⇧K` | Kill · `⌘⌫` Remove |
-| `⌘⇧D` | Toggle the detail pane · `⌘R` Reload |
+| `⌘⇧K` | Kill · `⌃X` Remove |
+| `⌘I` | Toggle the detail pane · `⌘R` Reload |
 
 ### Keyboard shortcuts (Groups)
 
@@ -70,11 +70,11 @@ This is the single most likely "it's broken" report, and it isn't a bug in the e
 | `⏎` | Show the group's tasks |
 | `⌘⇧R` | Restart every failed task in the group as new tasks |
 | `⌘⌥R` | Restart them in place — same ids, **overwrites their logs** |
-| `⌘⇧P` | Pause the group · `⌘⇧S` Resume it |
+| `⌘⇧P` | Pause the group · `⌘D` Resume it |
 | `⌘⇧L` | Set parallelism (presets, or `Custom…` for any number) |
 | `⌘⇧K` | Kill running tasks — **this also pauses the group** |
-| `⌘⌫` | Remove the group — its tasks **move to `default`**, they aren't deleted |
-| `⌘⇧D` | Toggle the detail pane · `⌘R` Reload |
+| `⌃X` | Remove the group — its tasks **move to `default`**, they aren't deleted |
+| `⌘I` | Toggle the detail pane · `⌘R` Reload |
 
 ## Preferences
 
@@ -84,7 +84,7 @@ This is the single most likely "it's broken" report, and it isn't a bug in the e
 | **Pueue Config Path** | pueue's default | Passed as `--config`, and used to locate `task_logs/`. |
 | **Remote Connections** | none | Connections separated by `;`, because Raycast preference fields are single-line: `name \| client config path \| ssh host`. See [Remote daemons](#remote-daemons). |
 | **Confirm destructive actions** | on | Kill, remove, clean, and reset ask first. The menu bar has no dialog available, so there the same setting puts those items behind `⌥` instead — turning this off removes both. One exception: **Reset Group** in the menu bar is always behind `⌥`, because it deletes every task in the group along with its logs. |
-| **Detail Pane** (Groups) | on | The per-group breakdown, average duration, ETA, elapsed, and failed ids beside the list. `⌘⇧D` toggles it. |
+| **Detail Pane** (Groups) | on | The per-group breakdown, average duration, ETA, elapsed, and failed ids beside the list. `⌘I` toggles it. |
 | **Connection Counts** (Queue Menu Bar) | off | Show each connection's counts on its row in the menu. Costs one read per connection per refresh; an unreachable host degrades only its own row. |
 
 ### "It works in my terminal but the extension can't find pueue"

@@ -114,7 +114,6 @@ export default function Command(
   useEffect(() => {
     if (contextGroup) setGroup(contextGroup);
   }, [contextGroup]);
-
   const [showDetail, setShowDetail] = useCachedState(
     "tasks.showDetail",
     prefs.showDetail,
@@ -126,6 +125,20 @@ export default function Command(
   // not stack log views on the navigation stack.
   const pushedLog = useRef(false);
   const logTaskId = props.launchContext?.logTaskId;
+
+  // Being sent to a specific task outranks the remembered group filter.
+  //
+  // The filter is applied server-side as `status --json --group X`, so a task
+  // outside it is not merely hidden — it is absent from the payload, the lookup
+  // below finds nothing, and the log view silently never opens. Observed from
+  // the menu bar with the filter left on another group; it worked again the
+  // moment the filter was back on All Groups, which is exactly the symptom a
+  // server-side filter produces.
+  useEffect(() => {
+    if (logTaskId !== undefined && contextGroup === undefined) {
+      setGroup(ALL_GROUPS);
+    }
+  }, [logTaskId, contextGroup]);
 
   // Separate controller kept for the state read; a superseded read must be
   // cancellable without touching the log preview's own request.
@@ -202,12 +215,23 @@ export default function Command(
     // whichever daemon was selected before, which looks like it worked and
     // shows someone else's task with the same id. Observed, not theorised.
     if (contextConnection && conn.connection.name !== contextConnection) return;
+    // And for the group filter to clear, for the same reason: until it does,
+    // the read is still scoped and the task genuinely isn't in the payload.
+    if (contextGroup === undefined && group !== ALL_GROUPS) return;
 
     const target = snap?.state.tasks[String(logTaskId)];
     if (!target) return;
     pushedLog.current = true;
     push(<TaskLogView task={target} connection={conn.connection} />);
-  }, [logTaskId, contextConnection, snap, conn.connection, push]);
+  }, [
+    logTaskId,
+    contextConnection,
+    contextGroup,
+    group,
+    snap,
+    conn.connection,
+    push,
+  ]);
 
   // A failed first read has nothing to show alongside the error, so the error
   // takes the whole screen.
@@ -556,7 +580,10 @@ function TaskItem(props: {
             <Action
               title={props.showDetail ? "Hide Detail" : "Show Detail"}
               icon={Icon.Sidebar}
-              shortcut={{ modifiers: ["cmd", "shift"], key: "d" }}
+              // NOT ⌘⇧D: Raycast binds that to "Open Documentation" in the
+              // Debug section it injects while an extension is in development,
+              // and its own action wins. ⌘I is free and reads as "info".
+              shortcut={{ modifiers: ["cmd"], key: "i" }}
               onAction={props.onToggleDetail}
             />
             <Action

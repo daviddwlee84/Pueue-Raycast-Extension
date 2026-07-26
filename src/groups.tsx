@@ -528,7 +528,10 @@ function GroupItem(props: {
             <Action
               title={props.showDetail ? "Hide Detail" : "Show Detail"}
               icon={Icon.Sidebar}
-              shortcut={{ modifiers: ["cmd", "shift"], key: "d" }}
+              // NOT ⌘⇧D: Raycast binds that to "Open Documentation" in the
+              // Debug section it injects while an extension is in development,
+              // and its own action wins. ⌘I is free and reads as "info".
+              shortcut={{ modifiers: ["cmd"], key: "i" }}
               onAction={props.onToggleDetail}
             />
             <Action

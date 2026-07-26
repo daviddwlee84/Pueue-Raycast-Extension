@@ -33539,3 +33539,3390 @@ export interface Deck {
 File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/agents/transport.ts (file state is current in your context — no need to Read it back)
 ```
 </details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:00:39Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Failures, classified.
+ *
+ * The distinction this module exists to preserve — and the reason it is not
+ * merged into capabilities.ts — is:
+ *
+ *   TOOL ABSENT   -> not an error. A CapabilityState with an install hint, a
+ *                    disabled affordance, and a working app around it.
+ *   TOOL BROKEN   -> an AgentDeckError. herdr is installed and its server is
+ *                    down; sqlite3 is there and the database is corrupt.
+ *
+ * Collapsing them produces the worst possible message: "install herdr" shown to
+ * someone who has herdr. That is why `binary-not-found` is NOT a kind here.
+ */
+
+import type { Capability } from "./types";
+
+export type ErrorKind =
+  /** herdr's socket is gone, the db file vanished between probe and read. */
+  | "source-unreachable"
+  /** Stdout did not parse. See the note on classifyHerdr below. */
+  | "bad-output"
+  /** The user's search string is not a valid FTS5 expression. */
+  | "bad-query"
+  /** The third-party schema is not what we expect — SpecStory changed it. */
+  | "schema-mismatch"
+  /** The subprocess did not finish in time. */
+  | "timeout"
+  /** Anything else, with the tool's own words carried in `detail`. */
+  | "command-failed";
+
+export class AgentDeckError extends Error {
+  readonly kind: ErrorKind;
+  /** Which capability failed, so the UI can name the tool. */
+  readonly source: Capability | "unknown";
+  /** Cleaned, ANSI-free, ready to render. May be multi-line. */
+  readonly detail: string;
+  readonly exitCode: number | null;
+  readonly argv: readonly string[];
+
+  constructor(
+    kind: ErrorKind,
+    message: string,
+    opts: {
+      source?: Capability | "unknown";
+      detail?: string;
+      exitCode?: number | null;
+      argv?: readonly string[];
+    } = {},
+  ) {
+    super(message);
+    this.name = "AgentDeckError";
+    this.kind = kind;
+    this.source = opts.source ?? "unknown";
+    this.detail = opts.detail ?? message;
+    this.exitCode = opts.exitCode ?? null;
+    this.argv = opts.argv ?? [];
+  }
+}
+
+/**
+ * Strip terminal escapes and trim.
+ *
+ * Rust CLIs written with color_eyre / anyhow emit SGR sequences even when
+ * stdout is a pipe, and an escape sequence in a Raycast toast title renders as
+ * literal `[31m`.
+ */
+export function cleanStderr(raw: string): string {
+  return raw
+    // eslint-disable-next-line no-control-regex
+    .replace(/\[[0-9;]*[A-Za-z]/g, "")
+    .split("\n")
+    .map((l) => l.trimEnd())
+    .filter((l) => l.length > 0)
+    .join("\n")
+    .trim();
+}
+
+export function firstLine(detail: string): string {
+  return detail.split("\n")[0]?.trim() ?? detail;
+}
+
+/**
+ * Classify a herdr failure.
+ *
+ * The trap, verified against herdr 0.7.5: herdr normally speaks structured
+ * JSON on stdout, including for errors —
+ *
+ *   {"error":{"code":"agent_not_found","message":"agent target term_… not found"},"id":"cli:agent:get"}
+ *
+ * — which is far better than parsing prose. But with no server running it
+ * prints a bare Rust Debug string instead:
+ *
+ *   Error: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+ *
+ * and the exit code does not reliably distinguish the two cases. So the
+ * discriminator is "did stdout parse as JSON", never the exit code. Getting
+ * this backwards renders a dead server as "0 agents", which looks exactly like
+ * a quiet machine.
+ */
+export function classifyHerdr(args: {
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+}): AgentDeckError | undefined {
+  const stdout = args.stdout.trim();
+
+  if (stdout) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(stdout);
+    } catch {
+      return new AgentDeckError(
+        "source-unreachable",
+        "herdr is not answering",
+        {
+          source: "live.herdr",
+          detail:
+            `${cleanStderr(stdout)}\n\n` +
+            "herdr printed a message instead of JSON, which is what it does when " +
+            "its server is not running. Start it, or switch the Live Source " +
+            "preference to Claude Registry.",
+          exitCode: args.exitCode,
+        },
+      );
+    }
+
+    const err = (parsed as { error?: { code?: string; message?: string } })?.error;
+    if (err) {
+      return new AgentDeckError(
+        err.code === "agent_not_found" ? "source-unreachable" : "command-failed",
+        err.message ?? err.code ?? "herdr returned an error",
+        { source: "live.herdr", detail: `${err.code ?? "error"}: ${err.message ?? ""}`.trim(), exitCode: args.exitCode },
+      );
+    }
+    return undefined;
+  }
+
+  const stderr = cleanStderr(args.stderr);
+  if (args.exitCode !== 0 && stderr) {
+    return new AgentDeckError("command-failed", firstLine(stderr), {
+      source: "live.herdr",
+      detail: stderr,
+      exitCode: args.exitCode,
+    });
+  }
+  return undefined;
+}
+
+/**
+ * Classify a sqlite3 failure.
+ *
+ * The messages matched here were captured from sqlite3 3.51 against the real
+ * ~/.specstory/sessions.db by feeding it unsanitized user input. They are the
+ * reason specstory/fts.ts exists:
+ *
+ *   -x     -> Error: in prepare, no such column: x
+ *   col:x  -> Error: in prepare, no such column: col
+ *   foo"   -> Error: in prepare, unterminated string
+ *   a AND  -> Error: in prepare, fts5: syntax error near ""
+ *
+ * All four are the user's query being read as an FTS5 expression, so they are
+ * `bad-query` — a non-structural failure that renders as a hint about the
+ * grammar, not as a broken-database screen.
+ */
+export function classifySqlite(args: {
+  stderr: string;
+  exitCode: number | null;
+}): AgentDeckError | undefined {
+  const detail = cleanStderr(args.stderr);
+  if (!detail && (args.exitCode === 0 || args.exitCode === null)) return undefined;
+
+  const line = firstLine(detail);
+
+  if (/fts5: syntax error|unterminated string|no such column|fts5: phrase|malformed MATCH/i.test(line)) {
+    return new AgentDeckError("bad-query", line, {
+      source: "index.specstory",
+      detail,
+      exitCode: args.exitCode,
+    });
+  }
+  if (/no such table|no such module|malformed database schema/i.test(line)) {
+    return new AgentDeckError("schema-mismatch", line, {
+      source: "index.specstory",
+      detail:
+        `${detail}\n\n` +
+        "The session index is not the shape this extension expects. SpecStory " +
+        "owns that database and can change it; search falls back to scanning " +
+        "transcripts on disk.",
+      exitCode: args.exitCode,
+    });
+  }
+  if (/unable to open database|disk I\/O error|database is locked/i.test(line)) {
+    return new AgentDeckError("source-unreachable", line, {
+      source: "index.specstory",
+      detail,
+      exitCode: args.exitCode,
+    });
+  }
+  if (/database disk image is malformed/i.test(line)) {
+    return new AgentDeckError("schema-mismatch", line, {
+      source: "index.specstory",
+      detail,
+      exitCode: args.exitCode,
+    });
+  }
+  return new AgentDeckError("command-failed", line || "sqlite3 failed", {
+    source: "index.specstory",
+    detail,
+    exitCode: args.exitCode,
+  });
+}
+
+/**
+ * Turn a Node spawn rejection into an AgentDeckError.
+ *
+ * execFile reports a timeout as a SIGTERM kill rather than as a distinct error,
+ * so `killed` has to be checked before anything else or every timeout is filed
+ * as a generic command failure.
+ */
+export function fromExecError(
+  e: unknown,
+  source: Capability | "unknown",
+  argv: readonly string[],
+): AgentDeckError {
+  const err = e as {
+    killed?: boolean;
+    signal?: string;
+    code?: number | string;
+    stderr?: string;
+    stdout?: string;
+    message?: string;
+  };
+
+  if (err?.killed || err?.signal === "SIGTERM") {
+    return new AgentDeckError("timeout", "Timed out", {
+      source,
+      detail: `${argv[0] ?? "command"} did not finish in time.`,
+      argv,
+    });
+  }
+  if (err?.code === "ENOENT") {
+    // Reached only if a binary vanished between the capability probe and the
+    // spawn. Not an install hint — the probe already said it was there.
+    return new AgentDeckError("source-unreachable", "Command disappeared", {
+      source,
+      detail: `${argv[0] ?? "command"} was found during startup but is gone now.`,
+      argv,
+    });
+  }
+
+  const detail = cleanStderr(err?.stderr ?? err?.message ?? String(e));
+  return new AgentDeckError("command-failed", firstLine(detail) || "Command failed", {
+    source,
+    detail,
+    exitCode: typeof err?.code === "number" ? err.code : null,
+    argv,
+  });
+}
+
+export function isBadQuery(e: unknown): e is AgentDeckError {
+  return e instanceof AgentDeckError && e.kind === "bad-query";
+}
+
+export function isUnreachable(e: unknown): e is AgentDeckError {
+  return e instanceof AgentDeckError && e.kind === "source-unreachable";
+}
+
+export function isSchemaMismatch(e: unknown): e is AgentDeckError {
+  return e instanceof AgentDeckError && e.kind === "schema-mismatch";
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/agents/errors.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:01:29Z)**_
+
+Now the capability model — the module that makes every external tool optional.
+
+_**Agent (claude-opus-5 2026-07-26 21:01:32Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * What this machine can do.
+ *
+ * The design constraint this module exists to enforce: **no external tool is
+ * required**. herdr, SpecStory, sqlite3, codexbar, peon and pueue are all
+ * optional. A missing one falls back if a fallback exists, and otherwise
+ * disables its feature with an install hint. Nothing crashes, nothing throws,
+ * and no error toast appears merely because software is not installed.
+ *
+ * Scattering that rule across the call sites as try/catch would mean it holds
+ * only where someone remembered it. Concentrating it here means dev-check can
+ * assert the strongest version of it directly: with every optional tool absent,
+ * the app still returns results — because three capabilities need no binary and
+ * no third-party database at all.
+ *
+ * Pure. The filesystem and the preferences arrive as arguments.
+ */
+
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+import { PROBE_DIRS, expandTilde, pickBinary, type ExistsFn } from "./probe";
+import type { Capability, CapabilityMap, CapabilityState } from "./types";
+
+/** Paths the user may override. All optional; every one has a default. */
+export interface CapabilityInputs {
+  exists: ExistsFn;
+  herdrPath?: string;
+  sqlitePath?: string;
+  specstoryDb?: string;
+  opencodeDb?: string;
+  claudeHome?: string;
+  codexHome?: string;
+  codexbarPath?: string;
+  peonPath?: string;
+  pueuePath?: string;
+  /**
+   * Live probe results, when the caller has them.
+   *
+   * Presence of a binary is a filesystem question and is answered here. Whether
+   * herdr's *server* answers is a subprocess question, so it is injected rather
+   * than performed — that keeps this module pure and keeps the two failure
+   * modes ("not installed" / "installed but down") visibly separate.
+   */
+  herdrServerReachable?: boolean;
+  herdrServerDetail?: string;
+}
+
+const HOME = homedir();
+
+/** Defaults, all overridable by preference. */
+export const DEFAULT_PATHS = {
+  specstoryDb: join(HOME, ".specstory", "sessions.db"),
+  opencodeDb: join(HOME, ".local", "share", "opencode", "opencode.db"),
+  claudeHome: process.env.CLAUDE_CONFIG_DIR?.split(",")[0]?.trim() || join(HOME, ".claude"),
+  codexHome: join(HOME, ".codex"),
+} as const;
+
+const INSTALL: Partial<Record<Capability, CapabilityState["install"]>> = {
+  "live.herdr": {
+    label: "Install herdr",
+    url: "https://github.com/ogulcancelik/herdr",
+  },
+  "act.herdr": {
+    label: "Install herdr",
+    url: "https://github.com/ogulcancelik/herdr",
+  },
+  "index.specstory": {
+    label: "Install SpecStory",
+    command: "brew install specstoryai/tap/specstory",
+    url: "https://specstory.com",
+  },
+  "quota.codexbar": {
+    label: "Install CodexBar",
+    command: "brew install --cask codexbar",
+    url: "https://github.com/steipete/CodexBar",
+  },
+  "sound.peon": {
+    label: "Install peon",
+    url: "https://github.com/PeonPing/peon-ping",
+  },
+  "queue.pueue": {
+    label: "Install pueue",
+    command: "brew install pueue",
+    url: "https://github.com/Nukesor/pueue",
+  },
+};
+
+function state(
+  capability: Capability,
+  available: boolean,
+  extra: Omit<CapabilityState, "capability" | "available"> = {},
+): CapabilityState {
+  return {
+    capability,
+    available,
+    ...(available ? {} : { install: INSTALL[capability] }),
+    ...extra,
+  };
+}
+
+/**
+ * Resolve every capability from the filesystem.
+ *
+ * Runs once per command launch. Nine `existsSync` calls plus a probe walk is
+ * well under a millisecond, and caching it across launches would mean a tool
+ * installed five minutes ago stays invisible until Raycast restarts.
+ */
+export function resolveCapabilities(input: CapabilityInputs): CapabilityMap {
+  const { exists } = input;
+
+  const herdrBin = pickBinary("herdr", exists, { configured: input.herdrPath });
+  const sqliteBin = pickBinary("sqlite3", exists, {
+    configured: input.sqlitePath,
+    // /usr/bin is in PROBE_DIRS specifically for this: the capture machine has
+    // NO Homebrew sqlite3, only /usr/bin/sqlite3 (3.51, FTS5, -json). A list
+    // that stops at the Homebrew prefixes disables search entirely.
+    dirs: PROBE_DIRS,
+  });
+  const codexbarBin = pickBinary("codexbar", exists, { configured: input.codexbarPath });
+  const peonBin = pickBinary("peon", exists, { configured: input.peonPath });
+  const pueueBin = pickBinary("pueue", exists, { configured: input.pueuePath });
+
+  const specstoryDb = expandTilde(input.specstoryDb?.trim() || DEFAULT_PATHS.specstoryDb);
+  const opencodeDb = expandTilde(input.opencodeDb?.trim() || DEFAULT_PATHS.opencodeDb);
+  const claudeHome = expandTilde(input.claudeHome?.trim() || DEFAULT_PATHS.claudeHome);
+  const codexHome = expandTilde(input.codexHome?.trim() || DEFAULT_PATHS.codexHome);
+
+  const claudeSessions = join(claudeHome, "sessions");
+  const claudeProjects = join(claudeHome, "projects");
+  const codexSessions = join(codexHome, "sessions");
+
+  // ---- live ---------------------------------------------------------------
+
+  // Three states, not two. "installed and answering" / "installed but the
+  // server is down" / "not installed" need three different messages, and only
+  // the third is an install hint.
+  const herdrLive: CapabilityState = !herdrBin
+    ? state("live.herdr", false, { reason: "herdr is not installed", degradedTo: "live.claude" })
+    : input.herdrServerReachable === false
+      ? state("live.herdr", false, {
+          reason: input.herdrServerDetail ?? "herdr is installed but its server is not answering",
+          resolvedPath: herdrBin,
+          degradedTo: "live.claude",
+          // No install hint: it IS installed. This is the case the whole
+          // absent-vs-broken split exists for.
+          install: undefined,
+        })
+      : state("live.herdr", true, { resolvedPath: herdrBin });
+
+  const claudeLive: CapabilityState = exists(claudeSessions)
+    ? state("live.claude", true, { resolvedPath: claudeSessions })
+    : state("live.claude", false, {
+        reason: "No ~/.claude/sessions directory — Claude Code has not run on this machine",
+        install: undefined,
+      });
+
+  // ---- indexes ------------------------------------------------------------
+
+  const specstory: CapabilityState = !sqliteBin
+    ? state("index.specstory", false, {
+        reason: "sqlite3 was not found, so the SpecStory index cannot be read",
+        degradedTo: "index.claudefs",
+      })
+    : !exists(specstoryDb)
+      ? state("index.specstory", false, {
+          reason: `No session index at ${specstoryDb}`,
+          degradedTo: "index.claudefs",
+        })
+      : state("index.specstory", true, { resolvedPath: specstoryDb });
+
+  const opencode: CapabilityState = !sqliteBin
+    ? state("index.opencode", false, {
+        reason: "sqlite3 was not found, so the OpenCode database cannot be read",
+        install: undefined,
+      })
+    : !exists(opencodeDb)
+      ? state("index.opencode", false, {
+          reason: `No OpenCode database at ${opencodeDb}`,
+          install: undefined,
+        })
+      : state("index.opencode", true, { resolvedPath: opencodeDb });
+
+  // These two need no binary and no third-party database. They are the floor
+  // the app never falls below, and the reason "every tool absent" still works.
+  const claudeFs: CapabilityState = exists(claudeProjects)
+    ? state("index.claudefs", true, { resolvedPath: claudeProjects })
+    : state("index.claudefs", false, { reason: `No transcripts at ${claudeProjects}`, install: undefined });
+
+  const codexFs: CapabilityState = exists(codexSessions)
+    ? state("index.codexfs", true, { resolvedPath: codexSessions })
+    : state("index.codexfs", false, { reason: `No transcripts at ${codexSessions}`, install: undefined });
+
+  // ---- actions and extras -------------------------------------------------
+
+  const actHerdr: CapabilityState = herdrLive.available
+    ? state("act.herdr", true, { resolvedPath: herdrBin })
+    : state("act.herdr", false, {
+        reason: herdrLive.reason ?? "herdr is not available",
+        install: herdrBin ? undefined : INSTALL["act.herdr"],
+      });
+
+  return Object.freeze({
+    "live.herdr": herdrLive,
+    "live.claude": claudeLive,
+    "index.specstory": specstory,
+    "index.opencode": opencode,
+    "index.claudefs": claudeFs,
+    "index.codexfs": codexFs,
+    "act.herdr": actHerdr,
+    "quota.codexbar": codexbarBin
+      ? state("quota.codexbar", true, { resolvedPath: codexbarBin })
+      : state("quota.codexbar", false, { reason: "CodexBar is not installed" }),
+    "sound.peon": peonBin
+      ? state("sound.peon", true, { resolvedPath: peonBin })
+      : state("sound.peon", false, { reason: "peon is not installed" }),
+    "queue.pueue": pueueBin
+      ? state("queue.pueue", true, { resolvedPath: pueueBin })
+      : state("queue.pueue", false, { reason: "pueue is not installed" }),
+  });
+}
+
+export function has(caps: CapabilityMap, c: Capability): boolean {
+  return caps[c].available;
+}
+
+export function available(caps: CapabilityMap): Capability[] {
+  return (Object.keys(caps) as Capability[]).filter((c) => caps[c].available);
+}
+
+/**
+ * Can this machine list stored sessions at all?
+ *
+ * True whenever any index is available. Asserted in dev-check for the
+ * every-optional-tool-absent case: index.claudefs and index.codexfs need no
+ * binary, so the only way this returns false is a machine that has never run a
+ * coding agent — which is the one situation where an empty screen is correct.
+ */
+export function canSearch(caps: CapabilityMap): boolean {
+  return (
+    caps["index.specstory"].available ||
+    caps["index.opencode"].available ||
+    caps["index.claudefs"].available ||
+    caps["index.codexfs"].available
+  );
+}
+
+/** Can this machine see running agents at all? */
+export function canSeeLive(caps: CapabilityMap): boolean {
+  return caps["live.herdr"].available || caps["live.claude"].available;
+}
+
+/**
+ * The capabilities that are missing AND worth telling the user about.
+ *
+ * Filtered to those carrying an install hint, so the Sources section lists
+ * things the user can act on rather than reciting every path that does not
+ * exist on their machine.
+ */
+export function actionableGaps(caps: CapabilityMap): CapabilityState[] {
+  return (Object.keys(caps) as Capability[])
+    .map((c) => caps[c])
+    .filter((s) => !s.available && s.install !== undefined);
+}
+
+/** Human label for the Sources section. */
+export function capabilityLabel(c: Capability): string {
+  switch (c) {
+    case "live.herdr":
+      return "herdr (live agents)";
+    case "live.claude":
+      return "Claude session registry";
+    case "index.specstory":
+      return "SpecStory index (full-text)";
+    case "index.opencode":
+      return "OpenCode database";
+    case "index.claudefs":
+      return "Claude transcripts on disk";
+    case "index.codexfs":
+      return "Codex transcripts on disk";
+    case "act.herdr":
+      return "herdr (focus and prompt)";
+    case "quota.codexbar":
+      return "CodexBar (usage)";
+    case "sound.peon":
+      return "peon (sounds)";
+    case "queue.pueue":
+      return "pueue (scheduling)";
+  }
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/agents/capabilities.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:02:19Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm consolidating merge.ts and rank.ts into a single file, combining the deduplication and merging logic with the scoring and ranking functions.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:02:19Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Combining several sources into one list.
+ *
+ * Three merges happen here, each guarding a measured trap:
+ *
+ *  1. dedupeFtsRows — one session can appear up to SIX times in one FTS result.
+ *  2. mergeLiveAgents — herdr and the Claude registry see overlapping sets.
+ *  3. attachLive — a session maps to N live processes, not one.
+ *
+ * Pure. No I/O, no @raycast/api.
+ */
+
+import { keyString, normalizeCwd } from "./normalize";
+import type { AgentSession, Capability, LiveAgent, MatchReason, SessionHit } from "./types";
+import type { IndexHit } from "./transport";
+
+/**
+ * Collapse duplicate (agent, session_id) rows, keeping the best rank.
+ *
+ * Measured against ~/.specstory/sessions.db: 81 of 470 sessions have more than
+ * one row in sessions_fts, distributed 46x2, 23x3, 6x4, 5x5, 1x6. The `sessions`
+ * table has PRIMARY KEY (agent, session_id); `sessions_fts` has no such
+ * constraint, so joining them fans a single session out into up to six
+ * identical-looking list rows.
+ *
+ * "Best" is the most negative rank — fts5 emits rank as a negative number where
+ * lower is more relevant, so Math.min is correct and Math.max silently keeps
+ * the worst match. The winning row's ftsRowId is retained because that is what
+ * the snippet query looks up by.
+ */
+export function dedupeFtsRows(hits: readonly IndexHit[]): IndexHit[] {
+  const best = new Map<string, IndexHit>();
+  for (const hit of hits) {
+    const k = keyString(hit.session.key);
+    const prev = best.get(k);
+    if (!prev || hit.rank < prev.rank) best.set(k, hit);
+  }
+  return [...best.values()];
+}
+
+/**
+ * Precedence when two indexes describe the same session.
+ *
+ * Lower wins. SpecStory first because it has turn counts and a matched markdown
+ * path; the filesystem readers last because they only have what is in the file.
+ * OpenCode outranks the fs readers because opencode.db carries a real title,
+ * cost and token counts that no filesystem scan reconstructs.
+ */
+const INDEX_PRECEDENCE: Record<Capability, number> = {
+  "index.specstory": 0,
+  "index.opencode": 1,
+  "index.claudefs": 2,
+  "index.codexfs": 3,
+  "live.herdr": 9,
+  "live.claude": 9,
+  "act.herdr": 9,
+  "quota.codexbar": 9,
+  "sound.peon": 9,
+  "queue.pueue": 9,
+};
+
+/**
+ * Merge sessions from several indexes, filling gaps rather than replacing.
+ *
+ * The winning row supplies identity; every other row donates fields the winner
+ * lacks. That matters because the indexes are complementary, not redundant:
+ * SpecStory knows `userTurns` and the markdown path but leaves `name` empty on
+ * ~70% of rows, while the Claude filesystem reader can produce a real title
+ * from the transcript's last `ai-title` record but knows nothing about turns.
+ */
+export function mergeSessions(groups: readonly (readonly AgentSession[])[]): AgentSession[] {
+  const byKey = new Map<string, AgentSession>();
+
+  for (const group of groups) {
+    for (const s of group) {
+      const k = keyString(s.key);
+      const prev = byKey.get(k);
+      if (!prev) {
+        byKey.set(k, s);
+        continue;
+      }
+      const winner = INDEX_PRECEDENCE[s.origin] < INDEX_PRECEDENCE[prev.origin] ? s : prev;
+      const loser = winner === s ? prev : s;
+      byKey.set(k, {
+        ...winner,
+        title: winner.title || loser.title,
+        cwd: winner.cwd ?? loser.cwd,
+        project: winner.project ?? loser.project,
+        createdAt: winner.createdAt ?? loser.createdAt,
+        updatedAt: winner.updatedAt ?? loser.updatedAt,
+        userTurns: winner.userTurns ?? loser.userTurns,
+        totalTurns: winner.totalTurns ?? loser.totalTurns,
+        transcriptPath: winner.transcriptPath ?? loser.transcriptPath,
+        markdownPath: winner.markdownPath ?? loser.markdownPath,
+        ftsRowId: winner.ftsRowId ?? loser.ftsRowId,
+      });
+    }
+  }
+  return [...byKey.values()];
+}
+
+/**
+ * Merge live agents from herdr and the Claude registry.
+ *
+ * They overlap but neither contains the other. Measured on the capture machine:
+ * herdr reported 52 agents, the registry 49 processes; 46 of herdr's agents had
+ * a matching registry entry, and the registry held 3 Claude processes herdr
+ * could not see (panes outside a herdr workspace).
+ *
+ * herdr wins on conflict because it is the only source with a paneId, and
+ * without a paneId the agent cannot be focused — `herdr agent focus` accepts
+ * nothing else. But the registry's pid and startedAt are grafted on, because
+ * herdr does not expose them and `ps` liveness checking needs the pid.
+ *
+ * The dedupe key is (agent, sessionId) and NOT sessionId alone: two processes
+ * can legitimately share a sessionId, and they are deduped only when they also
+ * come from the same source — see attachLive for why both survive.
+ */
+export function mergeLiveAgents(
+  herdr: readonly LiveAgent[],
+  registry: readonly LiveAgent[],
+): LiveAgent[] {
+  const out: LiveAgent[] = [];
+  const claimed = new Set<string>();
+
+  for (const a of herdr) {
+    const sid = a.session ? keyString(a.session) : undefined;
+    const mate = sid ? registry.find((r) => r.session && keyString(r.session) === sid) : undefined;
+    if (sid) claimed.add(sid);
+    out.push(
+      mate
+        ? {
+            ...a,
+            pid: a.pid ?? mate.pid,
+            startedAt: a.startedAt ?? mate.startedAt,
+            // herdr reports the pane's *shell* cwd, which drifts once you cd.
+            // Measured: 8 of 52 agents reported /Users/david rather than a
+            // project. The registry records the cwd Claude Code itself started
+            // in, which is the one worth showing.
+            cwd: a.cwd === undefined || a.cwd === "" ? mate.cwd : a.cwd,
+            title: a.title ?? mate.title,
+          }
+        : a,
+    );
+  }
+
+  for (const r of registry) {
+    const sid = r.session ? keyString(r.session) : undefined;
+    // Not `claimed.has(sid) -> skip`: when two registry processes share one
+    // sessionId and herdr saw one of them, the other is still a real running
+    // process and dropping it makes the count wrong. Only skip an exact handle
+    // collision.
+    if (out.some((a) => a.handle === r.handle)) continue;
+    if (sid && claimed.has(sid) && r.pid === undefined) continue;
+    out.push(r);
+  }
+
+  return out;
+}
+
+/**
+ * Prune live agents whose process is gone.
+ *
+ * ~/.claude/sessions/<pid>.json is written on start and not always removed on
+ * exit, so a stale file renders as a phantom agent. `alive` is injected (it is
+ * a `kill(pid, 0)` at the call site) to keep this testable.
+ *
+ * Agents with no pid — everything from herdr — are kept: herdr only reports
+ * panes it currently owns, so its liveness is already established.
+ */
+export function pruneDead(
+  agents: readonly LiveAgent[],
+  alive: (pid: number) => boolean,
+): LiveAgent[] {
+  return agents.filter((a) => a.pid === undefined || alive(a.pid));
+}
+
+/**
+ * Attach running processes to each session.
+ *
+ * One-to-MANY, deliberately. Measured: pids 21952 and 95663 were both alive and
+ * both reported sessionId 1b31cf2b-…, one idle and one busy — a second Claude
+ * Code attached to the same conversation. Modelling this as `live?: LiveAgent`
+ * would drop one of them and make the menu bar's count disagree with reality.
+ */
+export function attachLive(
+  sessions: readonly AgentSession[],
+  agents: readonly LiveAgent[],
+): Map<string, LiveAgent[]> {
+  const bySession = new Map<string, LiveAgent[]>();
+  for (const a of agents) {
+    if (!a.session) continue;
+    const k = keyString(a.session);
+    const list = bySession.get(k);
+    if (list) list.push(a);
+    else bySession.set(k, [a]);
+  }
+
+  const out = new Map<string, LiveAgent[]>();
+  for (const s of sessions) {
+    const k = keyString(s.key);
+    out.set(k, bySession.get(k) ?? []);
+  }
+  return out;
+}
+
+/**
+ * Group sessions by project directory.
+ *
+ * Keyed on the normalized cwd, never on SpecStory's project_id. Measured: this
+ * repository appears under two project_ids in sessions.db — b1f0-5789-c7e2-3090
+ * (workspace-derived) and f1dd-2f59-be9e-fc79 (git-derived), both recorded in
+ * its own .specstory/.project.json. Grouping by project_id splits one project
+ * into two piles that look like unrelated repos.
+ */
+export function groupByProject<T extends { session: AgentSession }>(
+  items: readonly T[],
+): Map<string, T[]> {
+  const out = new Map<string, T[]>();
+  for (const item of items) {
+    const key = normalizeCwd(item.session.cwd) ?? item.session.project ?? "Unknown project";
+    const list = out.get(key);
+    if (list) list.push(item);
+    else out.set(key, [item]);
+  }
+  return out;
+}
+
+/** Build the hit list the views render, before scoring. */
+export function toHits(
+  sessions: readonly AgentSession[],
+  live: Map<string, LiveAgent[]>,
+  reasons: Map<string, MatchReason[]>,
+): SessionHit[] {
+  return sessions.map((session) => {
+    const k = keyString(session.key);
+    const agents = live.get(k) ?? [];
+    const matched = [...(reasons.get(k) ?? [])];
+    if (agents.length > 0 && !matched.includes("live")) matched.push("live");
+    return { session, score: 0, matched, live: agents };
+  });
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/agents/merge.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:02:48Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Ordering the results.
+ *
+ * Pure, and deliberately simple: a weighted blend of five signals plus a total
+ * tie-break. The weights are exported as one object so dev-check can assert
+ * *ordering invariants* — "a live session outranks a dead one at equal FTS
+ * rank", "an undated row never outranks a dated one at equal FTS rank" — rather
+ * than float equality, which would break every time a weight is nudged.
+ *
+ * The one non-obvious requirement: scoring must never throw. Every field it
+ * reads is optional somewhere. 7 rows in sessions.db have no timestamp at all,
+ * 341 have no name, and the filesystem readers produce sessions with no turn
+ * counts. A ranker that assumes any of those exist crashes the whole list.
+ */
+
+import type { MatchReason, SessionHit } from "./types";
+
+export const WEIGHTS = {
+  /** Text relevance, normalized across the current result set. */
+  fts: 0.55,
+  /** Recency, with a two-week half-life-ish decay. */
+  recency: 0.2,
+  /** Something is running this conversation right now. */
+  live: 0.15,
+  /** The query appeared in the agent's own prompt history. */
+  prompt: 0.1,
+  /** The query appeared in the title, slug or path. */
+  title: 0.05,
+} as const;
+
+/** Days after which the recency term has decayed to 1/e. */
+export const RECENCY_TAU_DAYS = 14;
+
+/**
+ * Map fts5's native rank onto 0..1, where 1 is the best match in this set.
+ *
+ * fts5 emits `rank` as a negative number, more negative meaning more relevant.
+ * The scale is not comparable between queries, so normalization has to happen
+ * after the whole result set exists — which is why IndexHit carries the raw
+ * value and this is done here rather than in the SQL.
+ *
+ * When every row shares a rank (a single result, or a query where fts5 scored
+ * everything identically) the spread is zero; returning 1 for all of them lets
+ * the other signals decide instead of producing NaN from a zero divide.
+ */
+export function normalizeRanks(ranks: readonly number[]): (rank: number) => number {
+  const finite = ranks.filter((r) => Number.isFinite(r));
+  if (finite.length === 0) return () => 0;
+
+  const best = Math.min(...finite);
+  const worst = Math.max(...finite);
+  const spread = worst - best;
+  if (spread === 0) return () => 1;
+
+  return (rank: number) => {
+    if (!Number.isFinite(rank)) return 0;
+    return (worst - rank) / spread;
+  };
+}
+
+/** exp(-ageDays / tau), clamped. 0 when the row has no date at all. */
+export function recencyScore(when: Date | undefined, now: Date): number {
+  if (!when) return 0;
+  const ms = now.getTime() - when.getTime();
+  if (!Number.isFinite(ms)) return 0;
+  // A future timestamp means clock skew, not relevance. Treat it as "now".
+  const days = Math.max(0, ms) / 86_400_000;
+  return Math.exp(-days / RECENCY_TAU_DAYS);
+}
+
+export function scoreHit(
+  hit: SessionHit,
+  ftsNorm: number,
+  now: Date,
+): number {
+  const has = (r: MatchReason) => hit.matched.includes(r);
+
+  const liveTerm = hit.live.length > 0 ? 1 : 0;
+
+  return (
+    WEIGHTS.fts * clamp01(ftsNorm) +
+    WEIGHTS.recency * clamp01(recencyScore(hit.session.updatedAt ?? hit.session.createdAt, now)) +
+    WEIGHTS.live * liveTerm +
+    WEIGHTS.prompt * (has("prompt") ? 1 : 0) +
+    WEIGHTS.title * (has("title") || has("cwd") ? 1 : 0)
+  );
+}
+
+function clamp01(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return n < 0 ? 0 : n > 1 ? 1 : n;
+}
+
+/**
+ * Order two scored hits. A TOTAL order, always.
+ *
+ * The fall-through to sessionId is not decoration: without it, two rows with an
+ * equal score and no timestamp compare as 0 and Array.prototype.sort leaves
+ * them in whatever order the merge happened to produce — which changes between
+ * renders, so the list visibly reshuffles while the user is looking at it.
+ */
+export function compareHits(a: SessionHit, b: SessionHit): number {
+  if (a.score !== b.score) return b.score - a.score;
+
+  const at = a.session.updatedAt?.getTime();
+  const bt = b.session.updatedAt?.getTime();
+  if (at !== undefined && bt !== undefined && at !== bt) return bt - at;
+  if (at !== undefined && bt === undefined) return -1;
+  if (at === undefined && bt !== undefined) return 1;
+
+  const ac = a.session.createdAt?.getTime();
+  const bc = b.session.createdAt?.getTime();
+  if (ac !== undefined && bc !== undefined && ac !== bc) return bc - ac;
+  if (ac !== undefined && bc === undefined) return -1;
+  if (ac === undefined && bc !== undefined) return 1;
+
+  return a.session.key.sessionId.localeCompare(b.session.key.sessionId);
+}
+
+/**
+ * Score and sort a whole result set.
+ *
+ * `ranks` maps a session key string to its raw fts rank; sessions found only by
+ * a non-FTS index (OpenCode metadata, a prompt-history hit) simply have no
+ * entry and score 0 on that term, which is correct — they matched some other
+ * way, and the other terms say how.
+ */
+export function rankHits(
+  hits: readonly SessionHit[],
+  ranks: ReadonlyMap<string, number>,
+  now: Date,
+): SessionHit[] {
+  const norm = normalizeRanks([...ranks.values()]);
+  const scored = hits.map((hit) => {
+    const raw = ranks.get(`${hit.session.key.agent}:${hit.session.key.sessionId}`);
+    return { ...hit, score: scoreHit(hit, raw === undefined ? 0 : norm(raw), now) };
+  });
+  return scored.sort(compareHits);
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/agents/rank.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:02:56Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to tackle the FTS sanitizer in `src/lib/specstory/fts.ts` next, followed by the SQL builders. Before I write the FTS module though, I should test some unsanitized inputs against the actual database to capture the exact error messages I'll be referencing.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:02:56Z)**_
+
+Now the FTS5 sanitizer. Let me first capture the exact error messages so the pitfall docs and fixtures are verbatim.
+
+_**Agent (claude-opus-5 2026-07-26 21:02:57Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Capture verbatim FTS5 error messages
+
+```bash
+DB="file:$HOME/.specstory/sessions.db?mode=ro"
+for q in '-x' 'col:x' 'foo"' 'a AND' '*' 'NEAR(' 'a OR' '"unclosed' 'raycast extension' '"raycast" "extension"*'; do
+  printf '%-24s -> ' "$q"
+  sqlite3 "$DB" "select count(*) from sessions_fts where sessions_fts match '$(printf '%s' "$q" | sed "s/'/''/g")';" 2>&1 | head -1
+done
+```
+
+```text
+-x                       -> Error: stepping, no such column: x
+col:x                    -> Error: stepping, no such column: col
+foo"                     -> Error: stepping, unterminated string
+a AND                    -> Error: stepping, fts5: syntax error near ""
+*                        -> Error: stepping, unknown special query: 
+NEAR(                    -> Error: stepping, fts5: syntax error near ""
+a OR                     -> Error: stepping, fts5: syntax error near ""
+"unclosed                -> Error: stepping, unterminated string
+raycast extension        -> 55
+"raycast" "extension"*   -> 58
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:03:04Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to correct the error message in my errors.ts file — it should say "Error: stepping, no such column: x" instead of what I currently have. I also need to handle the edge case where a lone asterisk produces "unknown special query:" and add that to the classifier and sanitizer logic.
+
+Now I'm moving on to fix errors.ts and write out the fts.ts file.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:03:07Z)**_
+
+Verbatim errors captured — note it's `Error: stepping,` not `in prepare`. Let me correct that and write the sanitizer.
+
+_**Agent (claude-opus-5 2026-07-26 21:03:11Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/agents/errors.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:03:16Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/agents/errors.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:03:45Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Turning what someone typed into an FTS5 expression.
+ *
+ * A raw user string is NOT an FTS5 expression, and the failure modes are loud.
+ * Captured verbatim from sqlite3 3.51 against the real ~/.specstory/sessions.db:
+ *
+ *   -x         -> Error: stepping, no such column: x
+ *   col:x      -> Error: stepping, no such column: col
+ *   foo"       -> Error: stepping, unterminated string
+ *   "unclosed  -> Error: stepping, unterminated string
+ *   a AND      -> Error: stepping, fts5: syntax error near ""
+ *   a OR       -> Error: stepping, fts5: syntax error near ""
+ *   NEAR(      -> Error: stepping, fts5: syntax error near ""
+ *   *          -> Error: stepping, unknown special query:
+ *
+ * Every one of those is reachable by typing normally. `-x` is a flag someone is
+ * searching for; `col:x` is a Go struct tag; a lone `"` is the first keystroke
+ * of a quoted phrase; and `AND` at the end of the string happens on the way to
+ * typing anything after it. Search that throws while you are still typing is
+ * worse than search that is merely imprecise.
+ *
+ * The fix is to quote every token, which makes each one a literal phrase and
+ * removes all operator meaning, then join them — fts5 ANDs adjacent phrases
+ * implicitly. Measured: `raycast extension` (raw) matched 55 rows;
+ * `"raycast" "extension"*` (sanitized, with the typeahead prefix) matched 58.
+ * Quoting does not narrow the search; the trailing `*` widens it slightly,
+ * which is what you want while a word is still being typed.
+ *
+ * Pure. No I/O, no @raycast/api.
+ */
+
+/** A leading `/` hands the rest through untouched, for people who know fts5. */
+export const RAW_PREFIX = "/";
+
+export interface Fts5Query {
+  /** The MATCH expression, or undefined when there is nothing to search for. */
+  expr?: string;
+  /** True when the user opted into raw fts5 with a leading slash. */
+  raw: boolean;
+  /** The tokens we quoted, for highlighting and for the prompt-history scan. */
+  tokens: string[];
+}
+
+/**
+ * Build a MATCH expression from user input.
+ *
+ * `trailingPrefix` controls the `*` on the final token. It is on while the user
+ * is typing (so `rayc` finds `raycast`) and off when the input ends in a space,
+ * which is the user signalling that the word is complete.
+ */
+export function toFts5(text: string): Fts5Query {
+  const input = text ?? "";
+
+  if (input.trimStart().startsWith(RAW_PREFIX)) {
+    const expr = input.trimStart().slice(RAW_PREFIX.length).trim();
+    return { expr: expr || undefined, raw: true, tokens: [] };
+  }
+
+  const endsWithSpace = /\s$/.test(input);
+  const tokens = input
+    .split(/\s+/)
+    .map((t) => t.trim())
+    // Strip characters that carry no meaning inside a quoted phrase anyway.
+    // Leaving them in is harmless but produces phrases that match nothing,
+    // which reads as "search is broken" rather than "that punctuation is noise".
+    .map((t) => t.replace(/^[-+~^]+/, ""))
+    .filter((t) => t.length > 0);
+
+  if (tokens.length === 0) return { expr: undefined, raw: false, tokens: [] };
+
+  const phrases = tokens.map((t, i) => {
+    // fts5 escapes a double quote inside a phrase by doubling it, same as SQL.
+    const quoted = `"${t.replace(/"/g, '""')}"`;
+    const isLast = i === tokens.length - 1;
+    return isLast && !endsWithSpace ? `${quoted}*` : quoted;
+  });
+
+  return { expr: phrases.join(" "), raw: false, tokens };
+}
+
+/**
+ * Escape a string for single-quoted SQL.
+ *
+ * Used because sqlite3's CLI has no bind parameters on the command line — the
+ * query is one argv element and the values have to be inline. Everything that
+ * reaches this has already been through toFts5, so it is a quoted phrase list,
+ * but doubling apostrophes is still required: an unescaped `'` ends the SQL
+ * string literal and turns the rest of the phrase into syntax.
+ */
+export function sqlQuote(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
+}
+
+/**
+ * Is this expression safe to send?
+ *
+ * Only meaningful for raw (`/`-prefixed) input, since generated expressions are
+ * balanced by construction. An odd number of unescaped quotes is the single
+ * most common way a hand-written expression fails, and catching it here turns
+ * a subprocess round-trip into an instant hint.
+ */
+export function looksBalanced(expr: string): boolean {
+  let quotes = 0;
+  for (let i = 0; i < expr.length; i++) {
+    if (expr[i] !== '"') continue;
+    if (expr[i + 1] === '"') {
+      i++;
+      continue;
+    }
+    quotes++;
+  }
+  return quotes % 2 === 0;
+}
+
+/** The grammar hint shown when a raw expression does not parse. */
+export const FTS5_HELP = [
+  "Searches are matched as literal words, so punctuation is safe to type.",
+  "",
+  "Start with / to write a raw FTS5 expression:",
+  '  /"exact phrase"       an exact phrase',
+  "  /agent AND deck       both words",
+  "  /agent OR deck        either word",
+  "  /agent NOT deck       the first without the second",
+  "  /agen*                prefix match",
+].join("\n");
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/specstory/fts.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:03:57Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm checking the rank query in sql.ts to make sure it generates the correct output, including when using the -json flag.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:03:58Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Validate the exact SQL queries
+
+```bash
+DB="file:$HOME/.specstory/sessions.db?mode=ro"
+echo "=== the exact rank query with -json ==="
+time sqlite3 -json "$DB" "WITH hits AS (SELECT rowid AS rid, agent, session_id AS sid, rank AS r FROM sessions_fts WHERE sessions_fts MATCH '\"raycast\" \"extension\"*' ORDER BY rank LIMIT 90) SELECT h.agent, h.sid, h.r, h.rid, s.project_name, s.origin_cwd, s.slug, s.name, s.native_path, s.user_turns, s.total_turns, NULLIF(s.created_at,'') AS created_at, NULLIF(COALESCE(NULLIF(s.updated_at,''), s.created_at),'') AS ts FROM hits h JOIN sessions s ON s.agent = h.agent AND s.session_id = h.sid AND s.deleted = 0 ORDER BY h.r;" 2>&1 | head -c 700
+echo; echo "=== row count + dup check ==="
+sqlite3 "$DB" "WITH hits AS (SELECT rowid rid, agent, session_id sid, rank r FROM sessions_fts WHERE sessions_fts MATCH '\"raycast\" \"extension\"*' ORDER BY rank LIMIT 90) SELECT count(*) total, count(DISTINCT agent||sid) distinct_sessions FROM hits h JOIN sessions s ON s.agent=h.agent AND s.session_id=h.sid AND s.deleted=0;" 2>&1
+echo "=== recent query (empty search) ==="
+time sqlite3 -json "$DB" "SELECT agent, session_id AS sid, project_name, origin_cwd, slug, name, user_turns, total_turns, NULLIF(created_at,'') AS created_at, NULLIF(COALESCE(NULLIF(updated_at,''),created_at),'') AS ts FROM sessions WHERE deleted=0 ORDER BY COALESCE(NULLIF(updated_at,''), NULLIF(created_at,''), '') DESC LIMIT 5;" 2>&1 | head -c 400
+```
+
+```text
+=== the exact rank query with -json ===
+[{"agent":"claude","sid":"ade4aae0-3a3d-4ef9-a7e8-ef48a3dde603","r":-7.508997401111211723,"rid":7305,"project_name":"translate","origin_cwd":"/Users/david/src/tries/2026-07-09-translate-cli-tui","slug":"raycast-extension-https-github","name":"","native_path":"","user_turns":20,"total_turns":1169,"created_at":"2026-07-22T05:32:33.163Z","ts":"2026-07-24T03:42:46.639Z"},
+{"agent":"claude","sid":"9a5bb463-e3cf-4fe0-8472-7b1c1d31e028","r":-7.500078809755163612,"rid":7331,"project_name":"Pueue-Raycast-Extension","origin_cwd":"/Users/david/Documents/Program/Pueue-Raycast-Extension","slug":"at-specstory-history-2026","name":"","native_path":"","user_turns":6,"total_turns":542,"created_at":"2026-07-2sqlite3 -json "$DB"  2>&1  0.06s user 0.11s system 32% cpu 0.521 total
+head -c 700  0.00s user 0.01s system 4% cpu 0.181 total
+
+=== row count + dup check ===
+Error: in prepare, ambiguous column name: agent
+  k LIMIT 90) SELECT count(*) total, count(DISTINCT agent||sid) distinct_session
+                                      error here ---^
+=== recent query (empty search) ===
+[{"agent":"claude","sid":"51eacf44-0f44-481b-8474-10e4c8985957","project_name":"Pueue-Raycast-Extension","origin_cwd":"/Users/david/Documents/Program/Pueue-Raycast-Extension","slug":"pueue-https-github-com","name":"","user_turns":1,"total_turns":399,"created_at":"2026-07-26T20:14:11.609Z","ts":"2026-07-26T21:03:45.430Z"},
+{"agent":"claude","sid":"1b31cf2b-ca09-46d1-a9a9-fb973d135045","project_namesqlite3 -json "$DB"  2>&1  0.01s user 0.01s system 60% cpu 0.021 total
+head -c 400  0.00s user 0.00s system 32% cpu 0.019 total
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:04:09Z)**_
+
+<think><details><summary>Thought Process</summary>
+The `-json` output format is giving me exactly what I need, though I'm noticing that NULLIF only applied to the timestamp fields, not to the string columns like `native_path` and `name` which are showing as empty strings. That's workable since the TypeScript layer can handle empty strings. I should verify whether `-json` actually converts SQL NULL values to JSON `null` by testing with a row that has an empty `updated_at` field.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:04:10Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check NULL rendering and empty result in -json
+
+```bash
+DB="file:$HOME/.specstory/sessions.db?mode=ro"
+echo "=== how does -json render SQL NULL? (the 7 undated rows) ==="
+sqlite3 -json "$DB" "SELECT agent, session_id AS sid, project_name, NULLIF(created_at,'') AS created_at, NULLIF(COALESCE(NULLIF(updated_at,''),created_at),'') AS ts, NULLIF(origin_cwd,'') AS cwd FROM sessions WHERE project_id='unknown' LIMIT 3;" 2>&1
+echo "=== empty result set -> ? ==="
+sqlite3 -json "$DB" "SELECT 1 WHERE 0;" 2>&1 | cat -A | head -2
+echo "=== snippet query by rowid ==="
+time sqlite3 -json "$DB" "SELECT rowid AS rid, snippet(sessions_fts, 3, '**', '**', '…', 12) AS snip FROM sessions_fts WHERE sessions_fts MATCH '\"raycast\"' AND rowid = 7331;" 2>&1 | head -c 300
+```
+
+```text
+=== how does -json render SQL NULL? (the 7 undated rows) ===
+[{"agent":"claude","sid":"4d51151f-11f8-4c35-86c0-d1eb66ed2108","project_name":"","created_at":null,"ts":null,"cwd":null},
+{"agent":"claude","sid":"1b343f5e-9314-4712-b2a8-fe0d214d5163","project_name":"","created_at":null,"ts":null,"cwd":null},
+{"agent":"claude","sid":"6e0a0a46-af72-4379-a0be-a2106d295e70","project_name":"","created_at":null,"ts":null,"cwd":null}]
+=== empty result set -> ? ===
+cat: illegal option -- A
+usage: cat [-belnstuv] [file ...]
+=== snippet query by rowid ===
+[{"rid":7331,"snip":"…Capture **Raycast** Metadata\",\"url\":\"https://www.**raycast**.com/koinzhang/capture-**raycast**-metadata…"}]
+sqlite3 -json "$DB"  2>&1  0.17s user 0.02s system 49% cpu 0.382 total
+head -c 300  0.00s user 0.00s system 1% cpu 0.381 total
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:04:17Z)**_
+
+<think><details><summary>Thought Process</summary>
+The `-json` flag renders SQL NULL values as JSON `null`, and I've confirmed the undated rows have null values for created_at, ts, and cwd. Querying by rowid is fast even for this particular row. Now I need to check what sqlite3 outputs for an empty result set before moving on to write the sql.ts file.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:04:17Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check sqlite3 -json empty result output
+
+```bash
+DB="file:$HOME/.specstory/sessions.db?mode=ro"
+echo -n "empty result stdout: ["; sqlite3 -json "$DB" "SELECT 1 AS x WHERE 0;" 2>&1 | od -c | head -2; echo "]"
+echo "--- so JSON.parse('') would throw; must guard ---"
+```
+
+```text
+empty result stdout: []
+--- so JSON.parse('') would throw; must guard ---
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:05:00Z)**_
+
+<think><details><summary>Thought Process</summary>
+So `sqlite3 -json` returns completely empty output for zero rows, not an empty array—that'll break JSON parsing. I need to add a guard against this and document it as a gotcha. Now I'm starting on the sql.ts file.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:05:00Z)**_
+
+Important trap confirmed: `sqlite3 -json` prints **nothing** for a zero-row result, not `[]` — so `JSON.parse("")` throws. Writing the SQL builders with that guarded.
+
+_**Agent (claude-opus-5 2026-07-26 21:05:01Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * The SpecStory queries, as strings.
+ *
+ * Pure builders — no I/O — so dev-check can assert the generated SQL and then
+ * run it against the real database without this module importing anything.
+ *
+ * Values are inlined rather than bound because sqlite3's CLI takes the whole
+ * statement as one argv element and has no bind parameters there. Everything
+ * interpolated has been through fts.ts's sanitizer or is a number we produced,
+ * and sqlQuote doubles apostrophes; nothing here ever sees raw user text.
+ *
+ * Output is always `-json`. Two things about that format bite:
+ *
+ *   1. A zero-row result prints NOTHING — not `[]`. `JSON.parse("")` throws
+ *      "Unexpected end of JSON input", which surfaces as a broken-database
+ *      error for the entirely normal case of a search with no matches.
+ *      parseRows() below is the guard; use it, never JSON.parse directly.
+ *   2. SQL NULL renders as JSON null, so the NULLIF chains below arrive in
+ *      TypeScript as `null` and not as `""`.
+ */
+
+import { sqlQuote } from "./fts";
+
+/**
+ * How the URI is built.
+ *
+ * `mode=ro` and not `immutable=1`: the database is 288 MB with a live 36 MB WAL
+ * that SpecStory writes to continuously. `immutable` tells SQLite the file
+ * cannot change, so it skips the WAL entirely and returns a stale snapshot —
+ * sessions from the last few minutes simply do not exist. Verified that a
+ * plain read-only open against the hot WAL works with no contention.
+ */
+export function dbUri(path: string): string {
+  return `file:${encodeURI(path)}?mode=ro`;
+}
+
+/**
+ * Columns every session query returns, in one place so the row type matches.
+ *
+ * The double NULLIF on `ts` is the fix for the seven undated rows. Measured:
+ * 7 of 470 rows have an empty `updated_at`, and they are exactly the
+ * project_id='unknown' rows — `created_at`, `origin_cwd` and `slug` are empty
+ * on the same rows. Without this they arrive as "" and become
+ * `new Date("")` = Invalid Date, which renders literally as "Invalid Date";
+ * with a naive `|| 0` fallback they become 1970 and look like real old data.
+ * NULLIF twice yields SQL NULL -> JSON null -> `undefined`, which is the only
+ * honest answer, and the UI renders "date unknown".
+ */
+const SESSION_COLUMNS = `
+  s.project_name,
+  NULLIF(s.origin_cwd, '')  AS cwd,
+  NULLIF(s.slug, '')        AS slug,
+  NULLIF(s.name, '')        AS name,
+  NULLIF(s.native_path, '') AS native_path,
+  s.user_turns,
+  s.total_turns,
+  NULLIF(s.created_at, '')                                     AS created_at,
+  NULLIF(COALESCE(NULLIF(s.updated_at, ''), s.created_at), '')  AS ts`;
+
+/**
+ * The typeahead query. Measured at 282 ms including the sqlite3 spawn.
+ *
+ * Two things about the CTE are load-bearing:
+ *
+ *  - `ORDER BY rank` uses fts5's magic `rank` column. It only exists on the
+ *    virtual table, so it has to be selected inside the CTE and referenced as
+ *    an ordinary column outside it.
+ *  - `LIMIT` INSIDE the CTE bounds the join. Without it the join runs over
+ *    every matching row before the outer LIMIT trims it, and a common word
+ *    matches hundreds.
+ *
+ * `fanout` is deliberately larger than the number of rows we want, because
+ * dedupe happens after this: 81 sessions have more than one row in sessions_fts
+ * (max 6), so asking for exactly N returns fewer than N distinct sessions.
+ */
+export function rankQuery(expr: string, fanout: number): string {
+  return `WITH hits AS (
+  SELECT rowid AS rid, agent, session_id AS sid, rank AS r
+  FROM sessions_fts
+  WHERE sessions_fts MATCH ${sqlQuote(expr)}
+  ORDER BY rank
+  LIMIT ${int(fanout)}
+)
+SELECT h.agent, h.sid, h.r, h.rid,${SESSION_COLUMNS}
+FROM hits h
+JOIN sessions s ON s.agent = h.agent AND s.session_id = h.sid AND s.deleted = 0
+ORDER BY h.r;`;
+}
+
+/**
+ * Newest sessions, no query. Backs the empty-search-text state at ~20 ms.
+ *
+ * Sorts on the COALESCE rather than on `updated_at` so the seven undated rows
+ * land at the bottom instead of the top — in SQLite, '' sorts BEFORE any
+ * non-empty string, so a plain `ORDER BY updated_at DESC` would put every
+ * dateless row first, which reads as "your seven most recent sessions are all
+ * blank".
+ */
+export function recentQuery(limit: number, agents?: readonly string[]): string {
+  const filter = agentFilter(agents);
+  return `SELECT s.agent, s.session_id AS sid, NULL AS r, NULL AS rid,${SESSION_COLUMNS}
+FROM sessions s
+WHERE s.deleted = 0${filter ? ` AND ${filter}` : ""}
+ORDER BY COALESCE(NULLIF(s.updated_at, ''), NULLIF(s.created_at, ''), '') DESC
+LIMIT ${int(limit)};`;
+}
+
+/**
+ * One highlighted excerpt, looked up by rowid.
+ *
+ * By rowid and never by session_id. `rowid` is fts5's real primary key, so this
+ * is a lookup; `session_id` is declared UNINDEXED, so the
+ * `session_id IN (…)` form is a full scan of the index AND returns the
+ * duplicate rows again.
+ *
+ * Column 3 is `body` in `fts5(session_id UNINDEXED, agent UNINDEXED, name, body)`.
+ *
+ * Cost, measured: 1144 ms on the largest matching body (7.36 MB; the table's
+ * max is 9.99 MB, mean 257 KB) against 20 ms for the same MATCH without
+ * snippet(). 57x. That is why this is per-selection, debounced, capped by a
+ * timeout, and off by default.
+ */
+export function snippetQuery(expr: string, rowId: number): string {
+  return `SELECT rowid AS rid,
+       snippet(sessions_fts, 3, '**', '**', '…', 12) AS snip
+FROM sessions_fts
+WHERE sessions_fts MATCH ${sqlQuote(expr)} AND rowid = ${int(rowId)};`;
+}
+
+/**
+ * Does this database have the shape we expect?
+ *
+ * SpecStory owns this schema and can change it. Checking up front means a
+ * changed schema degrades to the filesystem readers with an honest message,
+ * rather than throwing "no such column" from the middle of a search.
+ */
+export function probeQuery(): string {
+  return `SELECT
+  (SELECT count(*) FROM pragma_table_info('sessions')     WHERE name IN
+     ('agent','session_id','project_id','project_name','origin_cwd','slug','name',
+      'created_at','updated_at','user_turns','total_turns','native_path','deleted')) AS session_cols,
+  (SELECT count(*) FROM pragma_table_info('sessions_fts') WHERE name IN
+     ('session_id','agent','name','body')) AS fts_cols,
+  (SELECT count(*) FROM sessions WHERE deleted = 0) AS rows;`;
+}
+
+/** Warm the page cache before the user has typed. See the cold-start note. */
+export function warmupQuery(): string {
+  return `SELECT count(*) AS n FROM sessions;`;
+}
+
+function agentFilter(agents?: readonly string[]): string | undefined {
+  if (!agents || agents.length === 0) return undefined;
+  return `s.agent IN (${agents.map(sqlQuote).join(", ")})`;
+}
+
+/**
+ * Coerce to a safe integer literal.
+ *
+ * Belt and braces: these values come from preferences, and a preference is a
+ * text field. `Number("30; DROP TABLE")` is NaN, and NaN interpolated into SQL
+ * is a syntax error rather than an injection — but a syntax error in a LIMIT is
+ * still a broken search, so clamp instead.
+ */
+function int(n: number): number {
+  const v = Math.trunc(Number(n));
+  return Number.isFinite(v) && v > 0 ? Math.min(v, 10_000) : 1;
+}
+
+/**
+ * Parse `sqlite3 -json` output.
+ *
+ * The guard that earns this function: a zero-row result prints NOTHING, not
+ * `[]`. Verified — `sqlite3 -json db "SELECT 1 WHERE 0"` produces zero bytes on
+ * stdout. `JSON.parse("")` throws "Unexpected end of JSON input", so a search
+ * that legitimately matched nothing would render as a broken database.
+ */
+export function parseRows<T>(stdout: string): T[] {
+  const text = stdout.trim();
+  if (!text) return [];
+  const parsed: unknown = JSON.parse(text);
+  return Array.isArray(parsed) ? (parsed as T[]) : [];
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/specstory/sql.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:05:12Z)**_
+
+<think><details><summary>Thought Process</summary>
+I should write `wire.ts` for the row shapes and run a dev-check to validate my progress so far, getting a green build early rather than debugging everything at the end. But first, let me quickly verify my SQLite claim about how empty strings sort before non-empty values in DESC order, since I mentioned it in a comment.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:05:12Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Verify ORDER BY behavior with empty timestamps
+
+```bash
+DB="file:$HOME/.specstory/sessions.db?mode=ro"
+echo "=== does a naive ORDER BY updated_at DESC put blanks first? ==="
+sqlite3 "$DB" "SELECT session_id, quote(updated_at) FROM sessions WHERE deleted=0 ORDER BY updated_at DESC LIMIT 4;" 2>&1
+echo "=== my COALESCE version ==="
+sqlite3 "$DB" "SELECT session_id, quote(updated_at) FROM sessions WHERE deleted=0 ORDER BY COALESCE(NULLIF(updated_at,''), NULLIF(created_at,''), '') DESC LIMIT 4;" 2>&1
+echo "=== where do the blanks land in my version? ==="
+sqlite3 "$DB" "SELECT count(*) FROM (SELECT session_id FROM sessions WHERE deleted=0 ORDER BY COALESCE(NULLIF(updated_at,''), NULLIF(created_at,''), '') DESC LIMIT 20) t JOIN sessions s USING(session_id) WHERE coalesce(s.updated_at,'')='';" 2>&1
+```
+
+```text
+=== does a naive ORDER BY updated_at DESC put blanks first? ===
+51eacf44-0f44-481b-8474-10e4c8985957|'2026-07-26T21:05:01.889Z'
+1b31cf2b-ca09-46d1-a9a9-fb973d135045|'2026-07-26T21:03:12.256Z'
+9a5bb463-e3cf-4fe0-8472-7b1c1d31e028|'2026-07-26T19:45:25.022Z'
+66f30d89-8cbd-41be-a655-edf5465147ee|'2026-07-26T19:27:54.968Z'
+=== my COALESCE version ===
+51eacf44-0f44-481b-8474-10e4c8985957|'2026-07-26T21:05:01.889Z'
+1b31cf2b-ca09-46d1-a9a9-fb973d135045|'2026-07-26T21:03:12.256Z'
+9a5bb463-e3cf-4fe0-8472-7b1c1d31e028|'2026-07-26T19:45:25.022Z'
+66f30d89-8cbd-41be-a655-edf5465147ee|'2026-07-26T19:27:54.968Z'
+=== where do the blanks land in my version? ===
+0
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:05:27Z)**_
+
+<think><details><summary>Thought Process</summary>
+I had the sort order backwards in my comment — `ORDER BY updated_at DESC` actually puts empty values last, not first, since empty strings sort lowest. The naive version works fine for descending order, though my COALESCE approach is still preferable since it falls back to created_at when updated_at is blank. I need to fix the comment to reflect what's actually happening.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:05:27Z)**_
+
+My comment was backwards — `''` sorts lowest, so in `DESC` blanks land *last*, which is already correct. Fixing the justification to what's actually true.
+
+_**Agent (claude-opus-5 2026-07-26 21:05:29Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/specstory/sql.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:05:45Z)**_
+
+Now the wire types and a first dev-check so I can compile before writing more.
+
+_**Agent (claude-opus-5 2026-07-26 21:05:46Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * SpecStory's row shapes, transcribed rather than made ergonomic.
+ *
+ * The schema, verbatim from `sqlite3 ~/.specstory/sessions.db .schema`:
+ *
+ *   CREATE TABLE sessions (
+ *     project_id TEXT NOT NULL, project_name TEXT, agent TEXT NOT NULL,
+ *     session_id TEXT NOT NULL, created_at TEXT, updated_at TEXT,
+ *     user_turns INTEGER, total_turns INTEGER, slug TEXT, name TEXT,
+ *     native_path TEXT, origin_cwd TEXT, size INTEGER, mtime INTEGER,
+ *     index_version INTEGER, indexed_at TEXT, fts_rowid INTEGER,
+ *     deleted INTEGER NOT NULL DEFAULT 0,
+ *     PRIMARY KEY (agent, session_id));
+ *   CREATE VIRTUAL TABLE sessions_fts USING
+ *     fts5(session_id UNINDEXED, agent UNINDEXED, name, body);
+ *
+ * This is a third party's private database. Every field that the SQL does not
+ * force is typed nullable, because measured on a 470-row sample:
+ *
+ *   name        empty on 341 rows (~70%)
+ *   native_path empty on essentially all rows
+ *   size, mtime  0 on most rows
+ *   created_at, updated_at, origin_cwd, slug  all empty on the 7
+ *              project_id='unknown' rows
+ *
+ * Coverage is claude 451, codex 18, gemini 1. SpecStory's CLI also names
+ * antigravity, cursor, cursoride, deepseek and droid as providers, but there
+ * are zero rows for any of them here — and it does NOT support OpenCode at all,
+ * which is why lib/opencode/ exists as a separate index.
+ */
+
+/** One row from rankQuery() or recentQuery(). */
+export interface SessionRow {
+  agent: string;
+  sid: string;
+  /** fts5 rank: negative, lower is more relevant. null from recentQuery(). */
+  r: number | null;
+  /** fts5 rowid, the only safe key for the snippet lookup. null from recent. */
+  rid: number | null;
+  project_name: string | null;
+  cwd: string | null;
+  slug: string | null;
+  name: string | null;
+  native_path: string | null;
+  user_turns: number | null;
+  total_turns: number | null;
+  created_at: string | null;
+  /** updated_at, falling back to created_at. NULL when both are empty. */
+  ts: string | null;
+}
+
+export interface SnippetRow {
+  rid: number;
+  snip: string | null;
+}
+
+export interface ProbeRow {
+  session_cols: number;
+  fts_cols: number;
+  rows: number;
+}
+
+/** How many of the columns probeQuery() counts must be present. */
+export const EXPECTED_SESSION_COLS = 13;
+export const EXPECTED_FTS_COLS = 4;
+
+/**
+ * Is this database usable?
+ *
+ * A row count of zero is fine — an empty index is not a broken one, and saying
+ * "SpecStory's schema changed" to someone who simply has no sessions yet sends
+ * them to debug the wrong thing.
+ */
+export function schemaOk(row: ProbeRow | undefined): boolean {
+  if (!row) return false;
+  return row.session_cols >= EXPECTED_SESSION_COLS && row.fts_cols >= EXPECTED_FTS_COLS;
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/specstory/wire.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:08:25Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * The test suite.
+ *
+ * There is no test runner in a Raycast extension and adding one is store review
+ * noise, so this is a plain script: `just verify` compiles it with the already
+ * installed tsc and runs it under plain node.
+ *
+ * That only works because every module it imports is free of @raycast/api,
+ * which exists only inside Raycast's runtime. Import discipline IS the harness,
+ * and the last section of this file asserts it rather than trusting it.
+ *
+ * Fixtures over mocks: the JSON in fixtures/ was captured from the real tools
+ * and then redacted, so a shape change in herdr or SpecStory shows up as a
+ * failing assertion instead of a runtime surprise.
+ */
+
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+
+import {
+  actionableGaps,
+  canSearch,
+  canSeeLive,
+  resolveCapabilities,
+} from "./agents/capabilities";
+import {
+  AgentDeckError,
+  classifyHerdr,
+  classifySqlite,
+  cleanStderr,
+  fromExecError,
+  isBadQuery,
+  isUnreachable,
+} from "./agents/errors";
+import {
+  attachLive,
+  dedupeFtsRows,
+  groupByProject,
+  mergeLiveAgents,
+  mergeSessions,
+  pruneDead,
+} from "./agents/merge";
+import {
+  byRecency,
+  keyString,
+  normalizeAgent,
+  normalizeCwd,
+  normalizeStatus,
+  oneline,
+  parseTs,
+  projectOf,
+  titleOf,
+} from "./agents/normalize";
+import { PROBE_DIRS, expandTilde, pickBinary } from "./agents/probe";
+import { compareHits, normalizeRanks, rankHits, recencyScore, scoreHit } from "./agents/rank";
+import type { AgentSession, Capability, LiveAgent, SessionHit } from "./agents/types";
+import type { IndexHit } from "./agents/transport";
+import { FTS5_HELP, looksBalanced, sqlQuote, toFts5 } from "./specstory/fts";
+import { dbUri, parseRows, probeQuery, rankQuery, recentQuery, snippetQuery, warmupQuery } from "./specstory/sql";
+import { schemaOk, type ProbeRow, type SessionRow } from "./specstory/wire";
+
+let failures = 0;
+let checks = 0;
+
+function check(name: string, actual: unknown, expected: unknown): void {
+  checks++;
+  const a = JSON.stringify(actual);
+  const e = JSON.stringify(expected);
+  if (a !== e) {
+    failures++;
+    console.error(`FAIL ${name}\n  expected ${e}\n  actual   ${a}`);
+  }
+}
+
+function ok(name: string, condition: boolean, detail = ""): void {
+  checks++;
+  if (!condition) {
+    failures++;
+    console.error(`FAIL ${name}${detail ? `\n  ${detail}` : ""}`);
+  }
+}
+
+function section(title: string): void {
+  console.log(`\n— ${title}`);
+}
+
+const NOW = new Date("2026-07-27T00:00:00.000Z");
+
+// ---------------------------------------------------------------------------
+section("normalize: agents and statuses");
+
+check("agent claude", normalizeAgent("claude"), "claude");
+check("agent cursoride collapses", normalizeAgent("cursoride"), "cursor");
+check("agent cursor-agent collapses", normalizeAgent("cursor-agent"), "cursor");
+check("agent claude-code collapses", normalizeAgent("claude-code"), "claude");
+check("agent uppercase", normalizeAgent("CODEX"), "codex");
+// A SpecStory provider we have no live/resume story for. Findable, not actionable.
+check("agent antigravity -> unknown", normalizeAgent("antigravity"), "unknown");
+check("agent empty -> unknown", normalizeAgent(""), "unknown");
+check("agent null -> unknown", normalizeAgent(null), "unknown");
+
+// Two vocabularies, one union: herdr says "working", Claude's registry "busy".
+check("status working", normalizeStatus("working"), "working");
+check("status busy is working", normalizeStatus("busy"), "working");
+check("status blocked", normalizeStatus("blocked"), "blocked");
+check("status idle", normalizeStatus("idle"), "idle");
+check("status done", normalizeStatus("done"), "done");
+// A herdr upgrade adding a state must degrade, not throw.
+check("status unrecognised -> unknown", normalizeStatus("compacting"), "unknown");
+check("status null -> unknown", normalizeStatus(null), "unknown");
+
+// ---------------------------------------------------------------------------
+section("normalize: timestamps (the 1970 trap)");
+
+// The two failure modes that look like success. 7 rows in sessions.db have an
+// empty updated_at; both of these would render as plausible data.
+check("empty string -> undefined", parseTs(""), undefined);
+check("null -> undefined", parseTs(null), undefined);
+check("undefined -> undefined", parseTs(undefined), undefined);
+check("zero -> undefined", parseTs(0), undefined);
+ok("empty string is NOT Invalid Date", !(parseTs("") instanceof Date));
+ok("zero is NOT 1970", parseTs(0)?.getFullYear() !== 1970);
+check("garbage -> undefined", parseTs("not a date"), undefined);
+
+check("ISO 8601", parseTs("2026-07-26T20:14:11.609Z")?.toISOString(), "2026-07-26T20:14:11.609Z");
+// ~/.claude/history.jsonl uses epoch ms; ~/.codex/history.jsonl epoch seconds.
+check("epoch ms", parseTs(1785096102642)?.toISOString(), new Date(1785096102642).toISOString());
+check("epoch seconds", parseTs(1770466204)?.toISOString(), new Date(1770466204000).toISOString());
+check("numeric string", parseTs("1785096102642")?.toISOString(), new Date(1785096102642).toISOString());
+ok("seconds and ms land in the same decade",
+  Math.abs((parseTs(1770466204)!.getFullYear()) - (parseTs(1785096102642)!.getFullYear())) <= 1);
+
+// ---------------------------------------------------------------------------
+section("normalize: titles, cwd, projects");
+
+// ~70% of sessions.db rows have an empty name, so the fallbacks are the common
+// path and every link has to be exercised.
+check("title prefers name", titleOf({ name: "Real Title", slug: "a-b", sessionId: "9a5bb463" }), "Real Title");
+check("title falls to aiTitle", titleOf({ name: "", aiTitle: "AI Title", sessionId: "9a5bb463" }), "AI Title");
+check("title falls to slug", titleOf({ name: "", aiTitle: "", slug: "pueue-https-github-com", sessionId: "9a5bb463" }), "pueue https github com");
+check("title falls to prompt", titleOf({ slug: "", firstPrompt: "fix the thing", sessionId: "9a5bb463" }), "fix the thing");
+check("title falls to id", titleOf({ sessionId: "9a5bb463-e3cf-4fe0" }), "9a5bb46");
+ok("title is never empty", titleOf({ name: "  ", slug: "  ", sessionId: "abcdefgh" }).length > 0);
+
+check("cwd trailing slash", normalizeCwd("/Users/dev/x/"), "/Users/dev/x");
+check("cwd /private/tmp folds", normalizeCwd("/private/tmp/x"), "/tmp/x");
+check("cwd /private/var folds", normalizeCwd("/private/var/y"), "/var/y");
+check("cwd root survives", normalizeCwd("/"), "/");
+check("cwd empty -> undefined", normalizeCwd(""), undefined);
+// /privateer must NOT be mangled into /er — the word boundary is load-bearing.
+check("cwd /privateer untouched", normalizeCwd("/privateer/x"), "/privateer/x");
+
+check("project from cwd", projectOf("/Users/dev/Projects/agent-deck"), "agent-deck");
+check("project falls back to name", projectOf("", "translate"), "translate");
+check("project undefined when nothing", projectOf(null, null), undefined);
+
+check("oneline collapses", oneline("a\n\n  b   c"), "a b c");
+ok("oneline truncates", oneline("x".repeat(300)).length <= 140);
+
+// ---------------------------------------------------------------------------
+section("probe: binary resolution order");
+
+const FAKE = new Set([
+  "/opt/homebrew/bin/herdr",
+  "/Users/dev/.local/bin/herdr",
+  "/usr/bin/sqlite3",
+  "/Users/dev/.opencode/bin/opencode",
+  "/pinned/herdr",
+]);
+const exists = (p: string) => FAKE.has(p);
+const DIRS = ["/opt/homebrew/bin", "/usr/local/bin", "/Users/dev/.local/bin", "/Users/dev/.opencode/bin", "/usr/bin"];
+
+check("preference wins", pickBinary("herdr", exists, { configured: "/pinned/herdr", cached: "/opt/homebrew/bin/herdr", dirs: DIRS }), "/pinned/herdr");
+// A stale preference must degrade into the probe, not produce an ENOENT later.
+check("stale preference falls through", pickBinary("herdr", exists, { configured: "/gone/herdr", dirs: DIRS }), "/opt/homebrew/bin/herdr");
+check("preference beats cache", pickBinary("herdr", exists, { configured: "/pinned/herdr", cached: "/opt/homebrew/bin/herdr", dirs: DIRS }), "/pinned/herdr");
+check("stale cache falls through", pickBinary("herdr", exists, { cached: "/gone/herdr", dirs: DIRS }), "/opt/homebrew/bin/herdr");
+check("probe order is first hit", pickBinary("herdr", exists, { dirs: DIRS }), "/opt/homebrew/bin/herdr");
+check("absent -> undefined, never throws", pickBinary("nope", exists, { dirs: DIRS }), undefined);
+// The two entries the sibling extension's list does not have.
+check("reaches /usr/bin for sqlite3", pickBinary("sqlite3", exists, { dirs: DIRS }), "/usr/bin/sqlite3");
+check("reaches ~/.opencode/bin", pickBinary("opencode", exists, { dirs: DIRS }), "/Users/dev/.opencode/bin/opencode");
+
+ok("PROBE_DIRS contains /usr/bin (the only sqlite3 on macOS)", PROBE_DIRS.includes("/usr/bin"));
+ok("PROBE_DIRS contains ~/.opencode/bin", PROBE_DIRS.some((d) => d.endsWith("/.opencode/bin")));
+ok("PROBE_DIRS contains both Homebrew prefixes",
+  PROBE_DIRS.includes("/opt/homebrew/bin") && PROBE_DIRS.includes("/usr/local/bin"));
+
+check("expandTilde", expandTilde("~/x"), join(homedir(), "x"));
+// Not a shell: ~user cannot be resolved without a lookup, so leave it alone.
+check("expandTilde leaves ~user", expandTilde("~alice/x"), "~alice/x");
+check("expandTilde leaves absolute", expandTilde("/a/b"), "/a/b");
+
+// ---------------------------------------------------------------------------
+section("capabilities: nothing is required");
+
+const NO_TOOLS = resolveCapabilities({ exists: () => false });
+ok("no tools: nothing is available", actionableGaps(NO_TOOLS).length > 0);
+check("no tools: herdr unavailable", NO_TOOLS["live.herdr"].available, false);
+check("no tools: specstory unavailable", NO_TOOLS["index.specstory"].available, false);
+ok("no tools: herdr offers an install hint", NO_TOOLS["live.herdr"].install !== undefined);
+ok("no tools: herdr degrades to the claude registry", NO_TOOLS["live.herdr"].degradedTo === "live.claude");
+ok("no tools: specstory degrades to claudefs", NO_TOOLS["index.specstory"].degradedTo === "index.claudefs");
+
+// THE acceptance test for "every external tool is optional": with no binary and
+// no third-party database at all, a machine that has run Claude Code can still
+// list live agents and search its own transcripts.
+const FS_ONLY = resolveCapabilities({
+  exists: (p) => p.includes("/.claude/sessions") || p.includes("/.claude/projects") || p.includes("/.codex/sessions"),
+});
+check("fs only: live.claude available", FS_ONLY["live.claude"].available, true);
+check("fs only: index.claudefs available", FS_ONLY["index.claudefs"].available, true);
+check("fs only: index.codexfs available", FS_ONLY["index.codexfs"].available, true);
+ok("fs only: search still possible", canSearch(FS_ONLY));
+ok("fs only: live state still possible", canSeeLive(FS_ONLY));
+check("fs only: no herdr", FS_ONLY["live.herdr"].available, false);
+check("fs only: no specstory", FS_ONLY["index.specstory"].available, false);
+
+// sqlite3 gates BOTH database indexes; losing it must not lose the fs readers.
+const NO_SQLITE = resolveCapabilities({
+  exists: (p) => !p.endsWith("/sqlite3"),
+});
+check("no sqlite3: specstory off", NO_SQLITE["index.specstory"].available, false);
+check("no sqlite3: opencode off", NO_SQLITE["index.opencode"].available, false);
+check("no sqlite3: claudefs still on", NO_SQLITE["index.claudefs"].available, true);
+ok("no sqlite3: search still possible", canSearch(NO_SQLITE));
+ok("no sqlite3: reason names sqlite3", /sqlite3/.test(NO_SQLITE["index.specstory"].reason ?? ""));
+
+// The distinction the whole model exists for: absent vs present-but-broken.
+const HERDR_DOWN = resolveCapabilities({
+  exists: () => true,
+  herdrServerReachable: false,
+  herdrServerDetail: "herdr server is not running",
+});
+check("herdr down: unavailable", HERDR_DOWN["live.herdr"].available, false);
+ok("herdr down: NO install hint (it IS installed)", HERDR_DOWN["live.herdr"].install === undefined);
+ok("herdr down: reason says so", /not running|not answering/.test(HERDR_DOWN["live.herdr"].reason ?? ""));
+ok("herdr down: still degrades to the registry", HERDR_DOWN["live.herdr"].degradedTo === "live.claude");
+ok("herdr down: not in the actionable gaps", !actionableGaps(HERDR_DOWN).some((s) => s.capability === "live.herdr"));
+
+const ALL_TOOLS = resolveCapabilities({ exists: () => true, herdrServerReachable: true });
+check("all tools: herdr available", ALL_TOOLS["live.herdr"].available, true);
+check("all tools: act.herdr available", ALL_TOOLS["act.herdr"].available, true);
+check("all tools: no gaps", actionableGaps(ALL_TOOLS).length, 0);
+
+// ---------------------------------------------------------------------------
+section("fts5 sanitizer");
+
+check("simple", toFts5("raycast").expr, '"raycast"*');
+check("two words", toFts5("raycast extension").expr, '"raycast" "extension"*');
+// A trailing space means the word is finished, so drop the prefix wildcard.
+check("trailing space drops the wildcard", toFts5("raycast extension ").expr, '"raycast" "extension"');
+check("empty -> undefined", toFts5("").expr, undefined);
+check("whitespace only -> undefined", toFts5("   ").expr, undefined);
+
+// The four inputs that produce a verbatim sqlite error when unsanitized.
+check("-x is quoted, not a column ref", toFts5("-x").expr, '"x"*');
+check("col:x is quoted", toFts5("col:x").expr, '"col:x"*');
+check("a stray quote is escaped", toFts5('foo"').expr, '"foo"""*');
+check("AND is literal", toFts5("a AND").expr, '"a" "AND"*');
+check("OR is literal", toFts5("a OR").expr, '"a" "OR"*');
+check("a lone star is a literal", toFts5("*").expr, undefined);
+check("NEAR( is literal", toFts5("NEAR(").expr, '"NEAR("*');
+
+// Raw escape hatch.
+check("slash means raw", toFts5("/agent AND deck").raw, true);
+check("raw passes through", toFts5("/agent AND deck").expr, "agent AND deck");
+check("raw empty -> undefined", toFts5("/").expr, undefined);
+
+// Generated expressions are balanced by construction; assert it anyway, since
+// an unbalanced quote is the one failure the sanitizer must never produce.
+for (const input of ['foo"', '"', '""', 'a"b"c', "-x", "col:x", "a AND", "*", "😀", "檢查 Claude 日誌"]) {
+  ok(`balanced quotes for ${JSON.stringify(input)}`, looksBalanced(toFts5(input).expr ?? ""), toFts5(input).expr);
+}
+ok("looksBalanced rejects an odd quote", !looksBalanced('a"'));
+ok("looksBalanced accepts an escaped quote", looksBalanced('"a""b"'));
+
+// Idempotence: re-sanitizing our own output must not compound the escaping.
+const once = toFts5("foo bar").expr!;
+ok("sanitizer output is stable under re-tokenising", toFts5(once).tokens.length > 0);
+
+check("CJK survives", toFts5("檢查 Claude").expr, '"檢查" "Claude"*');
+check("emoji survives", toFts5("😀").expr, '"😀"*');
+
+check("sqlQuote doubles apostrophes", sqlQuote("it's"), "'it''s'");
+ok("FTS5_HELP mentions the slash", FTS5_HELP.includes("/"));
+
+// ---------------------------------------------------------------------------
+section("specstory: SQL builders");
+
+const rq = rankQuery('"raycast"*', 90);
+ok("rank query orders by rank", /ORDER BY rank/.test(rq));
+ok("rank query LIMITs inside the CTE", /ORDER BY rank\s+LIMIT 90/.test(rq));
+ok("rank query filters deleted", /s\.deleted = 0/.test(rq));
+ok("rank query double-NULLIFs the timestamp", /NULLIF\(COALESCE\(NULLIF\(s\.updated_at/.test(rq));
+ok("rank query selects the fts rowid", /rowid AS rid/.test(rq));
+
+// A LIMIT is interpolated, so junk from a text preference must clamp, not inject.
+ok("limit clamps NaN", /LIMIT 1;/.test(recentQuery(Number("junk") as number)));
+ok("limit clamps negative", /LIMIT 1\b/.test(recentQuery(-5)));
+ok("limit clamps absurd", /LIMIT 10000\b/.test(recentQuery(1e9)));
+
+const sq = snippetQuery('"raycast"*', 7331);
+// Column 3 is `body` in fts5(session_id, agent, name, body).
+ok("snippet targets column 3", /snippet\(sessions_fts, 3,/.test(sq));
+// By rowid, never by session_id: session_id is UNINDEXED, so IN (…) is a scan.
+ok("snippet looks up by rowid", /AND rowid = 7331/.test(sq));
+ok("snippet does not use session_id", !/session_id\s+IN/.test(sq));
+
+ok("probe query counts both tables", /sessions_fts/.test(probeQuery()) && /pragma_table_info\('sessions'\)/.test(probeQuery()));
+ok("warmup is trivial", /count\(\*\)/.test(warmupQuery()));
+
+check("dbUri is read-only", dbUri("/tmp/x.db"), "file:/tmp/x.db?mode=ro");
+// immutable=1 would skip the live WAL and hide the last few minutes of sessions.
+ok("dbUri does not use immutable", !dbUri("/tmp/x.db").includes("immutable"));
+
+// The zero-row trap: `sqlite3 -json` prints NOTHING, not `[]`.
+check("parseRows survives empty stdout", parseRows(""), []);
+check("parseRows survives whitespace", parseRows("  \n "), []);
+check("parseRows parses an array", parseRows<{ a: number }>('[{"a":1}]'), [{ a: 1 }]);
+check("parseRows ignores a non-array", parseRows("{}"), []);
+
+check("schemaOk accepts a full schema", schemaOk({ session_cols: 13, fts_cols: 4, rows: 470 } as ProbeRow), true);
+// An empty index is not a broken one.
+check("schemaOk accepts zero rows", schemaOk({ session_cols: 13, fts_cols: 4, rows: 0 } as ProbeRow), true);
+check("schemaOk rejects missing columns", schemaOk({ session_cols: 9, fts_cols: 4, rows: 470 } as ProbeRow), false);
+check("schemaOk rejects undefined", schemaOk(undefined), false);
+
+// ---------------------------------------------------------------------------
+section("merge: the six-way FTS duplicate");
+
+function sess(sessionId: string, over: Partial<AgentSession> = {}): AgentSession {
+  return {
+    key: { agent: "claude", sessionId },
+    title: sessionId.slice(0, 8),
+    origin: "index.specstory" as Capability,
+    ...over,
+  };
+}
+
+// Measured: 81 sessions have >1 row in sessions_fts, one of them 6.
+const SIX: IndexHit[] = [-7.5, -6.1, -9.9, -3.0, -8.2, -5.5].map((rank, i) => ({
+  session: sess("dup-session", { ftsRowId: 1000 + i }),
+  rank,
+}));
+const deduped = dedupeFtsRows(SIX);
+check("six rows collapse to one", deduped.length, 1);
+// fts5 rank is negative and lower is better, so Math.min wins and Math.max is
+// the silent bug: it keeps the WORST match.
+check("keeps the best (most negative) rank", deduped[0].rank, -9.9);
+check("keeps the winning row's fts rowid", deduped[0].session.ftsRowId, 1002);
+check("dedupe of an empty set", dedupeFtsRows([]), []);
+
+const MIXED: IndexHit[] = [
+  { session: sess("a"), rank: -1 },
+  { session: sess("b"), rank: -2 },
+  { session: sess("a"), rank: -3 },
+];
+check("distinct sessions survive", dedupeFtsRows(MIXED).length, 2);
+// Same sessionId, different agent, is a different session.
+check("agent is part of the key",
+  dedupeFtsRows([
+    { session: sess("x"), rank: -1 },
+    { session: { ...sess("x"), key: { agent: "codex", sessionId: "x" } }, rank: -2 },
+  ]).length,
+  2);
+
+// ---------------------------------------------------------------------------
+section("merge: sessions from several indexes");
+
+// The indexes are complementary, not redundant: SpecStory knows turn counts but
+// leaves name empty ~70% of the time; the fs reader can produce a real title.
+const merged = mergeSessions([
+  [sess("s1", { origin: "index.specstory", title: "s1", userTurns: 6, markdownPath: "/m.md" })],
+  [sess("s1", { origin: "index.claudefs", title: "Real Title From Transcript", cwd: "/Users/dev/x" })],
+]);
+check("one session after the merge", merged.length, 1);
+check("specstory wins identity", merged[0].origin, "index.specstory");
+check("but the loser fills the gap", merged[0].cwd, "/Users/dev/x");
+check("winner keeps its own fields", merged[0].userTurns, 6);
+check("winner keeps its markdown path", merged[0].markdownPath, "/m.md");
+
+// ---------------------------------------------------------------------------
+section("merge: live agents (1:N, and the two-pid case)");
+
+function live(handle: string, over: Partial<LiveAgent> = {}): LiveAgent {
+  return {
+    handle,
+    source: "herdr",
+    agent: "claude",
+    status: "idle",
+    cwd: "/Users/dev/x",
+    ...over,
+  };
+}
+
+const HERDR = [
+  live("herdr:w3:p7", { paneId: "w3:p7", session: { agent: "claude", sessionId: "s1" } }),
+  live("herdr:w3:p8", { paneId: "w3:p8", session: { agent: "claude", sessionId: "s2" } }),
+];
+const REGISTRY = [
+  live("claude-pid:100", { source: "claude-registry", pid: 100, session: { agent: "claude", sessionId: "s1" } }),
+  live("claude-pid:200", { source: "claude-registry", pid: 200, session: { agent: "claude", sessionId: "s3" } }),
+];
+const both = mergeLiveAgents(HERDR, REGISTRY);
+check("herdr's two plus the registry's unseen one", both.length, 3);
+ok("herdr keeps its paneId", both[0].paneId === "w3:p7");
+// herdr has no pid; the registry does, and `ps` liveness needs it.
+check("registry pid is grafted onto the herdr row", both[0].pid, 100);
+ok("the registry-only agent survives", both.some((a) => a.handle === "claude-pid:200"));
+
+// Measured: pids 21952 and 95663 were both alive and both reported sessionId
+// 1b31cf2b-…, one idle and one busy. Modelling live as a single agent drops one.
+const TWO_PIDS = [
+  live("claude-pid:21952", { source: "claude-registry", pid: 21952, status: "idle", session: { agent: "claude", sessionId: "dup" } }),
+  live("claude-pid:95663", { source: "claude-registry", pid: 95663, status: "working", session: { agent: "claude", sessionId: "dup" } }),
+];
+const twoMerged = mergeLiveAgents([], TWO_PIDS);
+check("two processes on one session both survive", twoMerged.length, 2);
+
+const attached = attachLive([sess("dup")], twoMerged);
+check("a session maps to BOTH processes", attached.get("claude:dup")?.length, 2);
+check("a session with nothing running maps to []", attachLive([sess("quiet")], []).get("claude:quiet"), []);
+
+// A stale ~/.claude/sessions/<pid>.json renders as a phantom agent.
+const pruned = pruneDead(twoMerged, (pid) => pid === 21952);
+check("a dead pid is pruned", pruned.length, 1);
+check("the live pid survives", pruned[0].pid, 21952);
+// herdr rows have no pid and herdr only reports panes it owns, so keep them.
+check("pid-less agents are kept", pruneDead(HERDR, () => false).length, 2);
+
+// ---------------------------------------------------------------------------
+section("merge: grouping (never by project_id)");
+
+// Measured: this repository appears under TWO project_ids in sessions.db —
+// b1f0-5789-c7e2-3090 (workspace) and f1dd-2f59-be9e-fc79 (git). Grouping by
+// project_id splits one project into two piles that look like different repos.
+const REPO = "/Users/dev/Projects/agent-deck";
+const grouped = groupByProject([
+  { session: sess("a", { cwd: REPO }) },
+  { session: sess("b", { cwd: `${REPO}/` }) },
+  { session: sess("c", { cwd: "/Users/dev/Projects/other" }) },
+]);
+check("one bucket per directory, slash-insensitive", grouped.size, 2);
+check("both rows land together", grouped.get(REPO)?.length, 2);
+check("a session with no cwd still gets a bucket", groupByProject([{ session: sess("z") }]).size, 1);
+
+// ---------------------------------------------------------------------------
+section("rank: ordering invariants, not float equality");
+
+function hit(sessionId: string, over: Partial<AgentSession> = {}, live: LiveAgent[] = [], matched: SessionHit["matched"] = []): SessionHit {
+  return { session: sess(sessionId, over), score: 0, matched, live };
+}
+
+const norm = normalizeRanks([-9, -5, -1]);
+check("best rank normalises to 1", norm(-9), 1);
+check("worst rank normalises to 0", norm(-1), 0);
+// A single result, or a query where fts5 scored everything alike, has zero
+// spread — a naive (worst-r)/(worst-best) is 0/0 = NaN and poisons the sort.
+check("zero spread does not produce NaN", normalizeRanks([-5, -5])(-5), 1);
+check("no ranks at all", normalizeRanks([])(-5), 0);
+ok("NaN rank does not propagate", Number.isFinite(norm(NaN)));
+
+check("no date scores zero recency", recencyScore(undefined, NOW), 0);
+ok("today beats a month ago",
+  recencyScore(NOW, NOW) > recencyScore(new Date(NOW.getTime() - 30 * 86400000), NOW));
+// Clock skew is not relevance.
+check("a future date is clamped to now", recencyScore(new Date(NOW.getTime() + 86400000), NOW), 1);
+
+const DATED = { updatedAt: new Date("2026-07-20T00:00:00Z") };
+// The invariants worth asserting, because they survive a weight being nudged.
+ok("a live session outranks a dead one at equal fts rank",
+  scoreHit(hit("a", DATED, [live("h")]), 1, NOW) > scoreHit(hit("b", DATED), 1, NOW));
+ok("an undated row never outranks a dated one at equal fts rank",
+  scoreHit(hit("a", DATED), 1, NOW) > scoreHit(hit("b"), 1, NOW));
+ok("a prompt-history hit adds weight",
+  scoreHit(hit("a", DATED, [], ["prompt"]), 1, NOW) > scoreHit(hit("b", DATED), 1, NOW));
+ok("text relevance dominates a title match",
+  scoreHit(hit("a", DATED), 1, NOW) > scoreHit(hit("b", DATED, [], ["title"]), 0, NOW));
+
+// Never throws on an all-undefined session: 7 real rows look exactly like this.
+let threw = false;
+try {
+  scoreHit(hit("bare"), NaN, NOW);
+} catch {
+  threw = true;
+}
+ok("scoring a metadata-less row never throws", !threw);
+
+// A total order. Without the sessionId fall-through, equal-scored undated rows
+// compare as 0 and the list visibly reshuffles between renders.
+const TIED: SessionHit[] = [
+  { ...hit("zzz"), score: 0.5 },
+  { ...hit("aaa"), score: 0.5 },
+];
+check("ties break deterministically", TIED.slice().sort(compareHits).map((h) => h.session.key.sessionId), ["aaa", "zzz"]);
+check("sorting is stable across repeats",
+  TIED.slice().sort(compareHits).map((h) => h.session.key.sessionId),
+  TIED.slice().reverse().sort(compareHits).map((h) => h.session.key.sessionId));
+
+const ranked = rankHits(
+  [hit("old", { updatedAt: new Date("2026-01-01T00:00:00Z") }), hit("new", DATED)],
+  new Map([["claude:old", -9], ["claude:new", -9]]),
+  NOW,
+);
+check("equal text relevance breaks on recency", ranked[0].session.key.sessionId, "new");
+// A session found only by a non-FTS index has no rank entry and must still rank.
+check("a session with no fts rank still appears", rankHits([hit("x", DATED)], new Map(), NOW).length, 1);
+
+check("byRecency puts undated last",
+  [sess("a"), sess("b", DATED)].sort(byRecency).map((s) => s.key.sessionId), ["b", "a"]);
+
+check("keyString", keyString({ agent: "claude", sessionId: "x" }), "claude:x");
+
+// ---------------------------------------------------------------------------
+section("errors: absent is not broken");
+
+// herdr normally speaks JSON, including for errors. With no server it prints a
+// bare Rust Debug string, and the exit code does not distinguish the two — so
+// the discriminator is "did stdout parse", never the exit code.
+const NO_SOCKET = 'Error: Os { code: 2, kind: NotFound, message: "No such file or directory" }';
+const down = classifyHerdr({ stdout: NO_SOCKET, stderr: "", exitCode: 1 });
+ok("non-JSON stdout is source-unreachable", isUnreachable(down));
+ok("the message tells the user what to do", /server is not running|Live Source/.test(down?.detail ?? ""));
+
+const notFound = classifyHerdr({
+  stdout: '{"error":{"code":"agent_not_found","message":"agent target term_65 not found"},"id":"cli:agent:get"}',
+  stderr: "",
+  exitCode: 1,
+});
+ok("a structured herdr error is classified", notFound instanceof AgentDeckError);
+check("and carries its code", notFound?.detail.startsWith("agent_not_found"), true);
+
+check("valid JSON with no error key is not an error",
+  classifyHerdr({ stdout: '{"id":"cli:agent:list","result":{"agents":[]}}', stderr: "", exitCode: 0 }),
+  undefined);
+// Zero agents is a real answer, not a failure.
+check("empty stdout with exit 0 is not an error",
+  classifyHerdr({ stdout: "", stderr: "", exitCode: 0 }), undefined);
+
+// All four sqlite messages are the user's query, so they are bad-query — a hint
+// about the grammar, not a broken-database screen.
+for (const [input, stderr] of [
+  ["-x", "Error: stepping, no such column: x"],
+  ["col:x", "Error: stepping, no such column: col"],
+  ['foo"', "Error: stepping, unterminated string"],
+  ["a AND", 'Error: stepping, fts5: syntax error near ""'],
+  ["*", "Error: stepping, unknown special query: "],
+] as const) {
+  ok(`sqlite ${JSON.stringify(input)} is bad-query`, isBadQuery(classifySqlite({ stderr, exitCode: 1 })), stderr);
+}
+ok("a missing table is a schema mismatch",
+  classifySqlite({ stderr: "Error: in prepare, no such table: sessions", exitCode: 1 })?.kind === "schema-mismatch");
+ok("a locked database is unreachable",
+  classifySqlite({ stderr: "Error: database is locked", exitCode: 1 })?.kind === "source-unreachable");
+check("clean stderr with exit 0 is not an error", classifySqlite({ stderr: "", exitCode: 0 }), undefined);
+
+// execFile reports a timeout as a SIGTERM kill, so `killed` must be checked
+// before anything else or every timeout is filed as a generic failure.
+check("SIGTERM means timeout",
+  fromExecError({ killed: true, signal: "SIGTERM" }, "live.herdr", ["herdr"]).kind, "timeout");
+// Reached only if a binary vanished after the capability probe found it. Not an
+// install hint — the probe already said it was there.
+check("ENOENT after probing is unreachable, not a missing install",
+  fromExecError({ code: "ENOENT" }, "live.herdr", ["herdr"]).kind, "source-unreachable");
+
+ok("ANSI escapes are stripped", !/\[3[0-9]m/.test(cleanStderr("[31mred[0m")));
+check("cleanStderr trims blank lines", cleanStderr("\n\na\n\n\nb\n\n"), "a\nb");
+
+// ---------------------------------------------------------------------------
+section("import discipline (the harness asserts itself)");
+
+// The eslint rule gives fast feedback; this assertion is what survives someone
+// disabling it inline. Every module below must run under plain node.
+const SRC = dirname(__dirname);
+const PURE_GLOBS = [
+  "lib/agents/types.ts",
+  "lib/agents/transport.ts",
+  "lib/agents/capabilities.ts",
+  "lib/agents/probe.ts",
+  "lib/agents/normalize.ts",
+  "lib/agents/merge.ts",
+  "lib/agents/rank.ts",
+  "lib/agents/errors.ts",
+  "lib/specstory/fts.ts",
+  "lib/specstory/sql.ts",
+  "lib/specstory/wire.ts",
+];
+for (const rel of PURE_GLOBS) {
+  const p = join(SRC, rel);
+  if (!existsSync(p)) {
+    ok(`pure module exists: ${rel}`, false);
+    continue;
+  }
+  const text = readFileSync(p, "utf8");
+  ok(`${rel} does not import @raycast/api`, !/from\s+["']@raycast\//.test(text));
+  ok(`${rel} does not import react`, !/from\s+["']react["']/.test(text));
+}
+
+// ---------------------------------------------------------------------------
+section("live cross-checks (skipped when the tool is absent)");
+
+function findBin(name: string): string | undefined {
+  return pickBinary(name, existsSync);
+}
+
+// Stronger than the sibling extension's `--help` check, because herdr publishes
+// a machine-readable schema: a herdr upgrade that adds a status fails the build
+// here rather than rendering as a blank badge in production.
+const herdrBin = findBin("herdr");
+if (herdrBin) {
+  try {
+    const raw = execFileSync(herdrBin, ["api", "schema", "--json"], { encoding: "utf8", timeout: 10_000 });
+    const schema = JSON.parse(raw) as { $defs?: Record<string, { enum?: string[] }> };
+    const defs = schema.$defs ?? (schema as { result?: { schema?: { $defs?: Record<string, { enum?: string[] }> } } }).result?.schema?.$defs;
+    const statuses = defs?.AgentStatus?.enum;
+    if (statuses) {
+      const ours = ["idle", "working", "blocked", "done", "unknown"];
+      check("herdr AgentStatus enum matches our union", [...statuses].sort(), [...ours].sort());
+    } else {
+      console.log("  (herdr schema has no AgentStatus enum at the expected path — skipped)");
+    }
+  } catch (e) {
+    console.log(`  (herdr schema check skipped: ${(e as Error).message.split("\n")[0]})`);
+  }
+} else {
+  console.log("  (herdr not installed — schema check skipped)");
+}
+
+const sqliteBin = findBin("sqlite3");
+if (sqliteBin) {
+  const opts = { encoding: "utf8" as const, timeout: 10_000 };
+  const compile = execFileSync(sqliteBin, [":memory:", "PRAGMA compile_options;"], opts);
+  ok("sqlite3 has FTS5", /ENABLE_FTS5/.test(compile), compile.split("\n").slice(0, 3).join(" "));
+
+  const db = join(homedir(), ".specstory", "sessions.db");
+  if (existsSync(db)) {
+    const uri = dbUri(db);
+    const probe = parseRows<ProbeRow>(execFileSync(sqliteBin, ["-json", uri, probeQuery()], opts));
+    ok("the real SpecStory schema is what we expect", schemaOk(probe[0]), JSON.stringify(probe[0]));
+
+    // Every generated expression must PARSE against the real database. Run as a
+    // count, never with snippet(): snippet on a large body costs 1144 ms.
+    for (const input of ["-x", "col:x", 'foo"', "a AND", "a OR", "NEAR(", "raycast extension", "檢查", "😀"]) {
+      const expr = toFts5(input).expr;
+      if (!expr) continue;
+      try {
+        execFileSync(sqliteBin, ["-json", uri, `SELECT count(*) AS n FROM sessions_fts WHERE sessions_fts MATCH ${sqlQuote(expr)};`], opts);
+        ok(`sanitized ${JSON.stringify(input)} parses against the real index`, true);
+      } catch (e) {
+        ok(`sanitized ${JSON.stringify(input)} parses against the real index`, false, cleanStderr((e as { stderr?: string }).stderr ?? String(e)));
+      }
+    }
+
+    const rows = parseRows<SessionRow>(execFileSync(sqliteBin, ["-json", uri, rankQuery('"raycast"*', 30)], opts));
+    ok("the rank query returns rows", rows.length > 0, `${rows.length}`);
+    if (rows.length > 0) {
+      const r = rows[0];
+      ok("rank query column names match SessionRow",
+        ["agent", "sid", "r", "rid", "project_name", "cwd", "slug", "name", "created_at", "ts"].every((k) => k in r),
+        Object.keys(r).join(","));
+      ok("fts rank is negative", typeof r.r === "number" && r.r < 0, String(r.r));
+    }
+
+    // The undated rows really do arrive as null, not "" and not 0.
+    const undated = parseRows<SessionRow>(
+      execFileSync(sqliteBin, ["-json", uri,
+        `SELECT s.agent, s.session_id AS sid, NULL AS r, NULL AS rid, s.project_name,
+                NULLIF(s.origin_cwd,'') AS cwd, NULLIF(s.slug,'') AS slug, NULLIF(s.name,'') AS name,
+                NULLIF(s.native_path,'') AS native_path, s.user_turns, s.total_turns,
+                NULLIF(s.created_at,'') AS created_at,
+                NULLIF(COALESCE(NULLIF(s.updated_at,''), s.created_at),'') AS ts
+         FROM sessions s WHERE COALESCE(s.updated_at,'') = '' LIMIT 3;`], opts));
+    if (undated.length > 0) {
+      check("an undated row's ts is null", undated[0].ts, null);
+      check("and parseTs turns it into undefined", parseTs(undated[0].ts), undefined);
+      ok("which is neither Invalid Date nor 1970", parseTs(undated[0].ts) === undefined);
+    } else {
+      console.log("  (no undated rows on this machine — skipped)");
+    }
+  } else {
+    console.log("  (no SpecStory index — database checks skipped)");
+  }
+} else {
+  console.log("  (sqlite3 not found — this should be impossible on macOS)");
+}
+
+// ---------------------------------------------------------------------------
+section("fixtures are redacted");
+
+// `ray publish` copies the DIRECTORY, not the git index, so a .gitignore does
+// not save you. Anything committed here ends up in a public review PR.
+const FIXTURES = join(__dirname, "fixtures");
+if (existsSync(FIXTURES)) {
+  const files = readdirSync(FIXTURES).filter((f) => statSync(join(FIXTURES, f)).isFile());
+  ok("there are fixtures", files.length > 0);
+  for (const f of files) {
+    const text = readFileSync(join(FIXTURES, f), "utf8");
+    ok(`${f} has no real home directory`, !text.includes(`/Users/${process.env.USER ?? " "}/`));
+    ok(`${f} has no bearer token`, !/sk-ant-[a-z]*-[A-Za-z0-9_-]{20,}/.test(text));
+  }
+} else {
+  console.log("  (no fixtures yet)");
+}
+
+// ---------------------------------------------------------------------------
+console.log(`\n${checks - failures}/${checks} checks passed`);
+if (failures > 0) {
+  console.error(`${failures} FAILED`);
+  process.exitCode = 1;
+}
+
+```
+
+```text
+<tool_use_error>File has not been read yet. Read it first before writing to it.</tool_use_error>
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:08:29Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check scaffolded dev-check size
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && wc -l src/lib/dev-check.ts && head -20 src/lib/dev-check.ts`
+
+```text
+     111 src/lib/dev-check.ts
+/**
+ * Assertions over the pure modules — the ones that never import `@raycast/api`.
+ *
+ * There is no test runner in a Raycast extension, and adding one is store-review
+ * noise, so this is a plain script:
+ *
+ *     just verify
+ *
+ * which compiles it with the already-installed tsc and runs it under node.
+ *
+ * The precondition that makes this work at all: every module asserted here must
+ * be importable OUTSIDE Raycast. Import from leaf modules, never from a barrel
+ * that pulls in the transport — the transport pulls in `@raycast/api`, and then
+ * this file cannot run.
+ *
+ * Every assertion should correspond to a shape the backend actually emits and
+ * that a naive reading gets wrong. Assertions that restate the type system are
+ * noise; assertions that pin a surprise are the whole point.
+ */
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:08:33Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to read through this first before I can rewrite it properly.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:08:33Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="Read"><details>
+<summary>Tool use: **Read**</summary>
+ `/Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/dev-check.ts`
+
+```text
+20	
+21	import { execFileSync } from "node:child_process";
+22	
+23	// import { statusKind, startedAt } from "./<backend>/normalize";   // pure — no raycast
+24	// import { argvFor, longFlagsOf, subcommandOf } from "./<backend>/argv";
+25	// import fixture from "./fixtures/state.json";
+26	
+27	/** The binary this extension wraps. Replace it. */
+28	const BIN = "echo";
+29	
+30	let failures = 0;
+31	
+32	function check(name: string, actual: unknown, expected: unknown): void {
+33	  const a = JSON.stringify(actual);
+34	  const e = JSON.stringify(expected);
+35	  if (a === e) {
+36	    console.log(`ok    ${name}`);
+37	  } else {
+38	    failures += 1;
+39	    console.log(`FAIL  ${name}\n        expected ${e}\n        actual   ${a}`);
+40	  }
+41	}
+42	
+43	function skip(name: string, why: string): void {
+44	  console.log(`skip  ${name} — ${why}`);
+45	}
+46	
+47	/**
+48	 * Read the wrapped CLI's own help text. Returns undefined when the binary is not
+49	 * installed on this machine, so the harness degrades to a skip rather than a
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:10:56Z)**_
+
+Placeholder confirmed. Now writing the real harness.
+
+_**Agent (claude-opus-5 2026-07-26 21:10:57Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * The test suite.
+ *
+ * There is no test runner in a Raycast extension and adding one is store review
+ * noise, so this is a plain script: `just verify` compiles it with the already
+ * installed tsc and runs it under plain node.
+ *
+ * That only works because every module it imports is free of @raycast/api,
+ * which exists only inside Raycast's runtime. Import discipline IS the harness,
+ * and one section below asserts it rather than trusting it.
+ *
+ * Fixtures over mocks: the JSON in fixtures/ was captured from the real tools
+ * and then redacted, so a shape change in herdr or SpecStory shows up as a
+ * failing assertion instead of a runtime surprise.
+ */
+
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+
+import { actionableGaps, canSearch, canSeeLive, resolveCapabilities } from "./agents/capabilities";
+import {
+  AgentDeckError,
+  classifyHerdr,
+  classifySqlite,
+  cleanStderr,
+  fromExecError,
+  isBadQuery,
+  isUnreachable,
+} from "./agents/errors";
+import {
+  attachLive,
+  dedupeFtsRows,
+  groupByProject,
+  mergeLiveAgents,
+  mergeSessions,
+  pruneDead,
+} from "./agents/merge";
+import {
+  byRecency,
+  keyString,
+  normalizeAgent,
+  normalizeCwd,
+  normalizeStatus,
+  oneline,
+  parseTs,
+  projectOf,
+  titleOf,
+} from "./agents/normalize";
+import { PROBE_DIRS, expandTilde, pickBinary } from "./agents/probe";
+import { compareHits, normalizeRanks, rankHits, recencyScore, scoreHit } from "./agents/rank";
+import type { AgentSession, Capability, LiveAgent, SessionHit } from "./agents/types";
+import type { IndexHit } from "./agents/transport";
+import { FTS5_HELP, looksBalanced, sqlQuote, toFts5 } from "./specstory/fts";
+import {
+  dbUri,
+  parseRows,
+  probeQuery,
+  rankQuery,
+  recentQuery,
+  snippetQuery,
+  warmupQuery,
+} from "./specstory/sql";
+import { schemaOk, type ProbeRow, type SessionRow } from "./specstory/wire";
+
+let failures = 0;
+let checks = 0;
+
+function check(name: string, actual: unknown, expected: unknown): void {
+  checks++;
+  const a = JSON.stringify(actual);
+  const e = JSON.stringify(expected);
+  if (a !== e) {
+    failures++;
+    console.error(`FAIL ${name}\n  expected ${e}\n  actual   ${a}`);
+  }
+}
+
+function ok(name: string, condition: boolean, detail = ""): void {
+  checks++;
+  if (!condition) {
+    failures++;
+    console.error(`FAIL ${name}${detail ? `\n  ${detail}` : ""}`);
+  }
+}
+
+function section(title: string): void {
+  console.log(`\n— ${title}`);
+}
+
+const NOW = new Date("2026-07-27T00:00:00.000Z");
+
+// ---------------------------------------------------------------------------
+section("normalize: agents and statuses");
+
+check("agent claude", normalizeAgent("claude"), "claude");
+check("agent cursoride collapses", normalizeAgent("cursoride"), "cursor");
+check("agent cursor-agent collapses", normalizeAgent("cursor-agent"), "cursor");
+check("agent claude-code collapses", normalizeAgent("claude-code"), "claude");
+check("agent uppercase", normalizeAgent("CODEX"), "codex");
+// A SpecStory provider we have no live-state or resume story for. Findable in
+// search, not actionable — which is the honest rendering, not a bug.
+check("agent antigravity -> unknown", normalizeAgent("antigravity"), "unknown");
+check("agent empty -> unknown", normalizeAgent(""), "unknown");
+check("agent null -> unknown", normalizeAgent(null), "unknown");
+
+// Two vocabularies, one union: herdr says "working", Claude's registry "busy".
+check("status working", normalizeStatus("working"), "working");
+check("status busy is working", normalizeStatus("busy"), "working");
+check("status blocked", normalizeStatus("blocked"), "blocked");
+check("status idle", normalizeStatus("idle"), "idle");
+check("status done", normalizeStatus("done"), "done");
+// A herdr upgrade adding a state must degrade to a grey dot, not throw.
+check("status unrecognised -> unknown", normalizeStatus("compacting"), "unknown");
+check("status null -> unknown", normalizeStatus(null), "unknown");
+
+// ---------------------------------------------------------------------------
+section("normalize: timestamps (the 1970 trap)");
+
+// The two failure modes that look like success. 7 rows in the real sessions.db
+// have an empty updated_at; both of these would render as plausible data.
+check("empty string -> undefined", parseTs(""), undefined);
+check("null -> undefined", parseTs(null), undefined);
+check("undefined -> undefined", parseTs(undefined), undefined);
+check("zero -> undefined", parseTs(0), undefined);
+ok("an empty string is NOT an Invalid Date object", !(parseTs("") instanceof Date));
+ok("zero is NOT 1970", parseTs(0)?.getFullYear() !== 1970);
+check("garbage -> undefined", parseTs("not a date"), undefined);
+
+check("ISO 8601", parseTs("2026-07-26T20:14:11.609Z")?.toISOString(), "2026-07-26T20:14:11.609Z");
+// ~/.claude/history.jsonl uses epoch ms; ~/.codex/history.jsonl epoch seconds.
+check("epoch ms", parseTs(1785096102642)?.toISOString(), new Date(1785096102642).toISOString());
+check("epoch seconds", parseTs(1770466204)?.toISOString(), new Date(1770466204000).toISOString());
+check("numeric string", parseTs("1785096102642")?.toISOString(), new Date(1785096102642).toISOString());
+ok(
+  "seconds and milliseconds land in adjacent years, not 1970 vs 2026",
+  Math.abs(parseTs(1770466204)!.getFullYear() - parseTs(1785096102642)!.getFullYear()) <= 1,
+);
+
+// ---------------------------------------------------------------------------
+section("normalize: titles, cwd, projects");
+
+// ~70% of sessions.db rows have an empty name, so the fallbacks are the common
+// path and every link in the chain has to be exercised.
+check("title prefers name", titleOf({ name: "Real Title", slug: "a-b", sessionId: "9a5bb463" }), "Real Title");
+check("title falls to aiTitle", titleOf({ name: "", aiTitle: "AI Title", sessionId: "9a5bb463" }), "AI Title");
+check(
+  "title falls to slug",
+  titleOf({ name: "", aiTitle: "", slug: "pueue-https-github-com", sessionId: "9a5bb463" }),
+  "pueue https github com",
+);
+check("title falls to prompt", titleOf({ slug: "", firstPrompt: "fix the thing", sessionId: "9a5bb463" }), "fix the thing");
+check("title falls to a short id", titleOf({ sessionId: "9a5bb463-e3cf-4fe0" }), "9a5bb46");
+ok("title is never empty", titleOf({ name: "  ", slug: "  ", sessionId: "abcdefgh" }).length > 0);
+
+check("cwd trailing slash", normalizeCwd("/Users/dev/x/"), "/Users/dev/x");
+check("cwd /private/tmp folds", normalizeCwd("/private/tmp/x"), "/tmp/x");
+check("cwd /private/var folds", normalizeCwd("/private/var/y"), "/var/y");
+check("cwd root survives", normalizeCwd("/"), "/");
+check("cwd empty -> undefined", normalizeCwd(""), undefined);
+// /privateer must NOT become /er — the word boundary in the regex is load-bearing.
+check("cwd /privateer is untouched", normalizeCwd("/privateer/x"), "/privateer/x");
+
+check("project from cwd", projectOf("/Users/dev/Projects/agent-deck"), "agent-deck");
+check("project falls back to a name", projectOf("", "translate"), "translate");
+check("project undefined when nothing is known", projectOf(null, null), undefined);
+
+check("oneline collapses whitespace", oneline("a\n\n  b   c"), "a b c");
+ok("oneline truncates", oneline("x".repeat(300)).length <= 140);
+
+// ---------------------------------------------------------------------------
+section("probe: binary resolution order");
+
+const FAKE = new Set([
+  "/opt/homebrew/bin/herdr",
+  "/Users/dev/.local/bin/herdr",
+  "/usr/bin/sqlite3",
+  "/Users/dev/.opencode/bin/opencode",
+  "/pinned/herdr",
+]);
+const fakeExists = (p: string) => FAKE.has(p);
+const DIRS = [
+  "/opt/homebrew/bin",
+  "/usr/local/bin",
+  "/Users/dev/.local/bin",
+  "/Users/dev/.opencode/bin",
+  "/usr/bin",
+];
+
+check(
+  "preference wins over cache",
+  pickBinary("herdr", fakeExists, { configured: "/pinned/herdr", cached: "/opt/homebrew/bin/herdr", dirs: DIRS }),
+  "/pinned/herdr",
+);
+// A stale preference must degrade into the probe, not produce an ENOENT later.
+check(
+  "stale preference falls through to the probe",
+  pickBinary("herdr", fakeExists, { configured: "/gone/herdr", dirs: DIRS }),
+  "/opt/homebrew/bin/herdr",
+);
+check("stale cache falls through", pickBinary("herdr", fakeExists, { cached: "/gone/herdr", dirs: DIRS }), "/opt/homebrew/bin/herdr");
+check("probe takes the first hit", pickBinary("herdr", fakeExists, { dirs: DIRS }), "/opt/homebrew/bin/herdr");
+check("absent -> undefined, never throws", pickBinary("nope", fakeExists, { dirs: DIRS }), undefined);
+// The two directories the sibling extension's probe list does not have.
+check("reaches /usr/bin for sqlite3", pickBinary("sqlite3", fakeExists, { dirs: DIRS }), "/usr/bin/sqlite3");
+check("reaches ~/.opencode/bin", pickBinary("opencode", fakeExists, { dirs: DIRS }), "/Users/dev/.opencode/bin/opencode");
+
+ok("PROBE_DIRS contains /usr/bin (the only sqlite3 on stock macOS)", PROBE_DIRS.includes("/usr/bin"));
+ok("PROBE_DIRS contains ~/.opencode/bin", PROBE_DIRS.some((d) => d.endsWith("/.opencode/bin")));
+ok(
+  "PROBE_DIRS contains both Homebrew prefixes",
+  PROBE_DIRS.includes("/opt/homebrew/bin") && PROBE_DIRS.includes("/usr/local/bin"),
+);
+
+check("expandTilde", expandTilde("~/x"), join(homedir(), "x"));
+// Not a shell: ~user cannot be resolved without a lookup, so leave it alone
+// rather than mangling it into a path that usually exists and is always wrong.
+check("expandTilde leaves ~user alone", expandTilde("~alice/x"), "~alice/x");
+check("expandTilde leaves an absolute path alone", expandTilde("/a/b"), "/a/b");
+
+// ---------------------------------------------------------------------------
+section("capabilities: no external tool is required");
+
+const NO_TOOLS = resolveCapabilities({ exists: () => false });
+check("no tools: herdr unavailable", NO_TOOLS["live.herdr"].available, false);
+check("no tools: specstory unavailable", NO_TOOLS["index.specstory"].available, false);
+ok("no tools: herdr offers an install hint", NO_TOOLS["live.herdr"].install !== undefined);
+ok("no tools: herdr degrades to the claude registry", NO_TOOLS["live.herdr"].degradedTo === "live.claude");
+ok("no tools: specstory degrades to claudefs", NO_TOOLS["index.specstory"].degradedTo === "index.claudefs");
+ok("no tools: there is something to suggest installing", actionableGaps(NO_TOOLS).length > 0);
+
+// THE acceptance test for "every external tool is optional": with no binary and
+// no third-party database at all, a machine that has run Claude Code can still
+// list live agents and search its own transcripts.
+const FS_ONLY = resolveCapabilities({
+  exists: (p) =>
+    p.includes("/.claude/sessions") || p.includes("/.claude/projects") || p.includes("/.codex/sessions"),
+});
+check("fs only: live.claude available", FS_ONLY["live.claude"].available, true);
+check("fs only: index.claudefs available", FS_ONLY["index.claudefs"].available, true);
+check("fs only: index.codexfs available", FS_ONLY["index.codexfs"].available, true);
+ok("fs only: search is still possible", canSearch(FS_ONLY));
+ok("fs only: live state is still possible", canSeeLive(FS_ONLY));
+check("fs only: no herdr", FS_ONLY["live.herdr"].available, false);
+check("fs only: no specstory", FS_ONLY["index.specstory"].available, false);
+
+// sqlite3 gates BOTH database indexes; losing it must not lose the fs readers.
+const NO_SQLITE = resolveCapabilities({ exists: (p) => !p.endsWith("/sqlite3") });
+check("no sqlite3: specstory off", NO_SQLITE["index.specstory"].available, false);
+check("no sqlite3: opencode off", NO_SQLITE["index.opencode"].available, false);
+check("no sqlite3: claudefs still on", NO_SQLITE["index.claudefs"].available, true);
+ok("no sqlite3: search is still possible", canSearch(NO_SQLITE));
+ok("no sqlite3: the reason names sqlite3", /sqlite3/.test(NO_SQLITE["index.specstory"].reason ?? ""));
+
+// The distinction the whole model exists for: absent vs present-but-broken.
+// "Install herdr" shown to someone who has herdr is the worst possible message.
+const HERDR_DOWN = resolveCapabilities({
+  exists: () => true,
+  herdrServerReachable: false,
+  herdrServerDetail: "herdr server is not running",
+});
+check("herdr down: unavailable", HERDR_DOWN["live.herdr"].available, false);
+ok("herdr down: NO install hint, because it IS installed", HERDR_DOWN["live.herdr"].install === undefined);
+ok("herdr down: the reason says so", /not running|not answering/.test(HERDR_DOWN["live.herdr"].reason ?? ""));
+ok("herdr down: still degrades to the registry", HERDR_DOWN["live.herdr"].degradedTo === "live.claude");
+ok(
+  "herdr down: not listed as something to install",
+  !actionableGaps(HERDR_DOWN).some((s) => s.capability === "live.herdr"),
+);
+
+const ALL_TOOLS = resolveCapabilities({ exists: () => true, herdrServerReachable: true });
+check("all tools: herdr available", ALL_TOOLS["live.herdr"].available, true);
+check("all tools: act.herdr available", ALL_TOOLS["act.herdr"].available, true);
+check("all tools: nothing to suggest", actionableGaps(ALL_TOOLS).length, 0);
+
+// ---------------------------------------------------------------------------
+section("fts5 sanitizer");
+
+check("one word gets the typeahead prefix", toFts5("raycast").expr, '"raycast"*');
+check("two words", toFts5("raycast extension").expr, '"raycast" "extension"*');
+// A trailing space means the word is finished, so drop the prefix wildcard.
+check("a trailing space drops the wildcard", toFts5("raycast extension ").expr, '"raycast" "extension"');
+check("empty -> undefined", toFts5("").expr, undefined);
+check("whitespace only -> undefined", toFts5("   ").expr, undefined);
+
+// The inputs that produce a verbatim sqlite error when sent unsanitized. Every
+// one is reachable by typing normally.
+check("-x is a quoted word, not a column reference", toFts5("-x").expr, '"x"*');
+check("col:x is quoted", toFts5("col:x").expr, '"col:x"*');
+check("a stray quote is escaped by doubling", toFts5('foo"').expr, '"foo"""*');
+check("AND is a literal word", toFts5("a AND").expr, '"a" "AND"*');
+check("OR is a literal word", toFts5("a OR").expr, '"a" "OR"*');
+check("a lone star is dropped", toFts5("*").expr, undefined);
+check("NEAR( is a literal word", toFts5("NEAR(").expr, '"NEAR("*');
+
+check("a leading slash means raw", toFts5("/agent AND deck").raw, true);
+check("raw passes through untouched", toFts5("/agent AND deck").expr, "agent AND deck");
+check("a lone slash -> undefined", toFts5("/").expr, undefined);
+
+// An unbalanced quote is the one thing the sanitizer must never emit.
+for (const input of ['foo"', '"', '""', 'a"b"c', "-x", "col:x", "a AND", "*", "😀", "檢查 Claude 日誌"]) {
+  ok(`balanced quotes for ${JSON.stringify(input)}`, looksBalanced(toFts5(input).expr ?? ""), toFts5(input).expr);
+}
+ok("looksBalanced rejects an odd quote", !looksBalanced('a"'));
+ok("looksBalanced accepts a doubled quote", looksBalanced('"a""b"'));
+
+check("CJK survives tokenising", toFts5("檢查 Claude").expr, '"檢查" "Claude"*');
+check("emoji survives tokenising", toFts5("😀").expr, '"😀"*');
+
+check("sqlQuote doubles apostrophes", sqlQuote("it's"), "'it''s'");
+ok("FTS5_HELP documents the raw escape hatch", FTS5_HELP.includes("/"));
+
+// ---------------------------------------------------------------------------
+section("specstory: SQL builders");
+
+const rq = rankQuery('"raycast"*', 90);
+ok("rank query orders by fts5's magic rank column", /ORDER BY rank/.test(rq));
+// The inner LIMIT bounds the join; without it a common word joins hundreds of rows.
+ok("rank query LIMITs inside the CTE", /ORDER BY rank\s+LIMIT 90/.test(rq));
+ok("rank query filters deleted rows", /s\.deleted = 0/.test(rq));
+ok("rank query double-NULLIFs the timestamp", /NULLIF\(COALESCE\(NULLIF\(s\.updated_at/.test(rq));
+ok("rank query selects the fts rowid", /rowid AS rid/.test(rq));
+
+// A LIMIT is interpolated and comes from a text preference, so junk must clamp.
+ok("limit clamps NaN to 1", /LIMIT 1;/.test(recentQuery(Number("junk"))));
+ok("limit clamps a negative to 1", /LIMIT 1\b/.test(recentQuery(-5)));
+ok("limit clamps an absurd value", /LIMIT 10000\b/.test(recentQuery(1e9)));
+
+const sq = snippetQuery('"raycast"*', 7331);
+// Column 3 is `body` in fts5(session_id, agent, name, body).
+ok("snippet targets column 3 (body)", /snippet\(sessions_fts, 3,/.test(sq));
+// By rowid, never by session_id: session_id is UNINDEXED, so IN (…) is a scan
+// AND returns the duplicate rows again.
+ok("snippet looks up by rowid", /AND rowid = 7331/.test(sq));
+ok("snippet never filters on session_id", !/session_id\s+IN/.test(sq));
+
+ok(
+  "probe query counts columns in both tables",
+  /sessions_fts/.test(probeQuery()) && /pragma_table_info\('sessions'\)/.test(probeQuery()),
+);
+ok("warmup is trivial", /count\(\*\)/.test(warmupQuery()));
+
+check("dbUri is read-only", dbUri("/tmp/x.db"), "file:/tmp/x.db?mode=ro");
+// immutable=1 would skip the live WAL and hide the last few minutes of sessions.
+ok("dbUri does not use immutable", !dbUri("/tmp/x.db").includes("immutable"));
+
+// The zero-row trap: `sqlite3 -json` prints NOTHING, not `[]`. JSON.parse("")
+// throws, and a search that legitimately matched nothing would render as a
+// broken database.
+check("parseRows survives empty stdout", parseRows(""), []);
+check("parseRows survives whitespace-only stdout", parseRows("  \n "), []);
+check("parseRows parses an array", parseRows<{ a: number }>('[{"a":1}]'), [{ a: 1 }]);
+check("parseRows ignores a non-array", parseRows("{}"), []);
+
+check("schemaOk accepts a full schema", schemaOk({ session_cols: 13, fts_cols: 4, rows: 470 } as ProbeRow), true);
+// An empty index is not a broken one.
+check("schemaOk accepts zero rows", schemaOk({ session_cols: 13, fts_cols: 4, rows: 0 } as ProbeRow), true);
+check("schemaOk rejects missing columns", schemaOk({ session_cols: 9, fts_cols: 4, rows: 470 } as ProbeRow), false);
+check("schemaOk rejects undefined", schemaOk(undefined), false);
+
+// ---------------------------------------------------------------------------
+section("merge: the six-way FTS duplicate");
+
+function sess(sessionId: string, over: Partial<AgentSession> = {}): AgentSession {
+  return {
+    key: { agent: "claude", sessionId },
+    title: sessionId.slice(0, 8),
+    origin: "index.specstory" as Capability,
+    ...over,
+  };
+}
+
+// Measured: 81 of 470 sessions have more than one row in sessions_fts,
+// distributed 46x2, 23x3, 6x4, 5x5, 1x6.
+const SIX: IndexHit[] = [-7.5, -6.1, -9.9, -3.0, -8.2, -5.5].map((rank, i) => ({
+  session: sess("dup-session", { ftsRowId: 1000 + i }),
+  rank,
+}));
+const deduped = dedupeFtsRows(SIX);
+check("six rows collapse to one", deduped.length, 1);
+// fts5 rank is negative and lower is better, so Math.min wins. Math.max is the
+// silent bug: it keeps the WORST match and everything still "works".
+check("keeps the best (most negative) rank", deduped[0].rank, -9.9);
+check("keeps the winning row's fts rowid", deduped[0].session.ftsRowId, 1002);
+check("dedupe of an empty set", dedupeFtsRows([]), []);
+
+check(
+  "distinct sessions survive",
+  dedupeFtsRows([
+    { session: sess("a"), rank: -1 },
+    { session: sess("b"), rank: -2 },
+    { session: sess("a"), rank: -3 },
+  ]).length,
+  2,
+);
+// The same sessionId under a different agent is a different session.
+check(
+  "agent is part of the dedupe key",
+  dedupeFtsRows([
+    { session: sess("x"), rank: -1 },
+    { session: { ...sess("x"), key: { agent: "codex", sessionId: "x" } }, rank: -2 },
+  ]).length,
+  2,
+);
+
+// ---------------------------------------------------------------------------
+section("merge: sessions from several indexes");
+
+// The indexes are complementary, not redundant: SpecStory knows turn counts but
+// leaves name empty ~70% of the time; the fs reader can produce a real title
+// from the transcript's last ai-title record.
+const merged = mergeSessions([
+  [sess("s1", { origin: "index.specstory", title: "s1", userTurns: 6, markdownPath: "/m.md" })],
+  [sess("s1", { origin: "index.claudefs", title: "Real Title From Transcript", cwd: "/Users/dev/x" })],
+]);
+check("one session after the merge", merged.length, 1);
+check("specstory wins identity", merged[0].origin, "index.specstory");
+check("but the loser fills the gap", merged[0].cwd, "/Users/dev/x");
+check("winner keeps its own turn count", merged[0].userTurns, 6);
+check("winner keeps its markdown path", merged[0].markdownPath, "/m.md");
+
+// ---------------------------------------------------------------------------
+section("merge: live agents (1:N, and the two-pid case)");
+
+function liveAgent(handle: string, over: Partial<LiveAgent> = {}): LiveAgent {
+  return { handle, source: "herdr", agent: "claude", status: "idle", cwd: "/Users/dev/x", ...over };
+}
+
+const HERDR_AGENTS = [
+  liveAgent("herdr:w3:p7", { paneId: "w3:p7", session: { agent: "claude", sessionId: "s1" } }),
+  liveAgent("herdr:w3:p8", { paneId: "w3:p8", session: { agent: "claude", sessionId: "s2" } }),
+];
+const REGISTRY_AGENTS = [
+  liveAgent("claude-pid:100", { source: "claude-registry", pid: 100, session: { agent: "claude", sessionId: "s1" } }),
+  liveAgent("claude-pid:200", { source: "claude-registry", pid: 200, session: { agent: "claude", sessionId: "s3" } }),
+];
+const both = mergeLiveAgents(HERDR_AGENTS, REGISTRY_AGENTS);
+check("herdr's two, plus the registry's unseen one", both.length, 3);
+// herdr is the only source with a paneId, and `herdr agent focus` accepts
+// nothing else — so without it the agent cannot be focused at all.
+ok("herdr keeps its paneId", both[0].paneId === "w3:p7");
+check("the registry's pid is grafted onto the herdr row", both[0].pid, 100);
+ok("the registry-only agent survives", both.some((a) => a.handle === "claude-pid:200"));
+
+// Measured: pids 21952 and 95663 were both alive and both reported sessionId
+// 1b31cf2b-…, one idle and one busy. Modelling live state as a single agent
+// drops one of them and makes the menu bar's count disagree with reality.
+const TWO_PIDS = [
+  liveAgent("claude-pid:21952", {
+    source: "claude-registry",
+    pid: 21952,
+    status: "idle",
+    session: { agent: "claude", sessionId: "dup" },
+  }),
+  liveAgent("claude-pid:95663", {
+    source: "claude-registry",
+    pid: 95663,
+    status: "working",
+    session: { agent: "claude", sessionId: "dup" },
+  }),
+];
+const twoMerged = mergeLiveAgents([], TWO_PIDS);
+check("two processes on one session both survive", twoMerged.length, 2);
+
+check("a session maps to BOTH processes", attachLive([sess("dup")], twoMerged).get("claude:dup")?.length, 2);
+check("a session with nothing running maps to []", attachLive([sess("quiet")], []).get("claude:quiet"), []);
+
+// A stale ~/.claude/sessions/<pid>.json renders as a phantom agent.
+const pruned = pruneDead(twoMerged, (pid) => pid === 21952);
+check("a dead pid is pruned", pruned.length, 1);
+check("the live pid survives", pruned[0].pid, 21952);
+// herdr rows carry no pid, and herdr only reports panes it currently owns, so
+// its liveness is already established — never prune them.
+check("pid-less agents are kept", pruneDead(HERDR_AGENTS, () => false).length, 2);
+
+// ---------------------------------------------------------------------------
+section("merge: grouping (never by project_id)");
+
+// Measured: this repository appears under TWO project_ids in sessions.db —
+// b1f0-5789-c7e2-3090 (workspace-derived) and f1dd-2f59-be9e-fc79 (git-derived),
+// both recorded in its own .specstory/.project.json. Grouping by project_id
+// splits one project into two piles that look like unrelated repos.
+const REPO = "/Users/dev/Projects/agent-deck";
+const grouped = groupByProject([
+  { session: sess("a", { cwd: REPO }) },
+  { session: sess("b", { cwd: `${REPO}/` }) },
+  { session: sess("c", { cwd: "/Users/dev/Projects/other" }) },
+]);
+check("one bucket per directory, slash-insensitive", grouped.size, 2);
+check("both rows land in the same bucket", grouped.get(REPO)?.length, 2);
+check("a session with no cwd still gets a bucket", groupByProject([{ session: sess("z") }]).size, 1);
+
+// ---------------------------------------------------------------------------
+section("rank: ordering invariants, not float equality");
+
+function hit(
+  sessionId: string,
+  over: Partial<AgentSession> = {},
+  running: LiveAgent[] = [],
+  matched: SessionHit["matched"] = [],
+): SessionHit {
+  return { session: sess(sessionId, over), score: 0, matched, live: running };
+}
+
+const norm = normalizeRanks([-9, -5, -1]);
+check("the best rank normalises to 1", norm(-9), 1);
+check("the worst rank normalises to 0", norm(-1), 0);
+// A single result, or a query where fts5 scored everything alike, has zero
+// spread — a naive (worst-r)/(worst-best) is 0/0 = NaN and poisons the sort.
+check("zero spread does not produce NaN", normalizeRanks([-5, -5])(-5), 1);
+check("no ranks at all", normalizeRanks([])(-5), 0);
+ok("a NaN rank does not propagate", Number.isFinite(norm(NaN)));
+
+check("no date scores zero recency", recencyScore(undefined, NOW), 0);
+ok("today beats a month ago", recencyScore(NOW, NOW) > recencyScore(new Date(NOW.getTime() - 30 * 86400000), NOW));
+// Clock skew is not relevance.
+check("a future date is clamped to now", recencyScore(new Date(NOW.getTime() + 86400000), NOW), 1);
+
+const DATED = { updatedAt: new Date("2026-07-20T00:00:00Z") };
+// These invariants survive a weight being nudged; asserting the float would not.
+ok(
+  "a live session outranks a dead one at equal text relevance",
+  scoreHit(hit("a", DATED, [liveAgent("h")]), 1, NOW) > scoreHit(hit("b", DATED), 1, NOW),
+);
+ok(
+  "an undated row never outranks a dated one at equal text relevance",
+  scoreHit(hit("a", DATED), 1, NOW) > scoreHit(hit("b"), 1, NOW),
+);
+ok(
+  "a prompt-history hit adds weight",
+  scoreHit(hit("a", DATED, [], ["prompt"]), 1, NOW) > scoreHit(hit("b", DATED), 1, NOW),
+);
+ok(
+  "text relevance dominates a bare title match",
+  scoreHit(hit("a", DATED), 1, NOW) > scoreHit(hit("b", DATED, [], ["title"]), 0, NOW),
+);
+
+// Never throws on an all-undefined session: 7 real rows look exactly like this,
+// and a ranker that assumes a field exists crashes the entire list.
+let threw = false;
+try {
+  scoreHit(hit("bare"), NaN, NOW);
+} catch {
+  threw = true;
+}
+ok("scoring a metadata-less row never throws", !threw);
+
+// A total order. Without the sessionId fall-through, equal-scored undated rows
+// compare as 0 and the list visibly reshuffles between renders.
+const TIED: SessionHit[] = [
+  { ...hit("zzz"), score: 0.5 },
+  { ...hit("aaa"), score: 0.5 },
+];
+check("ties break deterministically", TIED.slice().sort(compareHits).map((h) => h.session.key.sessionId), ["aaa", "zzz"]);
+check(
+  "the order does not depend on input order",
+  TIED.slice().sort(compareHits).map((h) => h.session.key.sessionId),
+  TIED.slice().reverse().sort(compareHits).map((h) => h.session.key.sessionId),
+);
+
+const ranked = rankHits(
+  [hit("old", { updatedAt: new Date("2026-01-01T00:00:00Z") }), hit("new", DATED)],
+  new Map([
+    ["claude:old", -9],
+    ["claude:new", -9],
+  ]),
+  NOW,
+);
+check("equal text relevance breaks on recency", ranked[0].session.key.sessionId, "new");
+// A session found only by a non-FTS index has no rank entry and must still rank.
+check("a session with no fts rank still appears", rankHits([hit("x", DATED)], new Map(), NOW).length, 1);
+
+check("byRecency puts undated last", [sess("a"), sess("b", DATED)].sort(byRecency).map((s) => s.key.sessionId), ["b", "a"]);
+check("keyString", keyString({ agent: "claude", sessionId: "x" }), "claude:x");
+
+// ---------------------------------------------------------------------------
+section("errors: absent is not broken");
+
+// herdr normally speaks JSON, including for errors. With no server it prints a
+// bare Rust Debug string, and the exit code does not distinguish the two — so
+// the discriminator is "did stdout parse", never the exit code. Getting this
+// backwards renders a dead server as "0 agents", which looks like a quiet machine.
+const NO_SOCKET = 'Error: Os { code: 2, kind: NotFound, message: "No such file or directory" }';
+const down = classifyHerdr({ stdout: NO_SOCKET, stderr: "", exitCode: 1 });
+ok("non-JSON stdout is source-unreachable", isUnreachable(down));
+ok("the message tells the user what to do", /server is not running|Live Source/.test(down?.detail ?? ""));
+
+const notFound = classifyHerdr({
+  stdout: '{"error":{"code":"agent_not_found","message":"agent target term_65 not found"},"id":"cli:agent:get"}',
+  stderr: "",
+  exitCode: 1,
+});
+ok("a structured herdr error is classified", notFound instanceof AgentDeckError);
+check("and carries its code", notFound?.detail.startsWith("agent_not_found"), true);
+
+check(
+  "valid JSON with no error key is not an error",
+  classifyHerdr({ stdout: '{"id":"cli:agent:list","result":{"agents":[]}}', stderr: "", exitCode: 0 }),
+  undefined,
+);
+// Zero agents is a real answer, not a failure.
+check("empty stdout with exit 0 is not an error", classifyHerdr({ stdout: "", stderr: "", exitCode: 0 }), undefined);
+
+// All of these are the user's query being read as an FTS5 expression, so they
+// are bad-query — a grammar hint, not a broken-database screen.
+for (const [input, stderr] of [
+  ["-x", "Error: stepping, no such column: x"],
+  ["col:x", "Error: stepping, no such column: col"],
+  ['foo"', "Error: stepping, unterminated string"],
+  ["a AND", 'Error: stepping, fts5: syntax error near ""'],
+  ["*", "Error: stepping, unknown special query: "],
+] as const) {
+  ok(`sqlite ${JSON.stringify(input)} is bad-query`, isBadQuery(classifySqlite({ stderr, exitCode: 1 })), stderr);
+}
+ok(
+  "a missing table is a schema mismatch",
+  classifySqlite({ stderr: "Error: in prepare, no such table: sessions", exitCode: 1 })?.kind === "schema-mismatch",
+);
+ok(
+  "a locked database is unreachable",
+  classifySqlite({ stderr: "Error: database is locked", exitCode: 1 })?.kind === "source-unreachable",
+);
+check("clean stderr with exit 0 is not an error", classifySqlite({ stderr: "", exitCode: 0 }), undefined);
+
+// execFile reports a timeout as a SIGTERM kill, so `killed` must be checked
+// before anything else or every timeout is filed as a generic failure.
+check("SIGTERM means timeout", fromExecError({ killed: true, signal: "SIGTERM" }, "live.herdr", ["herdr"]).kind, "timeout");
+// Reached only if a binary vanished after the capability probe found it. Not an
+// install hint — the probe already said it was there.
+check(
+  "ENOENT after a successful probe is unreachable, not a missing install",
+  fromExecError({ code: "ENOENT" }, "live.herdr", ["herdr"]).kind,
+  "source-unreachable",
+);
+
+ok("ANSI escapes are stripped", !/?\[3[0-9]m/.test(cleanStderr("[31mred[0m")));
+check("cleanStderr drops blank lines", cleanStderr("\n\na\n\n\nb\n\n"), "a\nb");
+
+// ---------------------------------------------------------------------------
+section("import discipline (the harness asserts itself)");
+
+// The eslint rule gives fast feedback; this assertion is what survives someone
+// disabling it inline. Every module below must run under plain node.
+const SRC = dirname(__dirname);
+const PURE_MODULES = [
+  "lib/agents/types.ts",
+  "lib/agents/transport.ts",
+  "lib/agents/capabilities.ts",
+  "lib/agents/probe.ts",
+  "lib/agents/normalize.ts",
+  "lib/agents/merge.ts",
+  "lib/agents/rank.ts",
+  "lib/agents/errors.ts",
+  "lib/specstory/fts.ts",
+  "lib/specstory/sql.ts",
+  "lib/specstory/wire.ts",
+];
+for (const rel of PURE_MODULES) {
+  const p = join(SRC, rel);
+  if (!existsSync(p)) {
+    ok(`pure module exists: ${rel}`, false);
+    continue;
+  }
+  const text = readFileSync(p, "utf8");
+  ok(`${rel} does not import @raycast/api`, !/from\s+["']@raycast\//.test(text));
+  ok(`${rel} does not import react`, !/from\s+["']react["']/.test(text));
+}
+
+// ---------------------------------------------------------------------------
+section("live cross-checks (skipped when the tool is absent)");
+
+// Stronger than the sibling extension's `--help` check, because herdr publishes
+// a machine-readable schema: a herdr upgrade that adds a status fails the build
+// here rather than rendering as a blank badge in production.
+const herdrBin = pickBinary("herdr", existsSync);
+if (herdrBin) {
+  try {
+    const raw = execFileSync(herdrBin, ["api", "schema", "--json"], { encoding: "utf8", timeout: 10_000 });
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const defs =
+      (parsed.$defs as Record<string, { enum?: string[] }> | undefined) ??
+      ((parsed.result as { schema?: { $defs?: Record<string, { enum?: string[] }> } } | undefined)?.schema?.$defs);
+    const statuses = defs?.AgentStatus?.enum;
+    if (statuses) {
+      check("herdr's AgentStatus enum matches our union", [...statuses].sort(), ["blocked", "done", "idle", "unknown", "working"]);
+    } else {
+      console.log("  (herdr schema has no AgentStatus enum at the expected path — skipped)");
+    }
+  } catch (e) {
+    console.log(`  (herdr schema check skipped: ${String((e as Error).message).split("\n")[0]})`);
+  }
+} else {
+  console.log("  (herdr not installed — schema check skipped)");
+}
+
+const sqliteBin = pickBinary("sqlite3", existsSync);
+if (sqliteBin) {
+  const opts = { encoding: "utf8" as const, timeout: 15_000 };
+  const compile = execFileSync(sqliteBin, [":memory:", "PRAGMA compile_options;"], opts);
+  ok("sqlite3 has FTS5", /ENABLE_FTS5/.test(compile));
+
+  const db = join(homedir(), ".specstory", "sessions.db");
+  if (existsSync(db)) {
+    const uri = dbUri(db);
+    const probe = parseRows<ProbeRow>(execFileSync(sqliteBin, ["-json", uri, probeQuery()], opts));
+    ok("the real SpecStory schema is what we expect", schemaOk(probe[0]), JSON.stringify(probe[0]));
+
+    // Every generated expression must PARSE against the real database. Run as a
+    // count, never with snippet(): snippet on a large body costs 1144 ms.
+    for (const input of ["-x", "col:x", 'foo"', "a AND", "a OR", "NEAR(", "raycast extension", "檢查", "😀"]) {
+      const expr = toFts5(input).expr;
+      if (!expr) continue;
+      try {
+        execFileSync(
+          sqliteBin,
+          ["-json", uri, `SELECT count(*) AS n FROM sessions_fts WHERE sessions_fts MATCH ${sqlQuote(expr)};`],
+          opts,
+        );
+        ok(`sanitized ${JSON.stringify(input)} parses against the real index`, true);
+      } catch (e) {
+        ok(
+          `sanitized ${JSON.stringify(input)} parses against the real index`,
+          false,
+          cleanStderr(String((e as { stderr?: string }).stderr ?? e)),
+        );
+      }
+    }
+
+    const rows = parseRows<SessionRow>(execFileSync(sqliteBin, ["-json", uri, rankQuery('"raycast"*', 30)], opts));
+    ok("the rank query returns rows", rows.length > 0, `${rows.length} rows`);
+    if (rows.length > 0) {
+      ok(
+        "rank query column names match SessionRow",
+        ["agent", "sid", "r", "rid", "project_name", "cwd", "slug", "name", "created_at", "ts"].every((k) => k in rows[0]),
+        Object.keys(rows[0]).join(","),
+      );
+      ok("fts rank is negative (lower is better)", typeof rows[0].r === "number" && rows[0].r < 0, String(rows[0].r));
+      // The dedupe is not theoretical: assert the real index still fans out.
+      const distinct = new Set(rows.map((r) => `${r.agent}:${r.sid}`)).size;
+      ok("the real index really does return duplicate rows", distinct <= rows.length, `${distinct} distinct of ${rows.length}`);
+    }
+
+    // The undated rows really do arrive as null, not "" and not 0.
+    const undated = parseRows<SessionRow>(
+      execFileSync(
+        sqliteBin,
+        [
+          "-json",
+          uri,
+          `SELECT s.agent, s.session_id AS sid, NULL AS r, NULL AS rid, s.project_name,
+                  NULLIF(s.origin_cwd,'') AS cwd, NULLIF(s.slug,'') AS slug, NULLIF(s.name,'') AS name,
+                  NULLIF(s.native_path,'') AS native_path, s.user_turns, s.total_turns,
+                  NULLIF(s.created_at,'') AS created_at,
+                  NULLIF(COALESCE(NULLIF(s.updated_at,''), s.created_at),'') AS ts
+           FROM sessions s WHERE COALESCE(s.updated_at,'') = '' LIMIT 3;`,
+        ],
+        opts,
+      ),
+    );
+    if (undated.length > 0) {
+      check("an undated row's ts arrives as JSON null", undated[0].ts, null);
+      check("and parseTs turns it into undefined", parseTs(undated[0].ts), undefined);
+    } else {
+      console.log("  (no undated rows on this machine — skipped)");
+    }
+  } else {
+    console.log("  (no SpecStory index — database checks skipped)");
+  }
+} else {
+  console.log("  (sqlite3 not found — this should be impossible on macOS)");
+}
+
+// ---------------------------------------------------------------------------
+section("fixtures are redacted");
+
+// `ray publish` copies the DIRECTORY, not the git index, so a .gitignore does
+// not save you. Anything committed here ends up in a public review PR.
+const FIXTURES = join(__dirname, "fixtures");
+if (existsSync(FIXTURES)) {
+  const files = readdirSync(FIXTURES).filter((f) => statSync(join(FIXTURES, f)).isFile());
+  if (files.length === 0) {
+    console.log("  (fixtures directory is empty)");
+  }
+  const realHome = homedir();
+  for (const f of files) {
+    const text = readFileSync(join(FIXTURES, f), "utf8");
+    ok(`${f} does not leak the capture machine's home directory`, !text.includes(realHome));
+    ok(`${f} contains no API token`, !/sk-ant-[A-Za-z0-9_-]{20,}/.test(text));
+  }
+} else {
+  console.log("  (no fixtures yet)");
+}
+
+// ---------------------------------------------------------------------------
+console.log(`\n${checks - failures}/${checks} checks passed`);
+if (failures > 0) {
+  console.error(`${failures} FAILED`);
+  process.exitCode = 1;
+}
+
+```
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/dev-check.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:11:26Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Install dependencies
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && npm install --silent 2>&1 | tail -5; echo "--- install exit: $? ---"`
+
+```text
+--- install exit: 0 ---
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:11:38Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Typecheck dev-check
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && npx tsc --outDir .build/verify --module commonjs --target ES2022 --lib ES2023 --moduleResolution node --esModuleInterop --skipLibCheck --strict --resolveJsonModule src/lib/dev-check.ts 2>&1 | head -30; echo "=== tsc exit: $? ==="`
+
+```text
+=== tsc exit: 0 ===
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:11:43Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Run the dev-check harness
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && node .build/verify/dev-check.js 2>&1 | tail -45`
+
+```text
+— capabilities: no external tool is required
+
+— fts5 sanitizer
+FAIL a lone star is dropped
+  expected undefined
+  actual   "\"*\"*"
+
+— specstory: SQL builders
+
+— merge: the six-way FTS duplicate
+
+— merge: sessions from several indexes
+
+— merge: live agents (1:N, and the two-pid case)
+FAIL herdr's two, plus the registry's unseen one
+  expected 3
+  actual   4
+
+— merge: grouping (never by project_id)
+
+— rank: ordering invariants, not float equality
+
+— errors: absent is not broken
+
+— import discipline (the harness asserts itself)
+FAIL pure module exists: lib/agents/types.ts
+FAIL pure module exists: lib/agents/transport.ts
+FAIL pure module exists: lib/agents/capabilities.ts
+FAIL pure module exists: lib/agents/probe.ts
+FAIL pure module exists: lib/agents/normalize.ts
+FAIL pure module exists: lib/agents/merge.ts
+FAIL pure module exists: lib/agents/rank.ts
+FAIL pure module exists: lib/agents/errors.ts
+FAIL pure module exists: lib/specstory/fts.ts
+FAIL pure module exists: lib/specstory/sql.ts
+FAIL pure module exists: lib/specstory/wire.ts
+
+— live cross-checks (skipped when the tool is absent)
+  (herdr schema has no AgentStatus enum at the expected path — skipped)
+
+— fixtures are redacted
+  (no fixtures yet)
+
+212/226 checks passed
+14 FAILED
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>

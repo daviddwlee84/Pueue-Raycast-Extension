@@ -166,7 +166,7 @@ ls /definitely-not-a-directory
 
 Open **Tasks**. It lands under *Failed* with its exit code.
 
-**The detail pane** (`⌘⇧D` toggles it) shows the command, working directory,
+**The detail pane** (`⌘I` toggles it) shows the command, working directory,
 group, label, timestamps, exit code, and a preview of the last 20 log lines —
 enough to identify most failures without leaving the list. Raise or lower the
 preview length with the *Log Preview Lines* preference on the Tasks command;
@@ -189,10 +189,10 @@ The rest of the Tasks shortcuts:
 | `⌘L` | Follow output (running tasks) |
 | `⌘⇧R` | Restart as a new task |
 | `⌘⌥R` | Restart in place — same id, **overwrites the log** |
-| `⌘⇧P` | Pause · `⌘⇧S` Resume / Start now |
+| `⌘⇧P` | Pause · `⌘D` Resume / Start now |
 | `⌘⇧T` | Stash · `⌘⇧E` Enqueue |
-| `⌘⇧K` | Kill · `⌘⌫` Remove |
-| `⌘⇧D` | Toggle the detail pane · `⌘R` Reload |
+| `⌘⇧K` | Kill · `⌃X` Remove |
+| `⌘I` | Toggle the detail pane · `⌘R` Reload |
 
 The usual loop on a failure is: read the log, fix the command, `⌘⇧R` to restart
 as a new task. Use `⌘⌥R` only when you want to keep the id — it overwrites the

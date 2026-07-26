@@ -76168,3 +76168,1100 @@ all assertions passed
 ready  - built extension successfully
 ```
 </details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:00:14Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit the docs
+
+```bash
+git status --short && git add -A && git commit -q -F - <<'EOF'
+Write down what v0.3.0 changed, and drop the fleet view
+
+Docs:
+
+- pitfalls/usecachedpromise-serves-other-cache-keys.md — the connection bug,
+  with the `laggyDataRef` mechanism quoted out of the bundle and the
+  generalisation: if the identity of what you fetched matters, put it in the
+  value, not only in the key. Correct cache keying does not help, and this repo
+  had correct cache keying when the bug shipped.
+- docs/groups.md + the zh-TW sibling — what each number means and where it
+  deliberately stops short of guessing: why `total` counts the whole group, why
+  `finished` includes failures, why the ETA skips the stash and needs two
+  samples, and why the parallelism presets are not seeded from the local core
+  count.
+
+TODO: the fleet view moves to "Won't do" with the reason rather than being
+deleted. It was never a technical problem — SSH multiplexing made it cheap — it
+would just make the tool more complicated than the problem. The per-connection
+counts on the menu bar's Connection rows answer the same question for a fraction
+of the cost.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+EOF
+git log --oneline -1
+```
+
+```text
+ M .specstory/history/2026-07-26_12-50-19Z-at-users-david-src.md
+ M .specstory/history/2026-07-26_20-14-11Z-pueue-https-github-com.md
+ M CHANGELOG.md
+ M README.md
+ M TODO.md
+ M mkdocs.yml
+ M pitfalls/README.md
+?? docs/groups.md
+?? docs/groups.zh-TW.md
+?? pitfalls/usecachedpromise-serves-other-cache-keys.md
+026b561 Write down what v0.3.0 changed, and drop the fleet view
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:00:22Z)**_
+
+<think><details><summary>Thought Process</summary>
+I should push the changes and seed a realistic queue for manual verification, then hold off on tagging v0.3.0 until the user has actually tested it interactively—since they framed version tags as marking when things are "fully ok". The user mentioned tagging v0.2.1 first with v0.3.0 as the eventual goal, but the interactive verification pass hasn't happened yet.
+
+Before pushing, I need to make sure the store-facing gates run—`just dist` and `just preflight`—then push and hand them the checklist.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:00:32Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Push to origin
+
+`git push origin main 2>&1 | tail -3`
+
+```text
+To https://github.com/daviddwlee84/Pueue-Raycast-Extension.git
+   fd4f414..026b561  main -> main
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:00:49Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Run the store-facing gates
+
+`just dist 2>&1 | tail -4; echo "=== preflight"; just preflight 2>&1 | tail -20`
+
+```text
+info  - compiled entry points
+info  - generated extension's TypeScript definitions
+info  - checked TypeScript
+ready  - built extension successfully
+=== preflight
+  {"id":"license-field","status":"pass","detail":"license is MIT","fix":""},
+  {"id":"license-file","status":"pass","detail":"a LICENSE file is present","fix":""},
+  {"id":"categories-nonempty","status":"pass","detail":"2 categor(y|ies) declared","fix":""},
+  {"id":"description-present","status":"pass","detail":"description is set","fix":""},
+  {"id":"no-version-field","status":"pass","detail":"no version field, as the store expects","fix":""},
+  {"id":"platforms-macos-when-menu-bar","status":"pass","detail":"platforms is consistent with the command modes","fix":""},
+  {"id":"command-src-files","status":"pass","detail":"every commands[].name has a matching src file","fix":""},
+  {"id":"lockfile-present","status":"pass","detail":"package-lock.json is present","fix":""},
+  {"id":"readme-present","status":"pass","detail":"README.md is present","fix":""},
+  {"id":"env-dts-present","status":"pass","detail":"raycast-env.d.ts is present","fix":""},
+  {"id":"no-handwritten-preferences","status":"pass","detail":"no hand-written Preferences interface","fix":""},
+  {"id":"changelog-initial-version","status":"pass","detail":"CHANGELOG has the Initial Version placeholder","fix":""},
+  {"id":"icon-present","status":"pass","detail":"icon found at assets/extension-icon.png","fix":""},
+  {"id":"icon-512","status":"pass","detail":"icon is 512x512","fix":""},
+  {"id":"icon-not-placeholder","status":"pass","detail":"the icon is not the scaffolder placeholder","fix":""},
+  {"id":"metadata-count","status":"fail","detail":"metadata/ has no PNGs — and ray lint exits 0 anyway","fix":"Capture 3-6 with Raycast Window Capture + \"Save to Metadata\""},
+  {"id":"metadata-dimensions","status":"skip","detail":"no screenshots to measure","fix":"See metadata-count"}
+]
+1 check(s) failed, 1 warning(s), 1 skipped
+error: Recipe `preflight` failed with exit code 4
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:01:02Z)**_
+
+<think><details><summary>Thought Process</summary>
+The tests are passing except for screenshots, which is a known issue. Now I need to populate a realistic queue so the new group rendering is actually visible to the user, then provide them with the checklist. I'm creating a batch of fixture tasks that demonstrates the features—some running, some queued, some failed—which is similar to what the repo already does for screenshots and is safe since it's reversible.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:01:07Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Seed a demo group for the manual pass
+
+```bash
+P=/usr/local/bin/pueue
+$P group add v03demo --parallel 2 >/dev/null
+for i in 1 2 3; do $P add -g v03demo -- "sleep 0.3; echo ok $i" >/dev/null; done
+$P add -g v03demo -- 'false' >/dev/null
+$P add -g v03demo -- 'exit 42' >/dev/null
+$P add -g v03demo -- 'definitely-not-a-real-binary' >/dev/null
+$P add -g v03demo -- 'sleep 400' >/dev/null
+$P add -g v03demo -- 'sleep 500' >/dev/null
+$P add -g v03demo -- 'sleep 600' >/dev/null
+$P add -g v03demo -s -- 'echo stashed' >/dev/null
+sleep 4
+$P status --group v03demo
+```
+
+```text
+Group "v03demo" (2 parallel): running
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Id   Status         Command                        Path                                                     Start      End      
+═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+ 1    Success        sleep 0.3; echo ok 1           /Users/david/Documents/Program/Pueue-Raycast-Extension   05:01:02   05:01:03 
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 2    Success        sleep 0.3; echo ok 2           /Users/david/Documents/Program/Pueue-Raycast-Extension   05:01:02   05:01:03 
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 3    Success        sleep 0.3; echo ok 3           /Users/david/Documents/Program/Pueue-Raycast-Extension   05:01:03   05:01:04 
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 4    Failed (1)     false                          /Users/david/Documents/Program/Pueue-Raycast-Extension   05:01:03   05:01:03 
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 5    Failed (42)    exit 42                        /Users/david/Documents/Program/Pueue-Raycast-Extension   05:01:03   05:01:04 
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 6    Failed (127)   definitely-not-a-real-binary   /Users/david/Documents/Program/Pueue-Raycast-Extension   05:01:04   05:01:04 
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 7    Running        sleep 400                      /Users/david/Documents/Program/Pueue-Raycast-Extension   05:01:04            
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 8    Running        sleep 500                      /Users/david/Documents/Program/Pueue-Raycast-Extension   05:01:04            
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 9    Queued         sleep 600                      /Users/david/Documents/Program/Pueue-Raycast-Extension                       
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ 10   Stashed        echo stashed                   /Users/david/Documents/Program/Pueue-Raycast-Extension                       
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:01:23Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Run the summariser against the live queue
+
+```bash
+cat > /tmp/gs.ts <<'EOF'
+import { summarizeGroups, summaryLine, progressBar, progressPercent } from "./src/lib/group-summary";
+import { taskList } from "./src/lib/pueue/normalize";
+import { execFileSync } from "node:child_process";
+const raw = JSON.parse(execFileSync("/usr/local/bin/pueue", ["status", "--json"], { encoding: "utf8", maxBuffer: 64e6 }));
+const tasks = taskList(raw.tasks);
+for (const s of summarizeGroups(raw.groups, tasks)) {
+  console.log(`${s.name.padEnd(10)} ${summaryLine(s)}`);
+  console.log(`           [${progressBar(s.progress)}] ${progressPercent(s.progress)}  avg=${s.avgMs?.toFixed(0) ?? "-"}ms  eta=${s.etaMs?.toFixed(0) ?? "-"}ms  elapsed=${s.elapsedMs?.toFixed(0) ?? "-"}ms  failed=${JSON.stringify(s.failedIds)}`);
+}
+EOF
+rm -rf .build/gs && npx tsc --outDir .build/gs --module commonjs --target ES2022 --lib ES2023 --esModuleInterop --resolveJsonModule --skipLibCheck --strict /tmp/gs.ts --rootDir . 2>&1 | head -5
+node .build/gs/tmp/gs.js 2>/dev/null || node .build/gs/gs.js
+```
+
+```text
+Exit code 1
+error TS6059: File '/tmp/gs.ts' is not under 'rootDir' '/Users/david/Documents/Program/Pueue-Raycast-Extension'. 'rootDir' is expected to contain all source files.
+  The file is in the program because:
+    Root file specified for compilation
+node:internal/modules/cjs/loader:1451
+  throw err;
+  ^
+
+Error: Cannot find module '/Users/david/Documents/Program/Pueue-Raycast-Extension/.build/gs/gs.js'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1448:15)
+    at defaultResolveImpl (node:internal/modules/cjs/loader:1059:19)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1064:22)
+    at Module._load (node:internal/modules/cjs/loader:1234:25)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.13.1
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:01:40Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Run the summariser against the live queue
+
+```bash
+mkdir -p .build/probe && cp /tmp/gs.ts .build/probe/gs.ts && python3 - <<'PY'
+p='.build/probe/gs.ts'
+s=open(p).read()
+s=s.replace('"./src/lib/','"../../src/lib/')
+open(p,'w').write(s)
+PY
+rm -rf .build/gs && npx tsc --outDir .build/gs --module commonjs --target ES2022 --lib ES2023 --esModuleInterop --resolveJsonModule --skipLibCheck --strict .build/probe/gs.ts 2>&1 | head -5
+find .build/gs -name "gs.js" | head -1 | xargs node
+```
+
+```text
+default    1/1 done
+           [██████████] 100%  avg=303ms  eta=-ms  elapsed=303ms  failed=[]
+v03demo    6/10 done · 2 running · 1 queued · 1 stashed · 3 failed
+           [██████░░░░] 60%  avg=472ms  eta=708ms  elapsed=37931ms  failed=[4,5,6]
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:01:57Z)**_
+
+<think><details><summary>Thought Process</summary>
+The summarizer is correctly displaying the queue status with a 60% progress bar, though the ETA calculation is misleading since it averages all task times rather than modeling actual performance—the finished tasks ran at 0.3s while the pending ones are set to sleep for 400ms, which explains the discrepancy, but this is the documented limitation of using averages instead of a proper predictive model.
+
+I'm verifying the elapsed time is accurate (37931ms from 05:01:02 to ~05:01:40 checks out), confirming the default group correctly shows no ETA since nothing's pending, and double-checking a few potential runtime issues like the error description function and status imports are properly available in the menu bar context. I'll clean up the probe artifacts and hold off on tagging v0.3.0 until the interactive pass is complete, as the user indicated they want verification before releasing.
+
+There's a minor inefficiency where `useAllCounts` runs status for every connection including the selected one, duplicating the main read, but it's acceptable since the main read might have a `menuQuery` filter applied that would make the counts differ anyway.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:01:57Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Clean up probe artifacts
+
+`rm -rf .build/gs .build/probe /tmp/gs.ts && git status --short && echo "--- log" && git log --oneline v0.2.1..HEAD`
+
+```text
+ M .specstory/history/2026-07-26_12-50-19Z-at-users-david-src.md
+ M .specstory/history/2026-07-26_20-14-11Z-pueue-https-github-com.md
+--- log
+026b561 Write down what v0.3.0 changed, and drop the fleet view
+9176a54 Say what a task's dependencies are actually doing
+311cbdd Show every daemon's counts on its own row, if you ask for it
+7b91df2 Let a big machine ask for a big parallelism
+932ebd0 Give a group's failures a single action, and its progress a place in the menu
+a1f4704 Lead the Groups view with progress, not with slot occupancy
+4762371 Add the numbers a batch is actually judged by
+02d97e8 Make the menu bar say when it is showing a frozen queue
+b9eb59f Stop an unreachable daemon from borrowing another one's queue
+3c6c662 One read per view, not two
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:02:02Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #32 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:02:11Z)**_
+
+<think><details><summary>Thought Process</summary>
+Everything's wrapped up except for the v0.3.0 tag, which I'm holding back so the user can verify it interactively. Now I'm putting together the summary and considering whether to save any context to memory—the user's preference against over-engineering and their specific request to protect the reset function with ⌥ in the menu bar are worth noting, though those decisions are already documented in the TODO file.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:02:11Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check existing memory index
+
+`cat "/Users/david/.claude/projects/-Users-david-Documents-Program-Pueue-Raycast-Extension/memory/MEMORY.md" 2>/dev/null || echo "(no MEMORY.md)"`
+
+```text
+(no MEMORY.md)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:02:22Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```md
+---
+name: tag-only-when-verified
+description: David tags releases only after interactive verification, not at feature-complete
+metadata:
+  type: feedback
+---
+
+David treats a version tag as a claim that the version has been *used*, not that
+its code is written. `v0.2.0` was cut only once remote support had been driven
+by hand; when four fixes landed after it he agreed the tag was "behind" and
+wanted `v0.2.1` cut before new work started.
+
+**Why:** a tag on unexercised code makes the git history lie about what was ever
+known to work — and in a Raycast extension a great deal cannot be checked by
+`tsc`, `ray lint`, or assertions, because it only exists in a GUI the harness
+cannot drive.
+
+**How to apply:** when a milestone's code is complete and the gate is green, push
+and hand over a concrete interactive checklist — do not tag. Tag after he
+confirms. Cutting a catch-up patch tag for already-shipped fixes before starting
+the next milestone is welcome; offer it. See [[interactive-pass-is-the-gap]].
+
+```
+
+```text
+File created successfully at: /Users/david/.claude/projects/-Users-david-Documents-Program-Pueue-Raycast-Extension/memory/tag-only-when-verified.md
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:02:36Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```md
+---
+name: interactive-pass-is-the-gap
+description: Every bug David has reported on this extension was invisible to the automated gate
+metadata:
+  type: project
+---
+
+As of 2026-07-27, every defect David has reported in Pueue-Raycast-Extension was
+found by *using* it, and none were reachable by `just check` (typecheck → 240
+assertions → `ray lint` → `ray build`):
+
+- `(Pueue error)` rendered as a task's own output — found in a screenshot
+- a dead queue rendering as live after `brew services stop pueue`
+- a "one per line" preference that can only hold one line, because Raycast has
+  no multi-line preference type
+- an unreachable SSH host blocking the menu bar for 30 s
+- no way back from a broken remote — the switcher lived only in the working menu
+- the confirmations preference not reaching the menu bar's ⌥ gate
+- an unreachable daemon rendering the *previous* daemon's queue under its name
+
+**Why:** the gate covers pure logic and argv. It cannot see rendering, cannot see
+Raycast's settings UI, and cannot see a hook returning cached data from the wrong
+key. A recurring sub-pattern: the escape route or the error report is missing
+specifically from the **degraded** path, which is the path nobody exercises while
+building the working one.
+
+**How to apply:** when finishing a feature, deliberately walk its failure states
+— unreachable host, stopped daemon, empty result, malformed config — not just its
+happy path, and check that each one still offers a way out. Assume anything only
+provable in the GUI is unproven until David says otherwise; see
+[[tag-only-when-verified]].
+
+```
+
+```text
+File created successfully at: /Users/david/.claude/projects/-Users-david-Documents-Program-Pueue-Raycast-Extension/memory/interactive-pass-is-the-gap.md
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:02:42Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```md
+- [Tag only when verified](tag-only-when-verified.md) — a version tag is a claim the version was used, not that it compiles
+- [The interactive pass is the gap](interactive-pass-is-the-gap.md) — every reported bug so far was invisible to `just check`
+
+```
+
+```text
+File created successfully at: /Users/david/.claude/projects/-Users-david-Documents-Program-Pueue-Raycast-Extension/memory/MEMORY.md (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:03:12Z)**_
+
+v0.3.0 is written and pushed — **10 commits**, gate green at each one, **240 assertions** (up from 224). I have *not* tagged it; see the end.
+
+## The bug you spotted
+
+`nas` showing `default — running (0/1)` wasn't a rendering slip — the menu bar was showing **the local daemon's queue** under the remote's name, with no error anywhere, because its "did this fail" branch is `if (!data)` and `data` was truthy.
+
+Cause, read out of `@raycast/utils/dist/main.js:759`: `useCachedPromise` keys its cache on the arguments — which this code already did correctly — but `keepPreviousData` falls back to a **key-independent** `laggyDataRef` whenever the new key has no entry. After one successful read that ref is returned forever, including through failures.
+
+So the fix isn't better keying. `Snapshot` now carries the connection it was read from, and `forConnection()` rejects anything that isn't yours. Written up in `pitfalls/usecachedpromise-serves-other-cache-keys.md`, with the general form: *if the identity of what you fetched matters, put it in the value, not only in the key.*
+
+While there: the menu bar now greys its icon, shows a warning header, and says **"Frozen at 02:54"** instead of "Updated 02:54" when a read fails on top of good data. The design promised that long ago and it was never built.
+
+## Groups
+
+`wf — running (0/1)` → `wf · 6/20 · 3 failed`, with a progress ring, an ETA, and a ⌘⇧D detail pane carrying the pqsum table. Verified against your live queue just now:
+
+```
+v03demo    6/10 done · 2 running · 1 queued · 1 stashed · 3 failed
+           [██████░░░░] 60%  avg=472ms  eta=708ms  elapsed=37931ms  failed=[4,5,6]
+```
+
+That 708 ms ETA is exactly the honest-but-useless case — three `sleep 400`s averaged against three 0.3 s jobs. It's an average, not a model, which is why it wears a `~`.
+
+Three judgement calls are in the module header: `total` is the whole group (pueue has no batch concept — inventing one would be a guess dressed as a fact), the ETA skips stashed tasks (they wait on a person, not the queue), and it needs two samples before it will claim anything.
+
+## Your two questions
+
+**Batch actions** — `restart --failed-in-group` and `clean --group` existed in pueue all along. I ran both forms against a real daemon before writing any UI, and the result changed the design: `--failed-in-group` on a group with no failures *exits 0 silently*. So the restart actions are **hidden** when there's nothing to restart, not greyed — an always-visible action that quietly does nothing is worse than one that isn't there.
+
+**Parallelism** — you were right that it was a compromise, and the wrong one for a big machine. Now 1–32 plus a `Custom…` field for any integer. Deliberately *not* seeded from `os.cpus().length`: point the extension at a remote and that's the wrong machine's core count, and a plausible wrong number beats no number only until someone believes it.
+
+**Reset in the menu bar** — implemented as you asked: present, always behind ⌥ *regardless* of the confirmations preference, with `Show Tasks in Group` and `Open Groups…` beside it. That's not the exception I removed last session — the Groups view already singles reset out as the one action that asks every time with no "don't show again".
+
+Also shipped: per-connection counts as Connection-row subtitles (opt-in, `allSettled` so a dead host degrades only its own row), dependencies as status-coloured tags, and the fleet view moved to **Won't do** with the reasoning, per your call.
+
+## One structural change worth flagging
+
+`status --json` returns a byte-identical groups map to `group --json`, and `--group nope` still returns every group at exit 0. So the paired hooks in all three views were a spare subprocess per revalidate and a second cache entry that could disagree with the first. Collapsing them deleted `applyGroupMutation` and `actOnGroups` — net less code.
+
+## Not tagged
+
+I've seeded `v03demo` on your local daemon (10 tasks across every state) so the manual pass is one click. `v0.2.1` is tagged and pushed; **`v0.3.0` isn't**, because none of this has been through a real keypress yet — and on this extension that's where every bug you've reported has come from. Worth walking:
+
+1. **The actual fix** — add `dead | nosuchhost.invalid` to Remote Connections, select it in the menu bar. Expect the red error menu with the switcher, *not* a `default` group. Then switch back to Local.
+2. **Groups** — ⌘⇧D, then `Restart 3 Failed` on `v03demo`.
+3. **Menu bar** — open the `v03demo` submenu; check the bar row, and that ⌥ still guards Reset with confirmations *off*.
+
+Cleanup when you're done: `pueue reset --force --groups v03demo && pueue group remove v03demo`.
+
+---
+
+_**User (2026-07-26 21:06:13Z)**_
+
+ ⌘⇧D 是 Raycast預設 open documents [Image #20]
+
+[Image #21]
+Quick Menu Bar有一個bug是 選擇failed task的show log時 如果Tasks本身之前切到別的group的情況（該group不包含該task id）這樣就不會進到task的詳細頁面 但是切回All Group時是正常的
+
+Quick Menu Bar 之前我記得是 running / parallelism 之類的 現在是換成 finished / submitted 嗎？
+
+另外評估一下是不是能夠給我們Extension添加@ Ask AI的功能？ (as v0.4.0?)
+很容易能夠帶上 pueue的context來問問題
+如果複雜度不大可以直接加上？
+
+_**User (2026-07-26 21:06:13Z)**_
+
+[Image: source: /var/folders/dq/zbxks7r975j049mj8jk19wtw0000gp/T/clipboard-2026-07-27-050459-A82CF385.png]
+
+[Image: source: /var/folders/dq/zbxks7r975j049mj8jk19wtw0000gp/T/clipboard-2026-07-27-050517-4947FDCF.png]
+
+---
+
+_**Agent (claude-opus-5 2026-07-26 21:06:45Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm noticing a keyboard shortcut collision — ⌘⇧D is already claimed by Raycast's "Open Documentation" action in dev mode, but the Tasks app is also using it for "Toggle Detail," which apparently worked before. Let me investigate whether this is actually a Raycast default or something else. I should verify this with `ray lint` since it catches reserved shortcuts like ⌘K and ⌘P — and it didn't flag ⌘⇧D, meaning it's not in Raycast's reserved list, just a collision in dev mode. Let me look at what's actually available: ⌘⇧I, ⌘Y, or ⌘⇧M might work better to avoid any conflict even during development.
+
+Now I'm hitting a different issue — the menu bar "Show Log…" feature breaks when a failed task's log is opened but the Tasks view's remembered group filter excludes that task, since the state is fetched with that group filter applied and the task ID ends up undefined.
+
+The fix is to reset the group filter to ALL_GROUPS when a specific log task ID is in the launch context, following the principle that the caller's explicit request should take precedence over remembered filters.
+
+On the menu bar title semantics — the group row display switched from showing running/parallel counts to finished/total counts, but the menu bar title itself (the number next to the icon) stays the same since it's pulling from `titleCounts`.
+
+Looking at their screenshot confirms this: the groups show `1/1 · 1 failed`, `1/1`, `31/31 · 5 failed` — all finished tasks with the failed count displayed. The red ring for the failed group is correct.
+
+Now I need to investigate the AI extensions feasibility for v0.4.0 — there's a backlog note on this and I should check the current Raycast AI extension API to see if adding `tools[]` support is viable.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:06:45Z)**_
+
+Four things. Let me check the two concrete ones first.
+
+_**Agent (claude-opus-5 2026-07-26 21:06:46Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read Keyboard.Shortcut.Common values
+
+`grep -n "Common: {" -A 60 node_modules/@raycast/api/types/index.d.ts | grep -E "readonly|modifiers|key:" | head -60`
+
+```text
+(Bash completed with no output)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:06:46Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read the AI tools backlog note
+
+`cat backlog/ai-tools.md`
+
+```text
+# AI tools
+
+**Status:** `P?` · **Effort:** `[M]` · not started
+
+## What
+
+A `tools[]` array in the manifest turns the extension into an AI Extension.
+Tools don't appear in root search; Raycast AI calls them, using each tool's
+`description` to decide when.
+
+Natural candidates, all of which map onto existing transport calls:
+
+| Tool | Maps to |
+| --- | --- |
+| what's running | `status()` filtered to running |
+| queue this | `mutate({op: "add", …})` |
+| why did task N fail | `status()` + `readLogText(N)` |
+| kill everything in group X | `mutate({op: "kill", group: X})` |
+
+The transport already returns structured data, so a tool is a thin wrapper — the
+work is prompt-shaped, not code-shaped.
+
+## Why it isn't done
+
+**AI Extensions require Raycast Pro.** From
+[developers.raycast.com/ai/getting-started](https://developers.raycast.com/ai/getting-started):
+
+> "To use AI APIs or AI Extensions, you need to subscribe to Raycast Pro."
+
+So this can only ever be an additive layer for Pro subscribers, never the
+primary way to use the extension. Everything it would offer already exists as a
+command.
+
+## Caution if it is built
+
+Mutating tools are the risk. An AI that decides "kill everything in the default
+group" from an ambiguous sentence is worse than no tool, and there is no
+confirmation surface in an AI tool call comparable to `confirmAlert`. If this
+ships, the first version should be **read-only** — status, logs, why-did-this-
+fail — with `add` at most, and nothing destructive.
+
+## What would have to be true
+
+A Pro subscription to test against, and a decision that read-only tools are
+worth the manifest surface.
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:06:53Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Find Keyboard.Shortcut.Common definition
+
+```bash
+python3 - <<'PY'
+import re
+s=open('node_modules/@raycast/api/types/index.d.ts').read()
+i=s.find('namespace Keyboard')
+seg=s[i:i+14000]
+j=seg.find('const Common')
+print(seg[j:j+3000] if j>0 else "no Common")
+PY
+```
+
+```text
+const Common: {
+            Copy: Shortcut;
+            CopyDeeplink: Shortcut;
+            CopyName: Shortcut;
+            CopyPath: Shortcut;
+            Save: Shortcut;
+            Duplicate: Shortcut;
+            Edit: Shortcut;
+            MoveDown: Shortcut;
+            MoveUp: Shortcut;
+            New: Shortcut;
+            Open: Shortcut;
+            OpenWith: Shortcut;
+            Pin: Shortcut;
+            Refresh: Shortcut;
+            Remove: Shortcut;
+            RemoveAll: Shortcut;
+            ToggleQuickLook: Shortcut;
+        };
+
+    }
+    /**
+     * Modifier of a {@link Keyboard.Shortcut}
+     */
+    export type KeyModifier = "cmd" | "ctrl" | "opt" | "shift" | "alt" | "windows";
+    /**
+     * KeyEquivalent of a {@link Keyboard.Shortcut}
+     */
+    export type KeyEquivalent = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z" | "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "." | "," | ";" | "=" | "+" | "-" | "[" | "]" | "{" | "}" | "«" | "»" | "(" | ")" | "/" | "\\" | "'" | "`" | "§" | "^" | "@" | "$" | "return" | "delete" | "deleteForward" | "tab" | "arrowUp" | "arrowDown" | "arrowLeft" | "arrowRight" | "pageUp" | "pageDown" | "home" | "end" | "space" | "escape" | "enter" | "backspace";
+}
+
+/**
+ * @deprecated Use {@link Keyboard.Shortcut} instead
+ */
+export declare type KeyboardShortcut = Keyboard.Shortcut;
+
+/**
+ * @deprecated Use {@link Keyboard.KeyEquivalent} instead
+ */
+export declare type KeyEquivalent = Keyboard.KeyEquivalent;
+
+/**
+ * @deprecated Use {@link Keyboard.KeyModifier} instead
+ */
+export declare type KeyModifier = Keyboard.KeyModifier;
+
+/**
+ * See {@link Detail.Metadata.Label}
+ */
+declare const Label: FunctionComponent<LabelProps>;
+
+declare interface LabelProps {
+    /**
+     * The title of the item.
+     */
+    title: string;
+    /**
+     * An icon to illustrate the value of the item.
+     */
+    icon?: Image.ImageLike | undefined | null;
+    /**
+     * The text value of the item.
+     * Specifying `color` will display the text in the provided color. Defaults to {@link Color.PrimaryText}.
+     */
+    text?: string | {
+        value: string;
+        color?: Color | null;
+    };
+}
+
+/**
+ * Launches another command. If the command does not exist, or if it's not enabled, an error will be thrown.
+ * If the command is part of another extension, the user will be presented with a permission alert.
+ * Use this method if your command needs to open another command based on user interaction,
+ * or when an immediate background refresh should be triggered, for example when a command needs to update an associated menu-bar command.
+ *
+ * @param options - Options to launch a command within the same extension or in another extension.
+ * @returns A Promise that resolves when the command has been launched. (Note that this does not indicate that the launched command has finished executing.)
+ *
+ * @throws {@link Error}
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:07:03Z)**_
+
+<think><details><summary>Thought Process</summary>
+The `Common` shortcuts are only defined as types in the type definitions, so I need to find their actual runtime values in the bundled JavaScript. Looking at Raycast's conventions and what I know from the ecosystem, I can map out the keyboard shortcuts: Duplicate uses ⌘⇧D, Copy is ⌘⇧C, Save is ⌘S, Edit is ⌘E, New is ⌘N, Open is ⌘O, and Pin is ⌘⇧P.
+
+I'm also seeing Refresh (⌘R), Remove (⌃X), RemoveAll (⌃⇧X), and ToggleQuickLook (⌘Y). If Duplicate is indeed ⌘⇧D, then the repo might be using `Common.Duplicate` for the "Resume Group"/"Start Now" action. Let me check the actual runtime values in the API's JavaScript bundle to confirm.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:07:04Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Locate the api runtime
+
+`ls node_modules/@raycast/api/; echo "---"; grep -rlo "ToggleQuickLook" node_modules/@raycast/api/ 2>/dev/null | head`
+
+```text
+bin
+dist
+node_modules
+types
+oclif.manifest.json
+package.json
+README.md
+---
+node_modules/@raycast/api/types/index.d.ts
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:07:35Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="WebFetch"><details>
+<summary>Tool use: **WebFetch**</summary>
+ `https://developers.raycast.com/api-reference/keyboard`
+
+```text
+Copy — macOS: "⌘ + ⇧ + C" | Windows: "ctrl + shift + C"
+CopyDeeplink — macOS: "⌘ + ⇧ + C" | Windows: "ctrl + shift + C"
+CopyName — macOS: "⌘ + ⇧ + ." | Windows: "ctrl + alt + C"
+CopyPath — macOS: "⌘ + ⇧ + ," | Windows: "alt + shift + C"
+Save — macOS: "⌘ + S" | Windows: "ctrl + S"
+Duplicate — macOS: "⌘ + D" | Windows: "ctrl + shift + S"
+Edit — macOS: "⌘ + E" | Windows: "ctrl + E"
+MoveDown — macOS: "⌘ + ⇧ + ↓" | Windows: "ctrl + shift + ↓"
+MoveUp — macOS: "⌘ + ⇧ + ↑" | Windows: "ctrl + shift + ↑"
+New — macOS: "⌘ + N" | Windows: "ctrl + N"
+Open — macOS: "⌘ + O" | Windows: "ctrl + O"
+OpenWith — macOS: "⌘ + ⇧ + O" | Windows: "ctrl + shift + O"
+Pin — macOS: "⌘ + ⇧ + P" | Windows: "ctrl + ."
+Refresh — macOS: "⌘ + R" | Windows: "ctrl + R"
+Remove — macOS: "⌃ + X" | Windows: "ctrl + D"
+RemoveAll — macOS: "⌃ + ⇧ + X" | Windows: "ctrl + shift + D"
+ToggleQuickLook — macOS: "⌘ + Y" | Windows: "ctrl + Y"
+
+This page does not list any Raycast-reserved shortcuts that extensions must not use.
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:08:20Z)**_
+
+<tool-use data-tool-type="search" data-tool-name="WebSearch"><details>
+<summary>Tool use: **WebSearch**</summary>
+ `Raycast extension development mode Debug section "Open Documentation" shortcut cmd shift D conflict`
+
+```text
+Web search results for query: "Raycast extension development mode Debug section "Open Documentation" shortcut cmd shift D conflict"
+
+Links: [{"title":"Debug an Extension - Raycast API","url":"https://developers.raycast.com/basics/debug-an-extension"},{"title":"Keyboard Shortcuts | Raycast Manual","url":"https://manual.raycast.com/keyboard-shortcuts"},{"title":"GitHub - tonka3000/vscode-raycast: Raycast tools for VSCode","url":"https://github.com/tonka3000/vscode-raycast"},{"title":"VS Code Workflow Cheat Sheet: Shortcuts, Terminal, Git, Python, Debugging","url":"https://tms-outsource.com/cs/vscode-workflow-cheat-sheet/"},{"title":"Documentation - iTerm2 - macOS Terminal Replacement","url":"https://iterm2.com/documentation-one-page.html"},{"title":"Raycast Store: Obsidian Link Opener","url":"https://www.raycast.com/osteele/obsidian-link-opener"}]
+
+I ran searches for that exact query and pulled the most relevant official docs, repo pages and examples. Summary of the useful results and what they show:
+
+- Raycast docs — "Debug an Extension" (React DevTools) — Raycast’s debug docs show the React Developer Tools shortcut as ⌘ ⌥ D (Cmd + Option + D), not Cmd + Shift + D. ([developers.raycast.com](https://developers.raycast.com/basics/debug-an-extension))  
+- Raycast keyboard-shortcuts & hotkeys docs — how to view and change Raycast shortcuts / hotkeys (so you can reassign conflicting keys). ([manual.raycast.com](https://manual.raycast.com/keyboard-shortcuts))  
+- Raycast-related tooling (vscode-raycast) and some store extensions expose actions such as "Open Documentation" from within VS Code / extensions; those repos/docs mention an "Open Documentation" feature but don’t document a global Cmd+Shift+D mapping for Raycast itself. (vscode-raycast repo / marketplace). ([github.com](https://github.com/tonka3000/vscode-raycast))  
+- Examples of other apps that commonly use Cmd+Shift+D (so a conflict could be external): VS Code’s Run & Debug view is opened by Cmd+Shift+D by default on macOS (so that shortcut will conflict if you expect it to be handled by VS Code). ([tms-outsource.com](https://tms-outsource.com/cs/vscode-workflow-cheat-sheet/))  
+- iTerm2 also uses Cmd-Shift-D for horizontal/vertical split commands (example of another common macOS app using that combo). ([iterm2.com](https://iterm2.com/documentation-one-page.html))  
+- Example Raycast Store extension (Obsidian Link Opener) documents keyboard shortcuts for opening documentation/docs URLs (uses ⌘D in that extension’s UI). That shows extensions can define their own doc-opening keys. ([raycast.com](https://www.raycast.com/osteele/obsidian-link-opener))
+
+Quick interpretation and next steps
+- Raycast’s official debug docs identify the React DevTools key as Cmd+Option+D, so if you’re seeing Cmd+Shift+D referenced in Raycast’s Debug UI it may be coming from a specific extension, a VS Code integration, or an external-app conflict (VS Code, iTerm2, etc.). ([developers.raycast.com](https://developers.raycast.com/basics/debug-an-extension))  
+- To resolve: check Raycast Settings → Shortcuts / Hotkeys to see or reassign the "Open Documentation" / debug-related hotkey (Raycast lets you change hotkeys). If the conflict is with VS Code, change the keybinding in VS Code (Cmd+Shift+D is the VS Code default for Run & Debug) or remap in Raycast. ([manual.raycast.com](https://manual.raycast.com/keyboard-shortcuts))
+
+Would you like me to:
+- open any of the pages above and extract the exact lines for you, or  
+- search for issues/threads where other users reported this exact Cmd+Shift+D conflict (e.g., Raycast community, GitHub issues, Stack Overflow)?
+
+
+REMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:08:54Z)**_
+
+<think><details><summary>Thought Process</summary>
+The screenshot confirms that Raycast's Debug section has "Open Documentation ⇧⌘D" as a built-in action, which is shadowing our keybinding. I also need to correct my understanding: `Common.Duplicate` is actually ⌘D (not ⌘⇧D), so there's no conflict with the existing "Resume/Start Now" binding. And `Common.Remove` uses ⌃X, not ⌘.
+
+Looking at the README, it lists several incorrect shortcuts that need fixing: `⌘⌫` for Remove should be `⌃X`, `⌘⇧S` for Resume/Start Now should be `⌘D`, and the `⌘⇧D` toggle detail binding directly conflicts with Raycast's dev-mode action. I need to find an alternative keybinding for toggle detail that avoids collisions with Raycast's reserved shortcuts like ⌘K, ⌘⏎, and ⌘[.
+
+Looking at common patterns in other extensions, many use ⌘I for "info" or detail panes, which isn't claimed by Raycast's Common shortcuts or debug bindings. Since the debug shortcuts only appear in development mode and end users never see them, `⌘I` seems like a solid choice—it's mnemonic, uses a single modifier, and stays unbound. Let me verify ⌘I isn't already reserved in Raycast by running the linter, which should catch any shortcut conflicts. On the second issue, I'm looking at how the cached group state works in the tasks component — the initial value from launch context gets overridden once a group preference is cached, so if you launch with a specific task ID but have a remembered group filter, that cached group takes precedence.
+
+The fix is to detect when we're launching with a task ID but no explicit group, then reset the filter to show all groups. There's a timing concern since setting the group is async, but the existing guard that checks whether the target task exists should handle this naturally — once the group resets and the task list refreshes, the target will be found and the push will happen.
+
+The `pushedLog.current` guard prevents double-pushing, so just adding the effect should be sufficient. Clearing the filter is the right call here since the user is being sent to a specific task that the filter would otherwise hide. It's a small side effect, but it's honest — they've been navigated to a task, so showing it takes priority over preserving the filter state.
+
+Now I need to move on to the other bugs and research the AI tools API for the v0.4.0 question, then check the current shortcut bindings.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:08:54Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+List every bound shortcut
+
+`grep -rn "shortcut=" src/ | sed 's/^\([^:]*:[0-9]*\).*shortcut={/\1  /' | sed 's/}$//'`
+
+```text
+src/add-task.tsx:215  { modifiers: ["cmd", "shift"], key: "a" }
+src/groups.tsx:265  { modifiers: ["cmd", "shift"], key: "p" }
+src/groups.tsx:277  Keyboard.Shortcut.Common.Duplicate
+src/groups.tsx:307  { modifiers: ["cmd", "shift"], key: "l" }
+src/groups.tsx:358  { modifiers: ["cmd", "shift"], key: "r" }
+src/groups.tsx:380  { modifiers: ["cmd", "opt"], key: "r" }
+src/groups.tsx:450  Keyboard.Shortcut.Common.New
+src/groups.tsx:459  { modifiers: ["cmd", "shift"], key: "k" }
+src/groups.tsx:483  Keyboard.Shortcut.Common.Remove
+src/groups.tsx:531  { modifiers: ["cmd", "shift"], key: "d" }
+src/groups.tsx:537  Keyboard.Shortcut.Common.Refresh
+src/tasks.tsx:273  Keyboard.Shortcut.Common.Refresh
+src/tasks.tsx:387  { modifiers: ["cmd"], key: "l" }
+src/tasks.tsx:403  Keyboard.Shortcut.Common.Copy
+src/tasks.tsx:408  Keyboard.Shortcut.Common.Open
+src/tasks.tsx:417  { modifiers: ["cmd", "shift"], key: "r" }
+src/tasks.tsx:432  { modifiers: ["cmd", "opt"], key: "r" }
+src/tasks.tsx:455  { modifiers: ["cmd", "shift"], key: "p" }
+src/tasks.tsx:468  Keyboard.Shortcut.Common.Duplicate
+src/tasks.tsx:481  { modifiers: ["cmd", "shift"], key: "t" }
+src/tasks.tsx:494  { modifiers: ["cmd", "shift"], key: "e" }
+src/tasks.tsx:508  { modifiers: ["cmd", "shift"], key: "k" }
+src/tasks.tsx:534  Keyboard.Shortcut.Common.Remove
+src/tasks.tsx:559  { modifiers: ["cmd", "shift"], key: "d" }
+src/tasks.tsx:586  Keyboard.Shortcut.Common.Refresh
+src/lib/connection-ui.tsx:79  { modifiers: ["cmd", "shift"], key: "n" }
+src/lib/error-states.tsx:373  Keyboard.Shortcut.Common.Refresh
+src/lib/task-log.tsx:65  { modifiers: ["cmd", "shift"], key: "f" }
+src/lib/task-log.tsx:146  { modifiers: ["cmd"], key: "f" }
+src/lib/task-log.tsx:153  Keyboard.Shortcut.Common.Refresh
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:09:08Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to correct my README — `⌘⇧S` isn't actually bound to Resume/Start Now. The real binding is `⌘D` through `Common.Duplicate`. I'm also noticing that `Common.Refresh` maps to `⌘R`, which collides with Raycast's Debug "Reload" command, though Raycast likely handles this since Refresh is their own Common action.
+
+Since `Common.Refresh` is Raycast's documented constant, I'll leave it as-is rather than fight their recommendation. For the `⌘⇧D` binding, I'm going to switch it to `⌘I` instead, then run `ray lint` to verify everything checks out before making these changes.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:09:08Z)**_
+
+Two real bugs. Fixing the shortcut collision first:
+
+_**Agent (claude-opus-5 2026-07-26 21:09:19Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Move the detail toggle off the reserved shortcut
+
+```bash
+python3 - <<'PY'
+for p in ('src/tasks.tsx','src/groups.tsx'):
+    s=open(p).read()
+    old='''              shortcut={{ modifiers: ["cmd", "shift"], key: "d" }}'''
+    new='''              // NOT ⌘⇧D: Raycast binds that to "Open Documentation" in the
+              // Debug section it injects while an extension is in development,
+              // and its own action wins. ⌘I is free and reads as "info".
+              shortcut={{ modifiers: ["cmd"], key: "i" }}'''
+    assert s.count(old)==1,(p,s.count(old))
+    s=s.replace(old,new)
+    open(p,'w').write(s)
+    print('patched',p)
+PY
+just lint 2>&1 | tail -8
+```
+
+```text
+patched src/tasks.tsx
+patched src/groups.tsx
+> lint
+> ray lint
+
+ready  - validate package.json file
+ready  - validate extension icons
+ready  - validate extension metadata
+ready  - run ESLint
+ready  - run Prettier 3.9.6
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:09:28Z)**_
+
+Now the menu-bar log jump bug:
+
+_**Agent (claude-opus-5 2026-07-26 21:09:29Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/src/tasks.tsx has been updated successfully. (note: the file had been modified on disk since you last read it — the edit applied cleanly, but the file contains other changes not in your context. Read it before edits that depend on surrounding content.)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:10:23Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Clear the group filter when sent to a task
+
+```bash
+python3 - <<'PY'
+p='src/tasks.tsx'
+s=open(p).read()
+
+old = '''  // The menu bar can hand us a task to open the log for. Wait for the state to
+  // arrive before pushing, and push only once — a re-render on every poll must
+  // not stack log views on the navigation stack.
+  const pushedLog = useRef(false);
+  const logTaskId = props.launchContext?.logTaskId;
+'''
+new = '''  // The menu bar can hand us a task to open the log for. Wait for the state to
+  // arrive before pushing, and push only once — a re-render on every poll must
+  // not stack log views on the navigation stack.
+  const pushedLog = useRef(false);
+  const logTaskId = props.launchContext?.logTaskId;
+
+  // Being sent to a specific task outranks the remembered group filter.
+  //
+  // The filter is applied server-side as `status --json --group X`, so a task
+  // outside it is not merely hidden — it is absent from the payload, the lookup
+  // below finds nothing, and the log view silently never opens. Observed from
+  // the menu bar with the filter left on another group; it worked again the
+  // moment the filter was back on All Groups, which is exactly the symptom a
+  // server-side filter produces.
+  useEffect(() => {
+    if (logTaskId !== undefined && contextGroup === undefined) {
+      setGroup(ALL_GROUPS);
+    }
+  }, [logTaskId, contextGroup]);
+'''
+assert s.count(old)==1
+s=s.replace(old,new)
+
+old2 = '''    if (contextConnection && conn.connection.name !== contextConnection) return;
+
+    const target = snap?.state.tasks[String(logTaskId)];
+    if (!target) return;'''
+new2 = '''    if (contextConnection && conn.connection.name !== contextConnection) return;
+    // And for the group filter to clear, for the same reason: until it does,
+    // the read is still scoped and the task genuinely isn't in the payload.
+    if (contextGroup === undefined && group !== ALL_GROUPS) return;
+
+    const target = snap?.state.tasks[String(logTaskId)];
+    if (!target) return;'''
+assert s.count(old2)==1
+s=s.replace(old2,new2)
+
+old3 = '''  }, [logTaskId, contextConnection, snap, conn.connection, push]);'''
+new3 = '''  }, [logTaskId, contextConnection, contextGroup, group, snap, conn.connection, push]);'''
+assert s.count(old3)==1
+s=s.replace(old3,new3)
+open(p,'w').write(s)
+print('ok')
+PY
+just fix >/dev/null 2>&1; just check 2>&1 | grep -E "FAIL|error|✖|assertions passed|built extension" | tail -4
+```
+
+```text
+ok
+log output — pueue hides its own errors in the output field
+  ok   a pueue error in the output field is recognised
+all assertions passed
+ready  - built extension successfully
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:10:40Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Correct the documented shortcuts
+
+```bash
+python3 - <<'PY'
+p='README.md'
+s=open(p).read()
+old = '''| Shortcut | Action |
+| --- | --- |
+| `⏎` | Show log |
+| `⌘L` | Follow output (running tasks) |
+| `⌘⇧R` | Restart as a new task |
+| `⌘⌥R` | Restart in place — same id, **overwrites the log** |
+| `⌘⇧P` | Pause · `⌘⇧S` Resume / Start now |
+| `⌘⇧T` | Stash · `⌘⇧E` Enqueue |
+| `⌘⇧K` | Kill · `⌘⌫` Remove |
+| `⌘⇧D` | Toggle the detail pane · `⌘R` Reload |'''
+new = '''| Shortcut | Action |
+| --- | --- |
+| `⏎` | Show log |
+| `⌘L` | Follow output (running tasks) |
+| `⌘⇧R` | Restart as a new task |
+| `⌘⌥R` | Restart in place — same id, **overwrites the log** |
+| `⌘⇧P` | Pause · `⌘D` Resume / Start now |
+| `⌘⇧T` | Stash · `⌘⇧E` Enqueue |
+| `⌘⇧K` | Kill · `⌃X` Remove |
+| `⌘I` | Toggle the detail pane · `⌘R` Reload |'''
+assert s.count(old)==1
+s=s.replace(old,new)
+
+old2 = '''| `⌘⇧P` | Pause the group · `⌘⇧S` Resume it |
+| `⌘⇧L` | Set parallelism (presets, or `Custom…` for any number) |
+| `⌘⇧K` | Kill running tasks — **this also pauses the group** |
+| `⌘⌫` | Remove the group — its tasks **move to `default`**, they aren't deleted |
+| `⌘⇧D` | Toggle the detail pane · `⌘R` Reload |'''
+new2 = '''| `⌘⇧P` | Pause the group · `⌘D` Resume it |
+| `⌘⇧L` | Set parallelism (presets, or `Custom…` for any number) |
+| `⌘⇧K` | Kill running tasks — **this also pauses the group** |
+| `⌃X` | Remove the group — its tasks **move to `default`**, they aren't deleted |
+| `⌘I` | Toggle the detail pane · `⌘R` Reload |'''
+assert s.count(old2)==1
+s=s.replace(old2,new2)
+open(p,'w').write(s)
+print('ok')
+PY
+grep -rn "⌘⇧D" docs/ README.md package.json 2>/dev/null
+```
+
+```text
+ok
+docs/getting-started.zh-TW.md:163:**詳細資訊面板**（`⌘⇧D` 切換）顯示指令、工作目錄、群組、標籤、時間戳記、退出碼，
+docs/getting-started.zh-TW.md:186:| `⌘⇧D` | 切換詳細資訊面板 · `⌘R` Reload |
+README.md:87:| **Detail Pane** (Groups) | on | The per-group breakdown, average duration, ETA, elapsed, and failed ids beside the list. `⌘⇧D` toggles it. |
+docs/getting-started.md:169:**The detail pane** (`⌘⇧D` toggles it) shows the command, working directory,
+docs/getting-started.md:195:| `⌘⇧D` | Toggle the detail pane · `⌘R` Reload |
+package.json:35:          "description": "Show task metadata and a log preview beside the list. Toggle at any time with ⌘⇧D.",
+package.json:94:          "description": "Show each group's full breakdown — progress, average duration, estimated remaining, elapsed, and the ids that failed — beside the list. Toggle at any time with ⌘⇧D.",
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:10:49Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Update the shortcut in docs and manifest
+
+```bash
+python3 - <<'PY'
+import re
+edits = {
+ 'README.md': [('`⌘⇧D` toggles it.','`⌘I` toggles it.')],
+ 'docs/getting-started.md': [('(`⌘⇧D` toggles it)','(`⌘I` toggles it)'),
+                             ('| `⌘⇧D` | Toggle the detail pane','| `⌘I` | Toggle the detail pane')],
+ 'docs/getting-started.zh-TW.md': [('（`⌘⇧D` 切換）','（`⌘I` 切換）'),
+                                   ('| `⌘⇧D` | 切換詳細資訊面板','| `⌘I` | 切換詳細資訊面板')],
+ 'package.json': [('Toggle at any time with ⌘⇧D.','Toggle at any time with ⌘I.')],
+}
+for p, pairs in edits.items():
+    s=open(p).read()
+    for a,b in pairs:
+        n=s.count(a)
+        assert n>=1,(p,a,n)
+        s=s.replace(a,b)
+    open(p,'w').write(s)
+    print('patched',p)
+PY
+grep -rn "⌘⇧S\|⌘⌫" docs/*.md README.md | head
+```
+
+```text
+patched README.md
+patched docs/getting-started.md
+patched docs/getting-started.zh-TW.md
+patched package.json
+docs/getting-started.md:192:| `⌘⇧P` | Pause · `⌘⇧S` Resume / Start now |
+docs/getting-started.md:194:| `⌘⇧K` | Kill · `⌘⌫` Remove |
+docs/getting-started.zh-TW.md:183:| `⌘⇧P` | Pause · `⌘⇧S` Resume / Start now |
+docs/getting-started.zh-TW.md:185:| `⌘⇧K` | Kill · `⌘⌫` Remove |
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:11:04Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Fix the docs and commit
+
+```bash
+python3 - <<'PY'
+for p in ('docs/getting-started.md','docs/getting-started.zh-TW.md'):
+    s=open(p).read()
+    for a,b in [('`⌘⇧S` Resume / Start now','`⌘D` Resume / Start now'),
+                ('`⌘⌫` Remove','`⌃X` Remove')]:
+        assert s.count(a)==1,(p,a)
+        s=s.replace(a,b)
+    open(p,'w').write(s)
+    print('patched',p)
+PY
+just fix >/dev/null 2>&1; just check 2>&1 | grep -E "FAIL|error|✖|assertions passed|built extension" | tail -4
+git add -A && git commit -q -F - <<'EOF'
+Move the detail toggle off ⌘⇧D, and stop a group filter hiding a log jump
+
+Two bugs, both found by using it.
+
+**⌘⇧D is Raycast's.** While an extension is in development Raycast injects a
+Debug section into every action panel, and it binds ⇧⌘D to "Open Documentation".
+Its own action wins, so the detail toggle simply did nothing. Moved to ⌘I —
+free, one modifier, and it reads as "info".
+
+**"Show Log…" from the menu bar failed whenever the Tasks view had a group
+filter left on.** The filter is applied server-side as `status --json --group X`,
+so a task outside it is not hidden, it is absent from the payload — the lookup
+found nothing and the log view silently never opened. That it worked again on
+All Groups is exactly the symptom a server-side filter produces. Being sent to a
+specific task now outranks the remembered filter and clears it, and the push
+waits for the clear to land, the same way it already waits for the connection.
+
+While checking the bindings against developers.raycast.com/api-reference/keyboard,
+three documented shortcuts turned out to be wrong: `Common.Duplicate` is ⌘D not
+⌘⇧S, and `Common.Remove` is ⌃X not ⌘⌫. Corrected in the README and both
+getting-started pages.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+EOF
+git log --oneline -1
+```
+</details></tool-use>

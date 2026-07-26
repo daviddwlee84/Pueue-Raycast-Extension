@@ -160,7 +160,7 @@ ls /definitely-not-a-directory
 
 打開 **Tasks**。它會落在 *Failed* 底下，附上退出碼 (exit code)。
 
-**詳細資訊面板**（`⌘⇧D` 切換）顯示指令、工作目錄、群組、標籤、時間戳記、退出碼，
+**詳細資訊面板**（`⌘I` 切換）顯示指令、工作目錄、群組、標籤、時間戳記、退出碼，
 以及最後 20 行 log 的預覽——足以在不離開清單的情況下辨識出大多數的失敗原因。
 預覽行數可用 Tasks 指令上的 *Log Preview Lines* 偏好設定調高或調低；每切換一次選取，
 就多付一次 `pueue log` 呼叫的成本。
@@ -180,10 +180,10 @@ Tasks 其餘的快捷鍵：
 | `⌘L` | Follow 輸出（執行中的任務） |
 | `⌘⇧R` | Restart 成一個新任務 |
 | `⌘⌥R` | 原地 Restart——同一個 id，**會覆寫 log** |
-| `⌘⇧P` | Pause · `⌘⇧S` Resume / Start now |
+| `⌘⇧P` | Pause · `⌘D` Resume / Start now |
 | `⌘⇧T` | Stash · `⌘⇧E` Enqueue |
-| `⌘⇧K` | Kill · `⌘⌫` Remove |
-| `⌘⇧D` | 切換詳細資訊面板 · `⌘R` Reload |
+| `⌘⇧K` | Kill · `⌃X` Remove |
+| `⌘I` | 切換詳細資訊面板 · `⌘R` Reload |
 
 失敗時的常見循環是：讀 log、修指令、`⌘⇧R` 以新任務重跑。只有在你想保留原本的 id 時
 才用 `⌘⌥R`——它會覆寫既有的 log。
