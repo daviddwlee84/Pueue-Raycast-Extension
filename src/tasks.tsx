@@ -35,6 +35,7 @@ import {
   type SectionKey,
 } from "./lib/format";
 import { act, type ActOptions } from "./lib/actions";
+import { canFollow, TaskFollowView, TaskLogView } from "./lib/task-log";
 import { ALL_GROUPS, GroupDropdown } from "./lib/group-dropdown";
 import {
   describeError,
@@ -273,6 +274,21 @@ function TaskItem(props: {
       actions={
         <ActionPanel>
           <ActionPanel.Section>
+            {hasEverRun(task) ? (
+              <Action.Push
+                title="Show Log"
+                icon={Icon.Text}
+                target={<TaskLogView task={task} />}
+              />
+            ) : null}
+            {canFollow(task) ? (
+              <Action.Push
+                title="Follow Output"
+                icon={Icon.Livestream}
+                shortcut={{ modifiers: ["cmd"], key: "l" }}
+                target={<TaskFollowView task={task} />}
+              />
+            ) : null}
             <Action.CopyToClipboard
               title="Copy Command"
               content={task.command}

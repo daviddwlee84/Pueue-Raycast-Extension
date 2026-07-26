@@ -51,7 +51,10 @@ import {
   type PueueErrorKind,
 } from "./pueue/errors";
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { readLogTail } from "./pueue/logfile";
 
 /**
  * The live `--help` check needs a real binary. binary.ts can't be imported here
@@ -654,9 +657,53 @@ check(
   true,
 );
 
-console.log(
-  failures === 0
-    ? "\nall assertions passed\n"
-    : `\n${failures} assertion(s) FAILED\n`,
-);
-process.exitCode = failures === 0 ? 0 : 1;
+async function checkLogTail() {
+  console.log("\nlog tail (real files)");
+  const dir = mkdtempSync(join(tmpdir(), "pueue-check-"));
+  const small = join(dir, "small.log");
+  const big = join(dir, "big.log");
+
+  writeFileSync(small, "alpha\nbeta\ngamma\n");
+  const whole = await readLogTail(small, 1024);
+  check(
+    "a file under the window is returned whole",
+    whole?.text,
+    "alpha\nbeta\ngamma\n",
+  );
+  check("and is not marked truncated", whole?.truncated, false);
+
+  // 2000 numbered lines, then read a window that lands mid-line.
+  writeFileSync(
+    big,
+    Array.from({ length: 2000 }, (_, i) => `line ${i}`).join("\n") + "\n",
+  );
+  const tail = await readLogTail(big, 200);
+  check("a large file is marked truncated", tail?.truncated, true);
+  check(
+    "the tail starts on a line boundary, never mid-line",
+    /^line \d+\n/.test(tail?.text ?? ""),
+    true,
+  );
+  check(
+    "the tail keeps the end of the file",
+    (tail?.text ?? "").endsWith("line 1999\n"),
+    true,
+  );
+  check("the window is respected", (tail?.text ?? "").length <= 200, true);
+  check(
+    "a missing file is undefined rather than an exception",
+    await readLogTail(join(dir, "nope.log")),
+    undefined,
+  );
+
+  rmSync(dir, { recursive: true, force: true });
+}
+
+checkLogTail().then(() => {
+  console.log(
+    failures === 0
+      ? "\nall assertions passed\n"
+      : `\n${failures} assertion(s) FAILED\n`,
+  );
+  process.exitCode = failures === 0 ? 0 : 1;
+});

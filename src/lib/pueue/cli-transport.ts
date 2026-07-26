@@ -18,13 +18,12 @@
  */
 
 import { execFile, spawn } from "node:child_process";
-import { readFile, stat } from "node:fs/promises";
-import { open } from "node:fs/promises";
 import { promisify } from "node:util";
 
 import { argvFor } from "./argv";
 import { baseEnv, configPath, resolvePueue, taskLogPath } from "./binary";
 import { fromExecError, PueueError } from "./errors";
+import { readLogTail, type LogTail } from "./logfile";
 import type {
   FollowHandlers,
   LogOptions,
@@ -245,39 +244,16 @@ export async function readTaskEnvs(
 }
 
 /**
- * Read a task's log straight off disk, tailing the last `maxBytes`.
+ * Read a task's log straight off disk.
  *
- * This is what `pueue log` itself does when `client.read_local_logs` is true
- * (the default): stdout and stderr are interleaved into one uncompressed plain
- * text file. Going direct skips the JSON string-escape round trip and lets us
- * tail rather than load a whole file that pueue's own help warns can exhaust
- * RAM. Returns undefined when the file isn't there — a remote daemon,
- * `read_local_logs: false`, or a `pueue_directory` we couldn't resolve — and
- * callers fall back to `readLogs`.
+ * Going direct skips the JSON string-escape round trip and lets us tail rather
+ * than load a whole file. The tail logic itself lives in `logfile.ts` so it can
+ * be asserted without Raycast.
  */
 export async function readLogFromDisk(
   id: number,
   maxBytes = 512 * 1024,
-): Promise<{ text: string; truncated: boolean; path: string } | undefined> {
+): Promise<LogTail | undefined> {
   const path = taskLogPath(id);
-  if (!path) return undefined;
-
-  try {
-    const { size } = await stat(path);
-    if (size <= maxBytes) {
-      return { text: await readFile(path, "utf8"), truncated: false, path };
-    }
-    const handle = await open(path, "r");
-    try {
-      const buf = Buffer.alloc(maxBytes);
-      await handle.read(buf, 0, maxBytes, size - maxBytes);
-      // The tail almost certainly starts mid-line; drop the partial one.
-      const text = buf.toString("utf8").replace(/^[^\n]*\n/, "");
-      return { text, truncated: true, path };
-    } finally {
-      await handle.close();
-    }
-  } catch {
-    return undefined;
-  }
+  return path ? readLogTail(path, maxBytes) : undefined;
 }
