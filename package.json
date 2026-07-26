@@ -1,0 +1,181 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "pueue",
+  "title": "Pueue",
+  "description": "Manage the Pueue task queue daemon from Raycast: browse and act on tasks, follow live output, control groups and parallelism, and watch the queue from the menu bar.",
+  "icon": "extension-icon.png",
+  "author": "da-wei_lee",
+  "license": "MIT",
+  "categories": ["Developer Tools", "Productivity"],
+  "platforms": ["macOS"],
+  "commands": [
+    {
+      "name": "tasks",
+      "title": "Tasks",
+      "description": "Browse, filter, and act on Pueue tasks; view or follow their output.",
+      "mode": "view",
+      "arguments": [
+        {
+          "name": "query",
+          "type": "text",
+          "placeholder": "status=failed order_by id desc",
+          "required": false
+        }
+      ],
+      "preferences": [
+        {
+          "name": "showDetail",
+          "title": "Detail Pane",
+          "label": "Show the detail pane by default",
+          "description": "Show task metadata and a log preview beside the list. Toggle at any time with ⌘⇧D.",
+          "type": "checkbox",
+          "required": false,
+          "default": true
+        },
+        {
+          "name": "detailLogLines",
+          "title": "Log Preview Lines",
+          "description": "How many trailing log lines to show in the detail pane for the selected task. Higher values cost one extra `pueue log` call per selection change.",
+          "type": "textfield",
+          "required": false,
+          "default": "20"
+        }
+      ]
+    },
+    {
+      "name": "add-task",
+      "title": "Add Task",
+      "description": "Queue a shell command with a working directory, group, label, priority, dependencies, and delay.",
+      "mode": "view",
+      "arguments": [
+        {
+          "name": "command",
+          "type": "text",
+          "placeholder": "Command",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "quick-add",
+      "title": "Quick Add Task",
+      "description": "Queue a command straight from root search, using your last-used group and working directory.",
+      "mode": "no-view",
+      "arguments": [
+        {
+          "name": "command",
+          "type": "text",
+          "placeholder": "Command",
+          "required": true
+        },
+        {
+          "name": "label",
+          "type": "text",
+          "placeholder": "Label (optional)",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "groups",
+      "title": "Groups",
+      "description": "List Pueue groups, pause or resume them, change parallelism, and add or remove groups.",
+      "mode": "view"
+    },
+    {
+      "name": "queue-menu",
+      "title": "Queue Menu Bar",
+      "description": "Show running, queued, and failed task counts in the menu bar with one-click actions.",
+      "mode": "menu-bar",
+      "interval": "1m",
+      "preferences": [
+        {
+          "name": "titleCounts",
+          "title": "Menu Bar Title",
+          "description": "What number to show next to the icon. The title is hidden entirely when the chosen counts are all zero.",
+          "type": "dropdown",
+          "required": false,
+          "default": "running",
+          "data": [
+            { "title": "Running count", "value": "running" },
+            { "title": "Running / queued", "value": "running-queued" },
+            { "title": "Running + queued + paused", "value": "active" },
+            { "title": "Icon only", "value": "none" }
+          ]
+        },
+        {
+          "name": "maxItemsPerSection",
+          "title": "Items per Section",
+          "description": "How many tasks to list under Running / Queued / Failed before collapsing into an \"…and N more\" item. Keeps a large queue from rendering hundreds of menu items every minute.",
+          "type": "textfield",
+          "required": false,
+          "default": "7"
+        },
+        {
+          "name": "showGroups",
+          "title": "Groups Section",
+          "label": "Show a Groups section",
+          "description": "Adds one submenu per group with pause / resume and a parallelism picker.",
+          "type": "checkbox",
+          "required": false,
+          "default": true
+        },
+        {
+          "name": "menuQuery",
+          "title": "Menu Bar Query",
+          "description": "Optional Pueue query applied to the menu bar's status read, e.g. \"last 100\". Useful when you keep thousands of finished tasks around. Leave empty for all tasks.",
+          "type": "textfield",
+          "required": false,
+          "placeholder": "last 100"
+        }
+      ]
+    }
+  ],
+  "preferences": [
+    {
+      "name": "pueuePath",
+      "title": "Pueue Binary Path",
+      "description": "Absolute path to the `pueue` client. Empty = auto-probe /opt/homebrew/bin, /usr/local/bin, ~/.cargo/bin, ~/.local/bin. `pueued` is looked for beside it. Raycast runs under launchd with no shell rc, so a bare `pueue` is never on PATH.",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "/usr/local/bin/pueue"
+    },
+    {
+      "name": "configPath",
+      "title": "Pueue Config Path",
+      "description": "Absolute path to pueue.yml. Empty = let pueue use its default (~/Library/Application Support/pueue/pueue.yml on macOS). Also used to locate the task_logs directory.",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "/Users/you/Library/Application Support/pueue/pueue.yml"
+    },
+    {
+      "name": "confirmDestructive",
+      "title": "Confirmations",
+      "label": "Confirm kill, remove, clean, and reset",
+      "description": "Ask before destructive actions in the view commands. Menu bar destructive actions are always behind ⌥ regardless of this setting.",
+      "type": "checkbox",
+      "required": false,
+      "default": true
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^1.104.23",
+    "@raycast/utils": "^2.2.7"
+  },
+  "devDependencies": {
+    "@raycast/eslint-config": "^2.2.0",
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.0.10",
+    "eslint": "^9.0.0",
+    "prettier": "^3.5.3",
+    "react": "^19.0.0",
+    "typescript": "^5.8.2"
+  },
+  "scripts": {
+    "build": "ray build",
+    "dev": "ray develop",
+    "lint": "ray lint",
+    "fix-lint": "ray lint --fix",
+    "publish": "npx @raycast/api@latest publish"
+  }
+}

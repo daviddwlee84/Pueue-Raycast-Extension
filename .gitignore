@@ -1,0 +1,6 @@
+node_modules/
+.build/
+.raycast-swift-build/
+dist/
+*.log
+.DS_Store
