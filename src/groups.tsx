@@ -114,7 +114,7 @@ export default function Command() {
       isLoading={groupState.isLoading || state.isLoading}
       searchBarPlaceholder={`Search ${entries.length} group${entries.length === 1 ? "" : "s"}…`}
     >
-      {stale || conn.connection.remote || conn.invalid.length > 0 ? (
+      {stale || conn.switchable || conn.invalid.length > 0 ? (
         <List.Section title="Connection">
           {stale ? (
             <StaleBannerItem
@@ -129,7 +129,15 @@ export default function Command() {
       ) : null}
 
       {entries.length === 0 ? (
-        <List.EmptyView icon={Icon.Tray} title="No groups" />
+        <List.EmptyView
+          icon={Icon.Tray}
+          title="No groups"
+          actions={
+            <ActionPanel>
+              <ConnectionSubmenu state={conn} />
+            </ActionPanel>
+          }
+        />
       ) : (
         entries.map(([name, group]) => (
           <GroupItem

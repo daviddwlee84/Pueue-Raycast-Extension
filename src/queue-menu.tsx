@@ -35,12 +35,14 @@ import {
   updateCommandMetadata,
   type Image,
 } from "@raycast/api";
-import { useCachedPromise } from "@raycast/utils";
+import { useCachedPromise, useCachedState } from "@raycast/utils";
 
+import { connectionIcon } from "./lib/connection-ui";
 import { describeError } from "./lib/error-states";
 import { statusTag } from "./lib/format";
 import {
-  defaultConnection,
+  connectionByName,
+  connections,
   hasEverRun,
   isFailed,
   isPaused,
@@ -50,6 +52,8 @@ import {
   oneline,
   snapshot,
   taskList,
+  LOCAL_CONNECTION_NAME,
+  type Connection,
   type Mutation,
   type Task,
 } from "./lib/pueue";
@@ -60,9 +64,19 @@ export default function Command() {
   const prefs = getPreferenceValues<Preferences.QueueMenu>();
   const perSection = Math.max(1, Number(prefs.maxItemsPerSection) || 7);
 
+  // Shares the selection with the view commands, so the menu bar and Tasks
+  // never disagree about which daemon you're looking at.
+  const [connectionName, setConnectionName] = useCachedState(
+    "connection.name",
+    LOCAL_CONNECTION_NAME,
+  );
+  const connection = connectionByName(connectionName);
+  const allConnections = connections();
+
   const { data, error, isLoading, revalidate } = useCachedPromise(
-    (query: string) => snapshot({ query }),
-    [prefs.menuQuery ?? ""],
+    (query: string, name: string) =>
+      snapshot({ query, connection: connectionByName(name) }),
+    [prefs.menuQuery ?? "", connectionName],
     {
       keepPreviousData: true,
       onData: (snap) => {
@@ -70,8 +84,11 @@ export default function Command() {
         const running = tasks.filter(isRunning).length;
         const queued = tasks.filter(isQueued).length;
         // Only affects this command's own subtitle in root search.
+        // Name the daemon in the subtitle when it isn't this machine —
+        // otherwise the counts are ambiguous the moment a remote is selected.
+        const where = connection.remote ? `${connection.name}: ` : "";
         updateCommandMetadata({
-          subtitle: `${running} running · ${queued} queued`,
+          subtitle: `${where}${running} running · ${queued} queued`,
         }).catch(() => {});
       },
     },
@@ -92,17 +109,14 @@ export default function Command() {
       // daemon you last selected, and the menu bar always reads the default —
       // so without this, a task id from one daemon gets looked up on another
       // and the log silently fails to open.
-      context: {
-        logTaskId: taskId,
-        connectionName: defaultConnection().name,
-      },
+      context: { logTaskId: taskId, connectionName: connection.name },
     }).catch(() => {});
   }
 
   /** Run a mutation from a menu item. No window, so feedback is a HUD. */
   async function run(m: Mutation, done: string) {
     try {
-      await mutate(m);
+      await mutate(m, { connection });
       await showHUD(done);
       revalidate();
     } catch (error) {
@@ -121,7 +135,7 @@ export default function Command() {
         isLoading
       />
     ) : (
-      <ErrorMenu error={error} onRetry={revalidate} />
+      <ErrorMenu error={error} onRetry={revalidate} connection={connection} />
     );
   }
 
@@ -150,6 +164,7 @@ export default function Command() {
         queued.length,
         failed.length,
         data.fetchedAt,
+        connection,
       )}
       isLoading={isLoading}
     >
@@ -285,6 +300,21 @@ export default function Command() {
                 ))}
               </MenuBarExtra.Submenu>
             </MenuBarExtra.Submenu>
+          ))}
+        </MenuBarExtra.Section>
+      ) : null}
+
+      {allConnections.length > 1 ? (
+        <MenuBarExtra.Section title="Connection">
+          {allConnections.map((c) => (
+            <MenuBarExtra.Item
+              key={c.name}
+              title={c.sshHost ? `${c.name} (${c.sshHost})` : c.name}
+              icon={
+                c.name === connection.name ? Icon.Checkmark : connectionIcon(c)
+              }
+              onAction={() => setConnectionName(c.name)}
+            />
           ))}
         </MenuBarExtra.Section>
       ) : null}
@@ -451,11 +481,13 @@ function TaskSection(props: {
 function ErrorMenu({
   error,
   onRetry,
+  connection,
 }: {
   error: unknown;
   onRetry: () => void;
+  connection: Connection;
 }) {
-  const d = describeError(error);
+  const d = describeError(error, connection);
   return (
     <MenuBarExtra
       icon={{ source: Icon.XMarkCircle, tintColor: Color.Red }}
@@ -536,10 +568,12 @@ function tooltip(
   queued: number,
   failed: number,
   fetchedAt: number,
+  connection: Connection,
 ): string {
   const parts = [`${running} running`, `${queued} queued`];
   if (failed > 0) parts.push(`${failed} failed`);
-  return `Pueue — ${parts.join(", ")} · updated ${clock(fetchedAt)}`;
+  const where = connection.remote ? connection.name : "Pueue";
+  return `${where} — ${parts.join(", ")} · updated ${clock(fetchedAt)}`;
 }
 
 function clock(ms: number): string {

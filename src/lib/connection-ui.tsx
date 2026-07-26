@@ -54,6 +54,15 @@ export function useConnection(key = "connection.name"): ConnectionState {
   };
 }
 
+/** One line describing how a connection reaches its daemon. */
+export function connectionSubtitle(c: Connection): string {
+  if (!c.remote) return "local daemon";
+  if (c.mode === "ssh") return `everything over ssh ${c.sshHost}`;
+  return c.sshHost
+    ? `socket · submits via ssh ${c.sshHost}`
+    : "socket · reads only, submitting will fail";
+}
+
 export function connectionIcon(c: Connection) {
   return c.remote
     ? { source: Icon.Globe, tintColor: Color.Blue }
@@ -129,21 +138,28 @@ export function InvalidConnectionItems({ state }: { state: ConnectionState }) {
   );
 }
 
+/**
+ * A row naming the daemon this list is showing.
+ *
+ * Rendered whenever there is more than one connection, not just for remote
+ * ones. Without it, a local list is indistinguishable from a remote list that
+ * happens to be empty — and, worse, an empty queue had no task rows, so the
+ * only place the switcher lived was unreachable. Which daemon you are looking
+ * at should never be a guess.
+ */
 export function ConnectionBannerItem({ state }: { state: ConnectionState }) {
   const c = state.connection;
-  if (!c.remote) return null;
+  if (!state.switchable) return null;
   return (
     <List.Item
       icon={connectionIcon(c)}
       title={c.name}
-      subtitle={
-        c.mode === "ssh"
-          ? `everything over ssh ${c.sshHost}`
-          : c.sshHost
-            ? `socket · submits via ssh ${c.sshHost}`
-            : "socket · reads only, submitting will fail"
-      }
-      accessories={[{ tag: { value: "remote", color: Color.Blue } }]}
+      subtitle={connectionSubtitle(c)}
+      accessories={[
+        c.remote
+          ? { tag: { value: "remote", color: Color.Blue } }
+          : { text: "this machine" },
+      ]}
       actions={
         <ActionPanel>
           <ConnectionSubmenu state={state} />

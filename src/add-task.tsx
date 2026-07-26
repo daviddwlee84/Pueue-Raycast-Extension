@@ -41,8 +41,15 @@ import {
   PueueError,
 } from "./lib/pueue";
 
-const LAST_GROUP = "add.group";
-const LAST_CWD = "add.cwd";
+/**
+ * Last-used group and directory, remembered per connection.
+ *
+ * Both are daemon-specific — a group that exists here may not exist there, and
+ * a local path is meaningless on a remote host. Sharing one key would seed the
+ * form with values from whichever machine you used last.
+ */
+const lastGroupKey = (connection: string) => `add.group:${connection}`;
+const lastCwdKey = (connection: string) => `add.cwd:${connection}`;
 
 /** How a task enters the queue. One control, because the CLI flags are exclusive. */
 type StartMode = "queued" | "stashed" | "immediate";
@@ -82,14 +89,16 @@ export default function Command(
 
   // Seed the group and directory from the last submission, so the common case
   // of "same project, same queue" is one keystroke.
+  const connectionName = conn.connection.name;
   useEffect(() => {
-    LocalStorage.getItem<string>(LAST_GROUP).then((g) => {
-      if (g) setGroup(g);
+    LocalStorage.getItem<string>(lastGroupKey(connectionName)).then((g) => {
+      setGroup(g && g.length > 0 ? g : "default");
     });
-    LocalStorage.getItem<string>(LAST_CWD).then((d) => {
-      setWorkingDirectory([d && d.length > 0 ? d : homedir()]);
+    LocalStorage.getItem<string>(lastCwdKey(connectionName)).then((d) => {
+      if (remote) setRemoteDirectory(d ?? "");
+      else setWorkingDirectory([d && d.length > 0 ? d : homedir()]);
     });
-  }, []);
+  }, [connectionName, remote]);
 
   // Only unfinished tasks can be depended on; depending on a finished one is
   // either a no-op or an instant DependencyFailed.
@@ -154,12 +163,18 @@ export default function Command(
       );
 
       toast.style = Toast.Style.Success;
-      toast.title = id === undefined ? "Queued" : `Queued task ${id}`;
+      // Name the daemon in the confirmation too, for the same reason.
+      const where = remote ? ` on ${conn.connection.name}` : "";
+      toast.title =
+        id === undefined ? `Queued${where}` : `Queued task ${id}${where}`;
       toast.message = oneline(trimmed, 60);
 
-      await LocalStorage.setItem(LAST_GROUP, group);
-      if (workingDirectory[0])
-        await LocalStorage.setItem(LAST_CWD, workingDirectory[0]);
+      await LocalStorage.setItem(lastGroupKey(connectionName), group);
+      const usedDirectory = remote
+        ? remoteDirectory.trim()
+        : workingDirectory[0];
+      if (usedDirectory)
+        await LocalStorage.setItem(lastCwdKey(connectionName), usedDirectory);
 
       // Documented use of launchCommand: force a sibling's background refresh,
       // so the menu bar catches up in seconds rather than at its next interval.
@@ -189,9 +204,14 @@ export default function Command(
       enableDrafts
       actions={
         <ActionPanel>
+          {/* The button names its target. A dropdown further up the form is
+              easy to miss, and "I queued it on the wrong machine" is a mistake
+              you only notice much later. */}
           <Action.SubmitForm
-            title="Queue Task"
-            icon={Icon.Plus}
+            title={
+              remote ? `Queue on ${conn.connection.name}` : "Queue Locally"
+            }
+            icon={remote ? Icon.Globe : Icon.Desktop}
             onSubmit={submit}
           />
           <Action
@@ -208,12 +228,14 @@ export default function Command(
       {conn.switchable ? (
         <Form.Dropdown
           id="connection"
-          title="Daemon"
+          title="Submit To"
           value={conn.connection.name}
           onChange={conn.setName}
           info={
             remote
-              ? "Submitted over SSH so the working directory is resolved on the remote host."
+              ? conn.connection.sshHost
+                ? `Runs on ${conn.connection.sshHost}. Submitted over SSH, so the working directory is resolved there rather than here.`
+                : "This connection has no SSH host, so the working directory would be resolved on THIS machine — submitting will almost certainly fail."
               : "This machine's pueue daemon."
           }
         >

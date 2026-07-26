@@ -20,7 +20,13 @@ import {
 import { homedir } from "node:os";
 
 import { describeError } from "./lib/error-states";
-import { firstLine, mutate, oneline, PueueError } from "./lib/pueue";
+import {
+  defaultConnection,
+  firstLine,
+  mutate,
+  oneline,
+  PueueError,
+} from "./lib/pueue";
 
 export default async function Command(
   props: LaunchProps<{ arguments: Arguments.QuickAdd }>,
@@ -33,17 +39,28 @@ export default async function Command(
     return;
   }
 
-  const group = (await LocalStorage.getItem<string>("add.group")) ?? "default";
-  const cwd = (await LocalStorage.getItem<string>("add.cwd")) ?? homedir();
+  // Quick Add always targets the default connection: it has no UI to pick
+  // one, and silently queueing onto whichever daemon a *different* command
+  // happened to select would be worse than being predictable.
+  const connection = defaultConnection();
+  const group =
+    (await LocalStorage.getItem<string>(`add.group:${connection.name}`)) ??
+    "default";
+  const cwd =
+    (await LocalStorage.getItem<string>(`add.cwd:${connection.name}`)) ??
+    homedir();
 
   try {
-    const id = await mutate({
-      op: "add",
-      command,
-      group: group === "default" ? undefined : group,
-      label: label || undefined,
-      workingDirectory: cwd,
-    });
+    const id = await mutate(
+      {
+        op: "add",
+        command,
+        group: group === "default" ? undefined : group,
+        label: label || undefined,
+        workingDirectory: cwd,
+      },
+      { connection },
+    );
 
     await showHUD(
       id === undefined

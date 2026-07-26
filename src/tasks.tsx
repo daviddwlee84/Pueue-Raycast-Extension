@@ -247,7 +247,7 @@ export default function Command(
         />
       }
     >
-      {stale || conn.connection.remote || conn.invalid.length > 0 ? (
+      {stale || conn.switchable || conn.invalid.length > 0 ? (
         <List.Section title="Connection">
           {stale ? (
             <StaleBannerItem
@@ -271,6 +271,10 @@ export default function Command(
           }
           actions={
             <ActionPanel>
+              {/* An empty queue has no task rows, so this is the only place the
+                  switcher can be reached from. Leaving it out stranded anyone
+                  whose selected daemon happened to be idle. */}
+              <ConnectionSubmenu state={conn} />
               <Action
                 title="Reload"
                 icon={Icon.ArrowClockwise}
