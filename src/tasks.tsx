@@ -56,14 +56,15 @@ import {
   endedAt,
   enqueuedAt,
   exitCode,
+  forConnection,
   hasEverRun,
   isLocked,
   logs as readLogs,
   oneline,
   parseTs,
+  snapshot,
   spawnError,
   startedAt,
-  status as readStatus,
   statusKeywords,
   taskList,
   taskResult,
@@ -135,7 +136,7 @@ export default function Command(
     // useCachedPromise keys its cache on it — switching daemons must not show
     // the previous one's tasks.
     (g: string, q: string, connectionName: string) =>
-      readStatus({
+      snapshot({
         group: g === ALL_GROUPS ? undefined : g,
         query: q,
         signal: stateAbort.current?.signal,
@@ -145,14 +146,20 @@ export default function Command(
     { keepPreviousData: true, abortable: stateAbort },
   );
 
+  // Keying the cache is not enough on its own: `keepPreviousData` falls back to
+  // the last successful read from *any* connection when this one has no entry
+  // yet, so an unreachable daemon would otherwise render another machine's
+  // queue under its name. The stamp on the payload is what settles it.
+  const snap = forConnection(state.data, conn.connection.name);
+
   // The dropdown reads the groups off the same payload. `status --json` carries
   // the whole groups map even when `--group` narrows the tasks — verified — so
   // a second `group --json` call was a spare subprocess per revalidate.
-  const groupMap = state.data?.groups;
+  const groupMap = snap?.state.groups;
 
   const logLines = Math.max(1, Number(prefs.detailLogLines) || 20);
 
-  const selectedTask = selectedId ? state.data?.tasks[selectedId] : undefined;
+  const selectedTask = selectedId ? snap?.state.tasks[selectedId] : undefined;
   // A task that never started has no log file, and asking anyway does not fail
   // — pueue exits 0 with its own error text in the output field. Skip the call.
   const canHaveLog = selectedTask !== undefined && hasEverRun(selectedTask);
@@ -174,7 +181,7 @@ export default function Command(
 
   const error = state.error;
   const isLoading = state.isLoading;
-  const tasks = taskList(state.data?.tasks ?? {});
+  const tasks = taskList(snap?.state.tasks ?? {});
 
   const bySection = new Map<SectionKey, Task[]>();
   for (const task of tasks) {
@@ -196,15 +203,15 @@ export default function Command(
     // shows someone else's task with the same id. Observed, not theorised.
     if (contextConnection && conn.connection.name !== contextConnection) return;
 
-    const target = state.data?.tasks[String(logTaskId)];
+    const target = snap?.state.tasks[String(logTaskId)];
     if (!target) return;
     pushedLog.current = true;
     push(<TaskLogView task={target} connection={conn.connection} />);
-  }, [logTaskId, contextConnection, state.data, conn.connection, push]);
+  }, [logTaskId, contextConnection, snap, conn.connection, push]);
 
   // A failed first read has nothing to show alongside the error, so the error
   // takes the whole screen.
-  if (error && !state.data) {
+  if (error && !snap) {
     return (
       <List searchBarPlaceholder="Search tasks…">
         <ErrorEmptyView

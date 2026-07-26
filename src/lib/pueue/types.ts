@@ -106,10 +106,22 @@ export interface LogEntry {
 export type LogMap = Record<string, LogEntry>;
 
 /**
- * A timestamped read. The menu bar keeps data and its age in one cache entry
- * so the two can never drift apart.
+ * A read, stamped with when it happened and which daemon it came from.
+ *
+ * `fetchedAt` exists because the menu bar keeps data and its age in one cache
+ * entry, so the two can never drift apart.
+ *
+ * `connection` exists because `useCachedPromise` cannot be trusted to keep
+ * connections apart on its own. It keys its cache on the arguments, but
+ * `keepPreviousData` falls back to a key-*independent* "last successful data"
+ * ref whenever the new key has no entry yet — so selecting an unreachable
+ * daemon renders the previous daemon's queue as though it were the new one's,
+ * with no error anywhere on screen. Stamping the payload lets every view ask
+ * the only question that matters: is this actually mine?
  */
 export interface Snapshot {
   state: State;
   fetchedAt: number;
+  /** The `Connection.name` this was read from. */
+  connection: string;
 }

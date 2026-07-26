@@ -29,11 +29,12 @@ import { ErrorDetail } from "./lib/error-states";
 import { connectionIcon, useConnection } from "./lib/connection-ui";
 import {
   connectionByName,
+  forConnection,
   isBinaryMissing,
   isDaemonDown,
   mutate,
   oneline,
-  status as readStatus,
+  snapshot,
   taskList,
   underlyingKind,
   firstLine,
@@ -77,10 +78,15 @@ export default function Command(
   // `status --json` carries the same groups map `group --json` returns.
   const state = useCachedPromise(
     (connectionName: string) =>
-      readStatus({ connection: connectionByName(connectionName) }),
+      snapshot({ connection: connectionByName(connectionName) }),
     [conn.connection.name],
     { keepPreviousData: true },
   );
+
+  // Submitting to the wrong daemon is the expensive mistake this form can make,
+  // so it must never offer another machine's groups or task ids. See
+  // `forConnection`.
+  const snap = forConnection(state.data, conn.connection.name);
 
   // Seed the group and directory from the last submission, so the common case
   // of "same project, same queue" is one keystroke.
@@ -97,13 +103,13 @@ export default function Command(
 
   // Only unfinished tasks can be depended on; depending on a finished one is
   // either a no-op or an instant DependencyFailed.
-  const dependencyOptions = taskList(state.data?.tasks ?? {}).filter((task) =>
+  const dependencyOptions = taskList(snap?.state.tasks ?? {}).filter((task) =>
     ["queued", "stashed", "running", "paused"].includes(
       underlyingKind(task.status),
     ),
   );
 
-  const groupNames = Object.keys(state.data?.groups ?? {});
+  const groupNames = Object.keys(snap?.state.groups ?? {});
   const knownGroups = groupNames.length > 0 ? groupNames.sort() : ["default"];
 
   const fatal = state.error;

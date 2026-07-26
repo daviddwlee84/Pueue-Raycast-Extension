@@ -10,6 +10,7 @@ import {
   readLogFromDisk,
   readTaskEnvs,
 } from "./cli-transport";
+import { defaultConnection } from "./binary";
 import { cleanLogOutput } from "./normalize";
 import type { Connection } from "./connections";
 import type {
@@ -88,16 +89,41 @@ export const follow = (
 export const probe = (o?: ConnectionOption) => transport().probe(o);
 
 /**
- * A timestamped read.
+ * A read stamped with its age and its daemon.
  *
- * The menu bar keeps the data and its age in one cache entry so the two can
- * never drift — which matters because Raycast restores a menu bar item from its
- * database rather than by re-running the command, so a stale render can outlive
- * a restart. Showing *when* it was read turns that from misleading into merely
- * old.
+ * Both stamps exist to stop `useCachedPromise` lying by omission. Keeping the
+ * data and its age in one cache entry means they cannot drift, which matters
+ * because Raycast restores a menu bar item from its database rather than by
+ * re-running the command — showing *when* it was read turns a stale render from
+ * misleading into merely old.
+ *
+ * Keeping the *connection* in the same entry is the stronger guarantee: the
+ * hook's `keepPreviousData` will happily hand a view the last successful read
+ * from a different daemon when the selected one cannot be reached. Only the
+ * payload itself can settle who it belongs to. See `Snapshot`.
  */
 export async function snapshot(o?: StatusOptions): Promise<Snapshot> {
-  return { state: await status(o), fetchedAt: Date.now() };
+  const connection = o?.connection ?? defaultConnection();
+  return {
+    state: await status({ ...o, connection }),
+    fetchedAt: Date.now(),
+    connection: connection.name,
+  };
+}
+
+/**
+ * A snapshot, but only if it came from the daemon you asked about.
+ *
+ * The one guard every view needs. `undefined` means "nothing for this
+ * connection yet", which is the honest answer while a switch is in flight or
+ * after it has failed — and it routes the caller into its existing
+ * no-data-plus-error branch rather than into someone else's queue.
+ */
+export function forConnection(
+  snap: Snapshot | undefined,
+  name: string,
+): Snapshot | undefined {
+  return snap && snap.connection === name ? snap : undefined;
 }
 
 /**

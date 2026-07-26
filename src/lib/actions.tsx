@@ -25,7 +25,7 @@ import {
   PueueError,
   type Connection,
   type Mutation,
-  type State,
+  type Snapshot,
 } from "./pueue";
 
 /**
@@ -159,16 +159,25 @@ export async function act<T>(
 }
 
 /**
- * `act` bound to the `State` both list views cache.
+ * `act` bound to the `Snapshot` both list views cache.
  *
  * Groups reads the same `status --json` payload Tasks does, so one updater
  * serves both — and a group-scoped kill correctly flips its tasks too, which
  * is what the per-group progress numbers are computed from.
+ *
+ * The optimistic paint reaches inside the snapshot and leaves the stamps
+ * alone: a predicted state still belongs to this connection, and it is still as
+ * old as the read it was predicted from.
  */
 export function actOnTasks(
   mutation: Mutation,
-  state: { mutate: MutatePromise<State | undefined>; revalidate: () => void },
+  state: {
+    mutate: MutatePromise<Snapshot | undefined>;
+    revalidate: () => void;
+  },
   options: ActOptions,
 ): Promise<boolean> {
-  return act(mutation, state, options, applyMutation);
+  return act(mutation, state, options, (snap, m) =>
+    snap ? { ...snap, state: applyMutation(snap.state, m) } : snap,
+  );
 }

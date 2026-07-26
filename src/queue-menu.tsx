@@ -44,6 +44,7 @@ import { statusTag } from "./lib/format";
 import {
   connectionByName,
   connections,
+  forConnection,
   hasEverRun,
   isFailed,
   isPaused,
@@ -86,7 +87,12 @@ export default function Command() {
   const connection = connectionByName(connectionName);
   const allConnections = connections();
 
-  const { data, error, isLoading, revalidate } = useCachedPromise(
+  const {
+    data: cached,
+    error,
+    isLoading,
+    revalidate,
+  } = useCachedPromise(
     (query: string, name: string) =>
       snapshot({ query, connection: connectionByName(name) }),
     [prefs.menuQuery ?? "", connectionName],
@@ -106,6 +112,12 @@ export default function Command() {
       },
     },
   );
+
+  // The hook's `keepPreviousData` will serve the last successful read from
+  // *another* daemon when this one has no cache entry yet, which is how an
+  // unreachable host used to render a plausible-looking `default` group that
+  // belonged to a different machine. Reject anything that isn't ours.
+  const data = forConnection(cached, connection.name);
 
   /**
    * Open the Tasks command on this task's log.
@@ -138,11 +150,15 @@ export default function Command() {
     }
   }
 
-  // No cached data and a failure: render the error rather than vanishing.
-  // Returning null would remove the item entirely, which is the wrong answer
-  // for someone who deliberately enabled a pueue menu bar command.
+  // No data *for this connection* and a failure: render the error rather than
+  // vanishing. Returning null would remove the item entirely, which is the
+  // wrong answer for someone who deliberately enabled a pueue menu bar command.
+  //
+  // The `!error` arm matters too: without it a connection switch renders
+  // ErrorMenu with no error at all, whose title becomes the literal string
+  // "undefined".
   if (!data) {
-    return isLoading ? (
+    return isLoading || !error ? (
       <MenuBarExtra
         icon={{ source: MENU_ICON, tintColor: Color.SecondaryText }}
         isLoading

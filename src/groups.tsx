@@ -38,10 +38,11 @@ import {
 } from "./lib/connection-ui";
 import {
   connectionByName,
+  forConnection,
   isPaused,
   isQueued,
   isRunning,
-  status as readStatus,
+  snapshot,
   taskList,
   type Group,
   type Mutation,
@@ -61,7 +62,7 @@ export default function Command() {
   // disagree with the first.
   const state = useCachedPromise(
     (connectionName: string) =>
-      readStatus({
+      snapshot({
         signal: stateAbort.current?.signal,
         connection: connectionByName(connectionName),
       }),
@@ -72,10 +73,14 @@ export default function Command() {
     },
   );
 
+  // `keepPreviousData` serves the last successful read from *any* connection
+  // when this one has no cache entry yet, so an unreachable daemon would
+  // otherwise show another machine's groups under its name.
+  const snap = forConnection(state.data, conn.connection.name);
   const error = state.error;
   const reload = () => state.revalidate();
 
-  if (error && !state.data) {
+  if (error && !snap) {
     return (
       <List searchBarPlaceholder="Search groups…">
         <ErrorEmptyView
@@ -89,8 +94,8 @@ export default function Command() {
 
   const stale =
     error !== undefined && describeError(error, conn.connection).structural;
-  const tasks = taskList(state.data?.tasks ?? {});
-  const entries = Object.entries(state.data?.groups ?? {}).sort(([a], [b]) =>
+  const tasks = taskList(snap?.state.tasks ?? {});
+  const entries = Object.entries(snap?.state.groups ?? {}).sort(([a], [b]) =>
     a.localeCompare(b),
   );
 
