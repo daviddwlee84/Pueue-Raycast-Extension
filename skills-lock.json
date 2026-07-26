@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "skills": {
+    "agent-history-hygiene": {
+      "source": "daviddwlee84/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/local/agent-history-hygiene/SKILL.md",
+      "computedHash": "aa7e6fe192518ecbddccc9c29c501b50200e41a753948cdb925254b373744259"
+    },
+    "mkdocs-site-bootstrap": {
+      "source": "daviddwlee84/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/local/mkdocs-site-bootstrap/SKILL.md",
+      "computedHash": "976267291b56eb84d845733f3eb0e4b2427157e42449c2d75c5c4102ff712eae"
+    },
+    "project-knowledge-harness": {
+      "source": "daviddwlee84/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/local/project-knowledge-harness/SKILL.md",
+      "computedHash": "0a8d0b4888de715160f947499408251de0530ccb5f7e8bb65c9c994b685e5d5a"
+    },
+    "pueue-job-queue": {
+      "source": "daviddwlee84/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/local/pueue-job-queue/SKILL.md",
+      "computedHash": "f09862fee433ea238b97595f7c598c09b119488f508d731607b8eade60529568"
+    }
+  }
+}
