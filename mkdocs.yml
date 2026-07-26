@@ -1,0 +1,107 @@
+site_name: Pueue for Raycast
+site_description: Documentation for Pueue for Raycast
+site_url: https://daviddwlee84.github.io/Pueue-Raycast-Extension/
+repo_url: https://github.com/daviddwlee84/Pueue-Raycast-Extension
+repo_name: daviddwlee84/Pueue-Raycast-Extension
+edit_uri: edit/main/docs/
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+  language: en
+plugins:
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: true
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: en
+          name: English
+          default: true
+        - locale: zh-TW
+          name: 繁體中文 (zh-TW)
+          nav_translations:
+            Home: 首頁
+            Getting Started: 開始使用
+            Remote daemons: 遠端 daemon
+            Reference: 參考資料
+            The pueue JSON contract: pueue JSON 契約
+            Raycast surfaces: Raycast 介面型態
+  - search
+  - llmstxt:
+      full_output: llms-full.txt
+      markdown_description: >
+        Documentation for Pueue for Raycast
+
+      sections:
+        Guides:
+          - index.md
+          - getting-started.md
+          - remote.md
+        Reference:
+          - pueue-json-contract.md
+          - raycast-surfaces.md
+  - copy-to-llm:
+      repo_url: "https://daviddwlee84.github.io/Pueue-Raycast-Extension/"
+      button_hover_color: "var(--md-primary-fg-color)"
+      toast_bg_color: "var(--md-primary-fg-color)"
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - tables
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path:
+        - .
+        - docs
+        - docs/_snippets
+      check_paths: true
+  - pymdownx.tabbed:
+      alternate_style: true
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Remote daemons: remote.md
+  - Reference:
+      - The pueue JSON contract: pueue-json-contract.md
+      - Raycast surfaces: raycast-surfaces.md
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/daviddwlee84/Pueue-Raycast-Extension
+# `_snippets/` are meant to be included via pymdownx.snippets, never
+# rendered as their own page. `not_in_nav` suppresses the INFO warning.
+not_in_nav: |
+  /_snippets/

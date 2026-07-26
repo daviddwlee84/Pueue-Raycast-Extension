@@ -4,3 +4,9 @@ node_modules/
 dist/
 *.log
 .DS_Store
+
+# mkdocs build output (regenerated every build)
+/site/
+
+# uv virtualenv for the docs toolchain
+.venv/

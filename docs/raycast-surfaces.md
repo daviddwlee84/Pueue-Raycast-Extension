@@ -91,7 +91,7 @@ makes collisions impossible.
 
 Per-command trust. It matters for two reasons: it's why an external nudge is a
 poor substitute for `launchCommand` (see
-[`../backlog/callback-notifications.md`](../backlog/callback-notifications.md)),
+[`../backlog/callback-notifications.md`](https://github.com/daviddwlee84/Pueue-Raycast-Extension/blob/main/backlog/callback-notifications.md)),
 and it's why some verification during development needs a real keypress rather
 than a deeplink.
 
@@ -113,4 +113,4 @@ them and they are **silently ignored**. `ray lint` catches this; `tsc` does not.
 | `tsc --noEmit` | types |
 
 All three are needed. See
-[`../pitfalls/ray-build-does-not-typecheck.md`](../pitfalls/ray-build-does-not-typecheck.md).
+[`../pitfalls/ray-build-does-not-typecheck.md`](https://github.com/daviddwlee84/Pueue-Raycast-Extension/blob/main/pitfalls/ray-build-does-not-typecheck.md).
