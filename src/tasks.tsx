@@ -34,6 +34,7 @@ import {
   statusTag,
   type SectionKey,
 } from "./lib/format";
+import { act, type ActOptions } from "./lib/actions";
 import { ALL_GROUPS, GroupDropdown } from "./lib/group-dropdown";
 import { ErrorEmptyView } from "./lib/error-states";
 import {
@@ -54,6 +55,7 @@ import {
   taskList,
   taskResult,
   underlyingKind,
+  type Mutation,
   type Task,
 } from "./lib/pueue";
 
@@ -198,6 +200,7 @@ export default function Command(
                   logLines={logLines}
                   onToggleDetail={() => setShowDetail((v) => !v)}
                   onReload={reload}
+                  onAct={(mutation, options) => act(mutation, state, options)}
                 />
               ))}
             </List.Section>
@@ -216,9 +219,12 @@ function TaskItem(props: {
   logLines: number;
   onToggleDetail: () => void;
   onReload: () => void;
+  onAct: (mutation: Mutation, options: ActOptions) => Promise<boolean>;
 }) {
-  const { task } = props;
+  const { task, onAct } = props;
   const duration = durationAccessory(task);
+  const kind = underlyingKind(task.status);
+  const label = `task ${task.id}`;
 
   // With the detail pane open the row is narrow, so it carries only the status
   // tag; the numbers move into the pane.
@@ -233,6 +239,14 @@ function TaskItem(props: {
         { tag: { value: statusTag(task), color: statusColor(task) } },
       ];
 
+  const canKill = kind === "running" || kind === "paused";
+  const canRestart = kind === "done";
+  const canStash = kind === "queued";
+  const canEnqueue = kind === "stashed";
+  const canPause = kind === "running";
+  const canResume =
+    kind === "paused" || kind === "stashed" || kind === "queued";
+
   return (
     <List.Item
       id={String(task.id)}
@@ -244,29 +258,201 @@ function TaskItem(props: {
       detail={props.showDetail ? <TaskDetail {...props} /> : undefined}
       actions={
         <ActionPanel>
-          <Action.CopyToClipboard title="Copy Command" content={task.command} />
-          <Action.CopyToClipboard
-            title="Copy Task ID"
-            content={String(task.id)}
-            shortcut={Keyboard.Shortcut.Common.Copy}
-          />
-          <Action.ShowInFinder
-            title="Open Working Directory"
-            path={task.path}
-            shortcut={Keyboard.Shortcut.Common.Open}
-          />
-          <Action
-            title={props.showDetail ? "Hide Detail" : "Show Detail"}
-            icon={Icon.Sidebar}
-            shortcut={{ modifiers: ["cmd", "shift"], key: "d" }}
-            onAction={props.onToggleDetail}
-          />
-          <Action
-            title="Reload"
-            icon={Icon.ArrowClockwise}
-            shortcut={Keyboard.Shortcut.Common.Refresh}
-            onAction={props.onReload}
-          />
+          <ActionPanel.Section>
+            <Action.CopyToClipboard
+              title="Copy Command"
+              content={task.command}
+            />
+            <Action.CopyToClipboard
+              title="Copy Task ID"
+              content={String(task.id)}
+              shortcut={Keyboard.Shortcut.Common.Copy}
+            />
+            <Action.ShowInFinder
+              title="Open Working Directory"
+              path={task.path}
+              shortcut={Keyboard.Shortcut.Common.Open}
+            />
+          </ActionPanel.Section>
+
+          <ActionPanel.Section title="Control">
+            {canRestart ? (
+              <Action
+                title="Restart"
+                icon={Icon.Redo}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "r" }}
+                onAction={() =>
+                  onAct(
+                    { op: "restart", ids: [task.id] },
+                    { verb: `Restarting ${label}`, done: `Restarted ${label}` },
+                  )
+                }
+              />
+            ) : null}
+            {canRestart ? (
+              <Action
+                // Reusing the id means the old log is gone, which is exactly
+                // what you don't want if you were about to read it.
+                title="Restart in Place (Overwrites Log)"
+                icon={Icon.Redo}
+                shortcut={{ modifiers: ["cmd", "opt"], key: "r" }}
+                onAction={() =>
+                  onAct(
+                    { op: "restart", ids: [task.id], inPlace: true },
+                    {
+                      verb: `Restarting ${label} in place`,
+                      done: `Restarted ${label}`,
+                      confirm: {
+                        title: `Restart ${label} in place?`,
+                        message:
+                          "The task keeps its id and its existing output is overwritten.",
+                        actionTitle: "Restart in Place",
+                        rememberChoice: true,
+                      },
+                    },
+                  )
+                }
+              />
+            ) : null}
+            {canPause ? (
+              <Action
+                title="Pause"
+                icon={Icon.Pause}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "p" }}
+                onAction={() =>
+                  onAct(
+                    { op: "pause", ids: [task.id] },
+                    { verb: `Pausing ${label}`, done: `Paused ${label}` },
+                  )
+                }
+              />
+            ) : null}
+            {canResume ? (
+              <Action
+                title={kind === "paused" ? "Resume" : "Start Now"}
+                icon={Icon.Play}
+                shortcut={Keyboard.Shortcut.Common.Duplicate}
+                onAction={() =>
+                  onAct(
+                    { op: "start", ids: [task.id] },
+                    { verb: `Starting ${label}`, done: `Started ${label}` },
+                  )
+                }
+              />
+            ) : null}
+            {canStash ? (
+              <Action
+                title="Stash"
+                icon={Icon.Tray}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "t" }}
+                onAction={() =>
+                  onAct(
+                    { op: "stash", ids: [task.id] },
+                    { verb: `Stashing ${label}`, done: `Stashed ${label}` },
+                  )
+                }
+              />
+            ) : null}
+            {canEnqueue ? (
+              <Action
+                title="Enqueue"
+                icon={Icon.Clock}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "e" }}
+                onAction={() =>
+                  onAct(
+                    { op: "enqueue", ids: [task.id] },
+                    { verb: `Enqueueing ${label}`, done: `Enqueued ${label}` },
+                  )
+                }
+              />
+            ) : null}
+            {canKill ? (
+              <Action
+                title="Kill"
+                icon={Icon.Stop}
+                style={Action.Style.Destructive}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "k" }}
+                onAction={() =>
+                  onAct(
+                    { op: "kill", ids: [task.id] },
+                    {
+                      verb: `Killing ${label}`,
+                      done: `Killed ${label}`,
+                      confirm: {
+                        title: `Kill ${label}?`,
+                        message: oneline(task.command, 120),
+                        actionTitle: "Kill",
+                        destructive: true,
+                        rememberChoice: true,
+                      },
+                    },
+                  )
+                }
+              />
+            ) : null}
+            <Action
+              // pueue refuses to remove a running or paused task. Rather than
+              // hide the action and leave the user guessing, keep it and let
+              // pueue's own refusal explain why.
+              title="Remove"
+              icon={Icon.Trash}
+              style={Action.Style.Destructive}
+              shortcut={Keyboard.Shortcut.Common.Remove}
+              onAction={() =>
+                onAct(
+                  { op: "remove", ids: [task.id] },
+                  {
+                    verb: `Removing ${label}`,
+                    done: `Removed ${label}`,
+                    confirm: {
+                      title: `Remove ${label}?`,
+                      message: canKill
+                        ? "pueue will refuse this while the task is running — kill it first."
+                        : oneline(task.command, 120),
+                      actionTitle: "Remove",
+                      destructive: true,
+                    },
+                  },
+                )
+              }
+            />
+          </ActionPanel.Section>
+
+          <ActionPanel.Section>
+            <Action
+              title={props.showDetail ? "Hide Detail" : "Show Detail"}
+              icon={Icon.Sidebar}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "d" }}
+              onAction={props.onToggleDetail}
+            />
+            <Action
+              title="Clean Finished Tasks"
+              icon={Icon.Trash}
+              style={Action.Style.Destructive}
+              onAction={() =>
+                onAct(
+                  { op: "clean" },
+                  {
+                    verb: "Cleaning finished tasks",
+                    done: "Cleaned finished tasks",
+                    confirm: {
+                      title: "Remove every finished task?",
+                      message:
+                        "Successful and failed tasks are both discarded, with their logs.",
+                      actionTitle: "Clean",
+                      destructive: true,
+                    },
+                  },
+                )
+              }
+            />
+            <Action
+              title="Reload"
+              icon={Icon.ArrowClockwise}
+              shortcut={Keyboard.Shortcut.Common.Refresh}
+              onAction={props.onReload}
+            />
+          </ActionPanel.Section>
         </ActionPanel>
       }
     />

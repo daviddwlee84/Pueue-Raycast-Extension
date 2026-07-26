@@ -39,6 +39,7 @@ import {
 import fixture from "./fixtures/state.json";
 import stderrFixture from "./fixtures/stderr.json";
 import { argvFor, longFlagsOf, subcommandOf } from "./pueue/argv";
+import { applyMutation } from "./optimistic";
 import type { Mutation } from "./pueue/transport";
 import {
   classify,
@@ -498,6 +499,160 @@ check("a stashed task cannot have a log", hasEverRun(t(0)), false);
 check("a queued task cannot have a log", hasEverRun(t(2)), false);
 check("a running task can", hasEverRun(t(3)), true);
 check("a finished task can, even through a lock", hasEverRun(t(5)), true);
+
+console.log("\noptimistic updates");
+const kinds = (s: State) =>
+  Object.fromEntries(
+    taskList(s.tasks).map((x) => [x.id, underlyingKind(x.status)]),
+  );
+
+check(
+  "killing a running task finishes it as Killed",
+  resultKind(
+    taskResult(
+      applyMutation(state, { op: "kill", ids: [3] }).tasks["3"].status,
+    ),
+  ),
+  "killed",
+);
+check(
+  "killing preserves the original start time rather than inventing one",
+  startedAt(
+    applyMutation(state, { op: "kill", ids: [3] }).tasks["3"].status,
+  )?.toISOString(),
+  startedAt(t(3).status)?.toISOString(),
+);
+check(
+  "killing a queued task changes nothing — pueue only kills what runs",
+  underlyingKind(
+    applyMutation(state, { op: "kill", ids: [2] }).tasks["2"].status,
+  ),
+  "queued",
+);
+check(
+  "killing a whole group also pauses it, as pueue does",
+  applyMutation(state, { op: "kill", group: "default" }).groups["default"]
+    .status,
+  "Paused",
+);
+check(
+  "killing by id leaves group status alone",
+  applyMutation(state, { op: "kill", ids: [3] }).groups["default"].status,
+  "Running",
+);
+check(
+  "pausing a running task",
+  underlyingKind(
+    applyMutation(state, { op: "pause", ids: [3] }).tasks["3"].status,
+  ),
+  "paused",
+);
+check(
+  "resuming a paused task",
+  underlyingKind(
+    applyMutation(state, { op: "start", ids: [4] }).tasks["4"].status,
+  ),
+  "running",
+);
+check(
+  "starting a queued task is NOT predicted — a free slot needs the scheduler",
+  underlyingKind(
+    applyMutation(state, { op: "start", ids: [2] }).tasks["2"].status,
+  ),
+  "queued",
+);
+check(
+  "stashing a queued task",
+  underlyingKind(
+    applyMutation(state, { op: "stash", ids: [2] }).tasks["2"].status,
+  ),
+  "stashed",
+);
+check(
+  "enqueueing a stashed task",
+  underlyingKind(
+    applyMutation(state, { op: "enqueue", ids: [0] }).tasks["0"].status,
+  ),
+  "queued",
+);
+check(
+  "removing drops the ids",
+  Object.keys(
+    applyMutation(state, { op: "remove", ids: [0, 1] }).tasks,
+  ).includes("0"),
+  false,
+);
+check(
+  "clean drops every finished task, successes and failures alike",
+  taskList(applyMutation(state, { op: "clean" }).tasks).map((x) => x.id),
+  [0, 1, 2, 3, 4, 11],
+);
+check(
+  "clean --successful-only spares the failures",
+  taskList(
+    applyMutation(state, { op: "clean", successfulOnly: true }).tasks,
+  ).map((x) => x.id),
+  [0, 1, 2, 3, 4, 5, 7, 8, 9, 10, 11],
+);
+check(
+  "an in-place restart keeps the id and requeues",
+  underlyingKind(
+    applyMutation(state, { op: "restart", ids: [5], inPlace: true }).tasks["5"]
+      .status,
+  ),
+  "queued",
+);
+check(
+  "a fresh restart is NOT predicted — the new id is unknowable",
+  kinds(applyMutation(state, { op: "restart", ids: [5] })),
+  kinds(state),
+);
+check(
+  "parallelism is set on the named group",
+  applyMutation(state, { op: "parallel", count: 8, group: "gpu" }).groups["gpu"]
+    .parallel_tasks,
+  8,
+);
+check(
+  "adding a group",
+  applyMutation(state, { op: "group-add", name: "new", parallel: 3 }).groups[
+    "new"
+  ],
+  { status: "Running", parallel_tasks: 3 },
+);
+check(
+  "removing a group drops it",
+  "gpu" in applyMutation(state, { op: "group-remove", name: "gpu" }).groups,
+  false,
+);
+check(
+  "removing a group moves its tasks to default rather than deleting them",
+  taskList(applyMutation(state, { op: "group-remove", name: "gpu" }).tasks)
+    .filter((x) => [10, 11].includes(x.id))
+    .map((x) => x.group),
+  ["default", "default"],
+);
+check(
+  "add is never predicted — the id comes back from the daemon",
+  applyMutation(state, { op: "add", command: "echo hi" }),
+  state,
+);
+check(
+  "an undefined state yields an empty one rather than throwing",
+  applyMutation(undefined, { op: "kill", ids: [1] }),
+  { tasks: {}, groups: {} },
+);
+check(
+  "the input state is never mutated in place",
+  (() => {
+    const before = JSON.stringify(state);
+    applyMutation(state, { op: "kill", group: "default" });
+    applyMutation(state, { op: "remove", ids: [0] });
+    applyMutation(state, { op: "group-remove", name: "gpu" });
+    return JSON.stringify(state) === before;
+  })(),
+  true,
+);
 
 console.log(
   failures === 0
