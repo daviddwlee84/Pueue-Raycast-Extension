@@ -74429,3 +74429,332 @@ all assertions passed
 ready  - built extension successfully
 ```
 </details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:52:02Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit step 7
+
+```bash
+git add -A && git commit -q -F - <<'EOF'
+Let a big machine ask for a big parallelism
+
+The list stopped at 12, which is a fine compromise on a laptop and the wrong one
+on a workstation with cores to spare. It now runs to 32, and a `Custom…` item
+opens a validated number field for anything else — pueue accepts any
+non-negative integer.
+
+When the current value is off the preset list the item says so
+("Custom… (currently 48)"), so the submenu never looks like it has quietly lost
+your setting because none of its checkmarks are lit.
+
+Deliberately not seeded from `os.cpus().length`: for a remote connection that is
+this machine's core count rather than the daemon's, and a plausible wrong number
+is worse than a static list.
+
+The menu bar keeps a shorter list — a menu is something you scan, not a form you
+fill in — with an "Other…" item that opens Groups, where a number can be typed.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+EOF
+git log --oneline -1
+```
+
+```text
+7b91df2 Let a big machine ask for a big parallelism
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:52:07Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #28 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:52:07Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #30 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:52:11Z)**_
+
+Step 9 — per-connection counts, opt-in:
+
+_**Agent (claude-opus-5 2026-07-26 20:52:12Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="Read"><details>
+<summary>Tool use: **Read**</summary>
+ `./src/queue-menu.tsx`
+
+```text
+596	          s.total === 0
+597	            ? undefined
+598	            : [
+599	                `${s.running}/${parallelLabel(s.parallel)} slots`,
+600	                ...(eta ? [`~${eta} left`] : []),
+601	              ].join(" · ")
+602	        }
+603	      />
+604	
+605	      <MenuBarExtra.Section>
+606	        <MenuBarExtra.Item
+607	          title={running ? "Pause Group" : "Resume Group"}
+608	          icon={running ? Icon.Pause : Icon.Play}
+609	          onAction={() =>
+610	            running
+611	              ? run({ op: "pause", group: s.name }, `Paused ${s.name}`)
+612	              : run({ op: "start", group: s.name }, `Resumed ${s.name}`)
+613	          }
+614	        />
+615	        <MenuBarExtra.Submenu title="Parallelism" icon={Icon.BulletPoints}>
+616	          {MENU_PARALLEL_CHOICES.map((n) => (
+617	            <MenuBarExtra.Item
+618	              key={n}
+619	              title={n === 0 ? "Unlimited" : String(n)}
+620	              icon={n === s.parallel ? Icon.Checkmark : Icon.Circle}
+621	              onAction={() =>
+622	                run(
+623	                  { op: "parallel", count: n, group: s.name },
+624	                  `${s.name}: ${n === 0 ? "unlimited" : n} at a time`,
+625	                )
+626	              }
+627	            />
+628	          ))}
+629	          {/* Free text is not enterable in a menu, so anything off this list
+630	              has to be set where a form can exist. */}
+631	          <MenuBarExtra.Item
+632	            title="Other…"
+633	            icon={Icon.Pencil}
+634	            onAction={() => openGroups()}
+635	          />
+636	        </MenuBarExtra.Submenu>
+637	      </MenuBarExtra.Section>
+638	
+639	      {s.failed > 0 || s.finished > 0 ? (
+640	        <MenuBarExtra.Section>
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:52:17Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read ConnectionSection
+
+`grep -n "function ConnectionSection" -A 30 src/queue-menu.tsx`
+
+```text
+537:function ConnectionSection({
+538-  all,
+539-  current,
+540-  onSelect,
+541-}: {
+542-  all: Connection[];
+543-  current: Connection;
+544-  onSelect: (name: string) => void;
+545-}) {
+546-  if (all.length < 2) return null;
+547-  return (
+548-    <MenuBarExtra.Section title="Connection">
+549-      {all.map((c) => (
+550-        <MenuBarExtra.Item
+551-          key={c.name}
+552-          title={c.sshHost ? `${c.name} (${c.sshHost})` : c.name}
+553-          icon={c.name === current.name ? Icon.Checkmark : connectionIcon(c)}
+554-          onAction={() => onSelect(c.name)}
+555-        />
+556-      ))}
+557-    </MenuBarExtra.Section>
+558-  );
+559-}
+560-
+561-/**
+562- * One group, with its progress in the title and its batch actions inside.
+563- *
+564- * The title used to be `name — running (0/1)`: running tasks over parallelism,
+565- * neither of which moves while a batch works through. It now leads with
+566- * `8/20`, which is the number you opened the menu for.
+567- *
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:52:37Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/src/queue-menu.tsx has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:53:07Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Wire per-connection counts
+
+```bash
+python3 - <<'PY'
+p='src/queue-menu.tsx'
+s=open(p).read()
+
+# Call the hook at the top of the command, unconditionally (hooks rule).
+old = '''  const connection = connectionByName(connectionName);
+  const allConnections = connections();
+'''
+new = '''  const connection = connectionByName(connectionName);
+  const allConnections = connections();
+  // Unconditional call, gated by `execute` inside — a hook cannot live behind
+  // an `if`, and the preference can change between renders.
+  const connectionCounts = useAllCounts(
+    allConnections,
+    prefs.connectionCounts === true,
+  );
+'''
+assert s.count(old)==1
+s=s.replace(old,new)
+
+# Pass counts to both call sites.
+old2 = '''      <ConnectionSection
+        all={allConnections}
+        current={connection}
+        onSelect={setConnectionName}
+      />'''
+new2 = '''      <ConnectionSection
+        all={allConnections}
+        current={connection}
+        onSelect={setConnectionName}
+        counts={connectionCounts}
+      />'''
+assert s.count(old2)==1
+s=s.replace(old2,new2)
+
+old3 = '''      <ErrorMenu
+        error={error}
+        onRetry={revalidate}
+        connection={connection}
+        all={allConnections}
+        onSelect={setConnectionName}
+      />'''
+new3 = '''      <ErrorMenu
+        error={error}
+        onRetry={revalidate}
+        connection={connection}
+        all={allConnections}
+        onSelect={setConnectionName}
+        counts={connectionCounts}
+      />'''
+assert s.count(old3)==1
+s=s.replace(old3,new3)
+
+old4 = '''function ErrorMenu({
+  error,
+  onRetry,
+  connection,
+  all,
+  onSelect,
+}: {
+  error: unknown;
+  onRetry: () => void;
+  connection: Connection;
+  all: Connection[];
+  onSelect: (name: string) => void;
+}) {'''
+new4 = '''function ErrorMenu({
+  error,
+  onRetry,
+  connection,
+  all,
+  onSelect,
+  counts,
+}: {
+  error: unknown;
+  onRetry: () => void;
+  connection: Connection;
+  all: Connection[];
+  onSelect: (name: string) => void;
+  counts?: Record<string, string>;
+}) {'''
+assert s.count(old4)==1
+s=s.replace(old4,new4)
+
+old5 = '''      {/* The way out. Without it a broken remote is a one-way door. */}
+      <ConnectionSection all={all} current={connection} onSelect={onSelect} />'''
+new5 = '''      {/* The way out. Without it a broken remote is a one-way door — and the
+          counts matter most here, where they say which machine is answering. */}
+      <ConnectionSection
+        all={all}
+        current={connection}
+        onSelect={onSelect}
+        counts={counts}
+      />'''
+assert s.count(old5)==1
+s=s.replace(old5,new5)
+
+s=s.replace('''  connectionByName,
+  connections,
+  forConnection,''','''  connectionByName,
+  connections,
+  forConnection,
+  status,''')
+open(p,'w').write(s)
+print('ok')
+PY
+python3 - <<'PY'
+import json
+p='package.json'
+d=json.load(open(p))
+for c in d['commands']:
+    if c['name']=='queue-menu':
+        c['preferences'].append({
+          "name":"connectionCounts",
+          "title":"Connection Counts",
+          "label":"Show each connection's counts in the menu",
+          "description":"Read every configured connection on each refresh so the Connection rows show that daemon's running, queued, and failed counts. Costs one extra read per connection per interval — cheap over a multiplexed SSH connection, but off by default because most setups have only one. An unreachable host degrades its own row and nothing else.",
+          "type":"checkbox",
+          "required":False,
+          "default":False,
+        })
+json.dump(d,open(p,'w'),indent=2,ensure_ascii=False)
+open(p,'a').write('\n')
+print('pref added')
+PY
+just build 2>&1 | tail -2; just typecheck 2>&1 | tail -6
+```
+
+```text
+ok
+pref added
+info  - generated extension's TypeScript definitions
+ready  - built extension successfully
+([ -d node_modules ] || npm install) && npx tsc --noEmit -p tsconfig.json
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:53:52Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Format and gate
+
+`just fix >/dev/null 2>&1; just check 2>&1 | grep -E "FAIL|error|✖|assertions passed|built extension" | tail -5`
+
+```text
+error predicates
+log output — pueue hides its own errors in the output field
+  ok   a pueue error in the output field is recognised
+all assertions passed
+ready  - built extension successfully
+```
+</details></tool-use>

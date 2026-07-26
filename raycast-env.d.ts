@@ -47,7 +47,9 @@ declare namespace Preferences {
   /** Groups Section - Adds one submenu per group with pause / resume and a parallelism picker. */
   "showGroups": boolean,
   /** Menu Bar Query - Optional Pueue query applied to the menu bar's status read, e.g. "last 100". Useful when you keep thousands of finished tasks around. Leave empty for all tasks. */
-  "menuQuery"?: string
+  "menuQuery"?: string,
+  /** Connection Counts - Read every configured connection on each refresh so the Connection rows show that daemon's running, queued, and failed counts. Costs one extra read per connection per interval — cheap over a multiplexed SSH connection, but off by default because most setups have only one. An unreachable host degrades its own row and nothing else. */
+  "connectionCounts": boolean
 }
 }
 

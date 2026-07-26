@@ -52,6 +52,7 @@ import {
   connectionByName,
   connections,
   forConnection,
+  status,
   hasEverRun,
   isFailed,
   isPaused,
@@ -100,6 +101,12 @@ export default function Command() {
   );
   const connection = connectionByName(connectionName);
   const allConnections = connections();
+  // Unconditional call, gated by `execute` inside — a hook cannot live behind
+  // an `if`, and the preference can change between renders.
+  const connectionCounts = useAllCounts(
+    allConnections,
+    prefs.connectionCounts === true,
+  );
 
   const {
     data: cached,
@@ -184,6 +191,7 @@ export default function Command() {
         connection={connection}
         all={allConnections}
         onSelect={setConnectionName}
+        counts={connectionCounts}
       />
     );
   }
@@ -339,6 +347,7 @@ export default function Command() {
         all={allConnections}
         current={connection}
         onSelect={setConnectionName}
+        counts={connectionCounts}
       />
 
       <MenuBarExtra.Section>
@@ -538,10 +547,13 @@ function ConnectionSection({
   all,
   current,
   onSelect,
+  counts,
 }: {
   all: Connection[];
   current: Connection;
   onSelect: (name: string) => void;
+  /** Per-connection summaries, when the preference is on. See `useAllCounts`. */
+  counts?: Record<string, string>;
 }) {
   if (all.length < 2) return null;
   return (
@@ -550,12 +562,73 @@ function ConnectionSection({
         <MenuBarExtra.Item
           key={c.name}
           title={c.sshHost ? `${c.name} (${c.sshHost})` : c.name}
+          subtitle={counts?.[c.name]}
           icon={c.name === current.name ? Icon.Checkmark : connectionIcon(c)}
           onAction={() => onSelect(c.name)}
         />
       ))}
     </MenuBarExtra.Section>
   );
+}
+
+/**
+ * Every configured daemon's counts, for the connection rows.
+ *
+ * Off by default, because it costs one read per connection per interval — a
+ * price worth paying only if you actually watch more than one machine. It is
+ * affordable now that ssh multiplexes at 10–30 ms per call, which is what made
+ * this worth offering at all.
+ *
+ * `allSettled`, not `all`: an unreachable host has to degrade its own row and
+ * nothing else. That is the whole reason this lives in a separate read from the
+ * selected connection's — a dead `nas` must not take the menu down with it.
+ *
+ * Deliberately not a count in the menu bar *title*. One number there is
+ * unambiguous; `2·5·0` is a puzzle.
+ */
+function useAllCounts(
+  all: Connection[],
+  enabled: boolean,
+): Record<string, string> | undefined {
+  const names = all.map((c) => c.name).join(" ");
+  const { data } = useCachedPromise(
+    async (joined: string) => {
+      const wanted = joined.split(" ").filter(Boolean);
+      const settled = await Promise.allSettled(
+        wanted.map((name) =>
+          status({ connection: connectionByName(name) }).then((state) =>
+            countsLine(taskList(state.tasks)),
+          ),
+        ),
+      );
+      return Object.fromEntries(
+        wanted.map((name, i) => {
+          const r = settled[i];
+          return [
+            name,
+            r.status === "fulfilled"
+              ? r.value
+              : describeError(r.reason, connectionByName(name)).shortTitle,
+          ];
+        }),
+      );
+    },
+    [names],
+    { execute: enabled && all.length > 1, keepPreviousData: true },
+  );
+  return data;
+}
+
+/** `2 running · 5 queued · 1 failed`, or `idle`. */
+function countsLine(tasks: Task[]): string {
+  const running = tasks.filter(isRunning).length;
+  const queued = tasks.filter(isQueued).length;
+  const failed = tasks.filter(isFailed).length;
+  const parts = [];
+  if (running > 0) parts.push(`${running} running`);
+  if (queued > 0) parts.push(`${queued} queued`);
+  if (failed > 0) parts.push(`${failed} failed`);
+  return parts.length > 0 ? parts.join(" · ") : "idle";
 }
 
 /**
@@ -826,12 +899,14 @@ function ErrorMenu({
   connection,
   all,
   onSelect,
+  counts,
 }: {
   error: unknown;
   onRetry: () => void;
   connection: Connection;
   all: Connection[];
   onSelect: (name: string) => void;
+  counts?: Record<string, string>;
 }) {
   const d = describeError(error, connection);
   return (
@@ -860,8 +935,14 @@ function ErrorMenu({
         ))}
       </MenuBarExtra.Section>
 
-      {/* The way out. Without it a broken remote is a one-way door. */}
-      <ConnectionSection all={all} current={connection} onSelect={onSelect} />
+      {/* The way out. Without it a broken remote is a one-way door — and the
+          counts matter most here, where they say which machine is answering. */}
+      <ConnectionSection
+        all={all}
+        current={connection}
+        onSelect={onSelect}
+        counts={counts}
+      />
     </MenuBarExtra>
   );
 }
