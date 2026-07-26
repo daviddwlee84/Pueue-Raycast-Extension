@@ -1,0 +1,189 @@
+/**
+ * One error descriptor, four renderers.
+ *
+ * The anti-pattern this avoids: an `errorMarkdown()` helper per surface, which
+ * drifts — the menu bar cannot render a `List.EmptyView`, so it grows its own
+ * copy and the two diverge.
+ *
+ * Actions are DATA, not JSX, so each renderer maps them to its own primitive.
+ */
+
+import {
+  Action,
+  ActionPanel,
+  Clipboard,
+  Color,
+  Detail,
+  Icon,
+  Image,
+  List,
+  MenuBarExtra,
+  open,
+  openExtensionPreferences,
+} from "@raycast/api";
+
+export interface ErrorAction {
+  id: string;
+  title: string;
+  icon?: Image.ImageLike;
+  copy?: string;
+  url?: string;
+  run?: () => void | Promise<void>;
+}
+
+export interface ErrorDescriptor {
+  icon: Image.ImageLike;
+  title: string;
+  /** A few words. With the detail pane open the list column is a third of the
+   *  window, and full titles truncate into nonsense. */
+  shortTitle: string;
+  /** One line, for List.EmptyView. */
+  description: string;
+  /** A full page, for Detail. Fence any raw stderr. */
+  markdown: string;
+  actions: ErrorAction[];
+  /** Is the backend GONE, or was this read just flaky? Cached-on-failure is the
+   *  right default for flaky and the wrong default for structural. */
+  structural: boolean;
+}
+
+const INSTALL = "brew install __TOOL__";
+
+export function describeError(error: unknown): ErrorDescriptor {
+  // Branch on your error taxonomy's `kind`, never on message substrings.
+  return {
+    icon: { source: Icon.XMarkCircle, tintColor: Color.Red },
+    title: "__TOOL__ was not found",
+    shortTitle: "Not installed",
+    description: "Install it, or set the binary path in extension preferences.",
+    markdown: [
+      "# __TOOL__ was not found",
+      "",
+      "Raycast runs extensions under launchd, which never sources your shell rc,",
+      "so a bare binary name is not on `PATH`.",
+      "",
+      "```sh",
+      INSTALL,
+      "```",
+      "",
+      fence(String(error)),
+    ].join("\n"),
+    actions: [
+      {
+        id: "copy-install",
+        title: "Copy Install Command",
+        icon: Icon.Clipboard,
+        copy: INSTALL,
+      },
+      {
+        id: "prefs",
+        title: "Open Extension Preferences",
+        icon: Icon.Gear,
+        run: openExtensionPreferences,
+      },
+      {
+        id: "docs",
+        title: "Open Documentation",
+        icon: Icon.Globe,
+        url: "https://example.com",
+      },
+    ],
+    structural: true,
+  };
+}
+
+/** Program output is not markdown. A fence inside it would close ours early, so
+ *  the backticks are broken with a zero-width space. */
+export function fence(text: string): string {
+  return "```text\n" + text.replace(/```/g, "``​`") + "\n```";
+}
+
+function ErrorActions({ d }: { d: ErrorDescriptor }) {
+  return (
+    <ActionPanel>
+      {d.actions.map((a) =>
+        a.copy !== undefined ? (
+          <Action.CopyToClipboard
+            key={a.id}
+            title={a.title}
+            icon={a.icon}
+            content={a.copy}
+          />
+        ) : a.url !== undefined ? (
+          <Action.OpenInBrowser
+            key={a.id}
+            title={a.title}
+            icon={a.icon}
+            url={a.url}
+          />
+        ) : (
+          <Action
+            key={a.id}
+            title={a.title}
+            icon={a.icon}
+            onAction={() => a.run?.()}
+          />
+        ),
+      )}
+    </ActionPanel>
+  );
+}
+
+/** Must be rendered INSIDE a <List> — List.EmptyView is not standalone. */
+export function ErrorEmptyView({ d }: { d: ErrorDescriptor }) {
+  return (
+    <List.EmptyView
+      icon={d.icon}
+      title={d.title}
+      description={d.description}
+      actions={<ErrorActions d={d} />}
+    />
+  );
+}
+
+/** The stale banner: a structural failure while cached data is still on screen. */
+export function StaleBannerItem({ d }: { d: ErrorDescriptor }) {
+  return (
+    <List.Item
+      icon={d.icon}
+      title={d.shortTitle}
+      subtitle={d.description}
+      accessories={[{ text: "cached" }]}
+      actions={<ErrorActions d={d} />}
+    />
+  );
+}
+
+export function ErrorDetail({ d }: { d: ErrorDescriptor }) {
+  return (
+    <Detail
+      navigationTitle={d.shortTitle}
+      markdown={d.markdown}
+      actions={<ErrorActions d={d} />}
+    />
+  );
+}
+
+/** The menu bar cannot render any of the above — and must never return null,
+ *  which would remove the item entirely from someone who enabled it. */
+export function ErrorMenu({ d }: { d: ErrorDescriptor }) {
+  return (
+    <MenuBarExtra icon={d.icon} tooltip={d.title}>
+      <MenuBarExtra.Item title={d.shortTitle} />
+      <MenuBarExtra.Section>
+        {d.actions.map((a) => (
+          <MenuBarExtra.Item
+            key={a.id}
+            title={a.title}
+            icon={a.icon}
+            onAction={() => {
+              if (a.copy !== undefined) Clipboard.copy(a.copy);
+              else if (a.url !== undefined) open(a.url);
+              else a.run?.();
+            }}
+          />
+        ))}
+      </MenuBarExtra.Section>
+    </MenuBarExtra>
+  );
+}

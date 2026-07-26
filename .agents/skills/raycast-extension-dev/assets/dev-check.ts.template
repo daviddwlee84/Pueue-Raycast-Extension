@@ -1,0 +1,111 @@
+/**
+ * Assertions over the pure modules — the ones that never import `@raycast/api`.
+ *
+ * There is no test runner in a Raycast extension, and adding one is store-review
+ * noise, so this is a plain script:
+ *
+ *     just verify
+ *
+ * which compiles it with the already-installed tsc and runs it under node.
+ *
+ * The precondition that makes this work at all: every module asserted here must
+ * be importable OUTSIDE Raycast. Import from leaf modules, never from a barrel
+ * that pulls in the transport — the transport pulls in `@raycast/api`, and then
+ * this file cannot run.
+ *
+ * Every assertion should correspond to a shape the backend actually emits and
+ * that a naive reading gets wrong. Assertions that restate the type system are
+ * noise; assertions that pin a surprise are the whole point.
+ */
+
+import { execFileSync } from "node:child_process";
+
+// import { statusKind, startedAt } from "./<backend>/normalize";   // pure — no raycast
+// import { argvFor, longFlagsOf, subcommandOf } from "./<backend>/argv";
+// import fixture from "./fixtures/state.json";
+
+/** The binary this extension wraps. Replace it. */
+const BIN = "echo";
+
+let failures = 0;
+
+function check(name: string, actual: unknown, expected: unknown): void {
+  const a = JSON.stringify(actual);
+  const e = JSON.stringify(expected);
+  if (a === e) {
+    console.log(`ok    ${name}`);
+  } else {
+    failures += 1;
+    console.log(`FAIL  ${name}\n        expected ${e}\n        actual   ${a}`);
+  }
+}
+
+function skip(name: string, why: string): void {
+  console.log(`skip  ${name} — ${why}`);
+}
+
+/**
+ * Read the wrapped CLI's own help text. Returns undefined when the binary is not
+ * installed on this machine, so the harness degrades to a skip rather than a
+ * failure on someone else's laptop.
+ */
+function helpFor(bin: string, subcommand: string): string | undefined {
+  try {
+    return execFileSync(bin, [subcommand, "--help"], {
+      encoding: "utf8",
+      timeout: 5_000,
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 1. Wire shapes. One fixture entry per variant the backend can emit, INCLUDING
+//    the awkward ones (nested enums, nulls, error-shaped success payloads).
+// ---------------------------------------------------------------------------
+
+check("the harness itself runs", 1 + 1, 2);
+
+// check("an externally-tagged status flattens to its kind", statusKind(fixture.tasks["5"]), "failed");
+// check("a null timestamp does not become 1970", startedAt(fixture.tasks["0"]), undefined);
+
+// ---------------------------------------------------------------------------
+// 2. Generated argv. Pure, so it is assertable without spawning anything.
+// ---------------------------------------------------------------------------
+
+// check("global flags precede the subcommand", argvFor({ op: "status" })[0], "--color");
+// check(
+//   "a user command is never shell-quoted — the CLI hands it to sh -c itself",
+//   argvFor({ op: "add", command: "echo 'it works'" }).at(-1),
+//   "echo 'it works'",
+// );
+
+// ---------------------------------------------------------------------------
+// 3. Conformance against the wrapped CLI's own --help. A flag in the wrong
+//    place, or one that does not exist, fails HERE instead of in front of a
+//    user. Replace the loop below with your real mutation variants.
+// ---------------------------------------------------------------------------
+
+const help = helpFor(BIN, "--version");
+if (help === undefined) {
+  skip("CLI conformance", `${BIN} is not installed on this machine`);
+} else {
+  check(`${BIN} responds to --help`, help.length >= 0, true);
+}
+
+// for (const m of ALL_MUTATION_VARIANTS) {
+//   const h = helpFor(BIN, subcommandOf(m));
+//   if (!h) continue;
+//   const flags = longFlagsOf(argvFor(m));
+//   check(`${subcommandOf(m)}: ${flags.join(" ")}`, flags.filter((f) => !h.includes(f)), []);
+// }
+
+// ---------------------------------------------------------------------------
+
+if (failures > 0) {
+  console.log(`\n${failures} failing`);
+  process.exitCode = 1;
+} else {
+  console.log("\nall checks passed");
+}

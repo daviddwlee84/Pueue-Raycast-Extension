@@ -1,0 +1,56 @@
+/**
+ * The transport seam.
+ *
+ * TYPES ONLY — no runtime imports, so `cli-transport.ts` can import this without
+ * creating a cycle, and so the argv builder stays assertable outside Raycast.
+ *
+ * The seam only holds because mutations are modelled as *data*. If `mutate` took
+ * a `string[]` of argv, a socket or HTTP transport would have to parse argv back
+ * into intent — which is not a seam, it is a shell.
+ */
+
+/** Every write the extension can perform, as data. One variant per operation. */
+export type Mutation =
+  | { op: "add"; command: string; group?: string; label?: string; cwd?: string }
+  | { op: "start" | "pause"; ids?: number[]; group?: string; all?: boolean }
+  | { op: "kill"; ids?: number[]; group?: string; all?: boolean }
+  | { op: "restart"; ids: number[]; inPlace?: boolean }
+  | { op: "remove"; ids: number[] };
+
+export interface ReadOptions {
+  signal?: AbortSignal;
+  timeout?: number;
+}
+
+export interface Transport {
+  read(o?: ReadOptions): Promise<State>;
+  mutate(m: Mutation, o?: ReadOptions): Promise<number | void>;
+  /** Returns a cancel closure. Call it from a useEffect cleanup. */
+  follow(id: number, h: FollowHandlers, o?: ReadOptions): () => void;
+  /** Parse the version STRING; never infer capability from an exit code. */
+  probe(
+    o?: ReadOptions,
+  ): Promise<{ version: string; major: number; reachable: boolean }>;
+}
+
+export interface FollowHandlers {
+  onData(chunk: string): void;
+  onError(error: unknown): void;
+  onDone(code: number | null): void;
+}
+
+export interface State {
+  // 1:1 with what the backend emits. Keep this transcription literal and build
+  // the ergonomic view on top in normalize.ts — an honest transcription is what
+  // makes the normalizers trustworthy.
+  items: Record<string, unknown>;
+}
+
+// ---------------------------------------------------------------------------
+// The factory and the swap hook live OUTSIDE this file (in the barrel), so this
+// module stays types-only:
+//
+//   let active: Transport | undefined;
+//   export function transport(): Transport { return (active ??= createCliTransport()); }
+//   export function setTransport(t: Transport | undefined): void { active = t; }
+// ---------------------------------------------------------------------------

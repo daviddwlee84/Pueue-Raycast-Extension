@@ -1,0 +1,6 @@
+// Flat config for @raycast/eslint-config v2 + ESLint 9. This is the whole file —
+// a legacy .eslintrc.json will be ignored by ESLint 9.
+import { defineConfig } from "eslint/config";
+import raycastConfig from "@raycast/eslint-config";
+
+export default defineConfig([...raycastConfig]);

@@ -24,6 +24,12 @@
       "sourceType": "github",
       "skillPath": "skills/local/pueue-job-queue/SKILL.md",
       "computedHash": "f09862fee433ea238b97595f7c598c09b119488f508d731607b8eade60529568"
+    },
+    "raycast-extension-dev": {
+      "source": "daviddwlee84/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/local/raycast-extension-dev/SKILL.md",
+      "computedHash": "8d7c3f1fe0a329ee325d40ca670ea9c2dc65f46297225700c08c6e1339ad0ae1"
     }
   }
 }

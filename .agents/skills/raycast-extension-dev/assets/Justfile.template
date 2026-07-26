@@ -1,0 +1,63 @@
+default:
+    @just --list
+
+# Every npm-touching recipe self-bootstraps: `ray` ships INSIDE @raycast/api,
+# so there is nothing to run until node_modules exists.
+
+# run in Raycast dev mode (registers the extension; persists after you stop)
+dev:
+    ([ -d node_modules ] || npm install) && npm run dev
+
+# bundle + regenerate raycast-env.d.ts. Does NOT typecheck.
+build:
+    ([ -d node_modules ] || npm install) && npm run build
+
+# the build the store actually produces — run this at least once before publishing
+dist:
+    ([ -d node_modules ] || npm install) && npx ray build -e dist
+
+lint:
+    ([ -d node_modules ] || npm install) && npm run lint
+
+fix:
+    ([ -d node_modules ] || npm install) && npm run fix-lint
+
+# the real typecheck. `ray build` bundles with esbuild, which strips types
+# without checking them, and `ray lint` runs ESLint/Prettier, not tsc.
+typecheck:
+    ([ -d node_modules ] || npm install) && npx tsc --noEmit -p tsconfig.json
+
+# assert the pure modules (the ones that never import @raycast/api) with the
+# already-installed tsc + node. There is no test runner here on purpose.
+verify:
+    ([ -d node_modules ] || npm install) && rm -rf .build/verify && \
+      npx tsc --outDir .build/verify --module commonjs --target ES2022 --lib ES2023 \
+        --esModuleInterop --resolveJsonModule --skipLibCheck --strict src/lib/dev-check.ts && \
+      node .build/verify/dev-check.js
+
+# the pre-commit gate — all four, in this order
+check: typecheck verify lint build
+
+# prove the committed lockfile still works from scratch (what store CI does)
+ci:
+    rm -rf node_modules && npm ci && just check
+
+# store preconditions that `ray lint` does NOT check (it exits 0 with an empty
+# metadata/). Requires the raycast-extension-dev skill to be vendored.
+preflight:
+    @script=.agents/skills/raycast-extension-dev/scripts/check-store-readiness.sh; \
+    if [ -x "$script" ]; then bash "$script" .; else \
+      echo "missing $script" >&2; \
+      echo "  npx skills@latest add <owner>/agent-skills/skills --skill raycast-extension-dev" >&2; \
+      exit 3; fi
+
+# an allowlisted copy for publishing — `ray publish` copies the DIRECTORY, not
+# the git index, so anything else in the root rides along into the review PR.
+store-export:
+    rm -rf .build/store && mkdir -p .build/store
+    rsync -a --relative \
+      package.json package-lock.json tsconfig.json eslint.config.mjs \
+      raycast-env.d.ts src assets metadata README.md CHANGELOG.md LICENSE \
+      .build/store/
+    cd .build/store && npx ray lint && npx ray build -e dist
+    @echo "clean copy in .build/store — publish from there or from the root"
