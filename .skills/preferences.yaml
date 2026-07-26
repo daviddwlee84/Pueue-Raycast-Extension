@@ -12,3 +12,5 @@ mkdocs_site_bootstrap:
     - zh-TW
   keep_english_terms: true
   i18n_structure: suffix
+  pages_deployed: true
+  pages_enabled_at: "2026-07-27"

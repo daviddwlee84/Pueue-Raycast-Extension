@@ -1,5 +1,7 @@
 # Pueue for Raycast
 
+**Docs: <https://daviddwlee84.github.io/Pueue-Raycast-Extension/>** (English · [繁體中文](https://daviddwlee84.github.io/Pueue-Raycast-Extension/zh-TW/))
+
 Manage the [Pueue](https://github.com/Nukesor/pueue) task queue daemon from Raycast: browse and act on tasks, follow live output, control groups and parallelism, and watch the queue from the menu bar.
 
 ## Requirements

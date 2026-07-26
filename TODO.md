@@ -26,6 +26,24 @@ shape isn't decided yet and there's a note in [`backlog/`](backlog/).
 - `[S]` **Dependency graph in the task detail** — render `dependencies[]` as
   rows with their live status instead of a comma-separated list of ids.
 
+## Docs site
+
+Live at <https://daviddwlee84.github.io/Pueue-Raycast-Extension/>, bilingual
+(en + zh-TW), deployed by `.github/workflows/docs.yml` on every push touching
+`docs/`, `mkdocs.yml`, or `pyproject.toml`.
+
+- `[S]` **Keep the zh-TW pages in step with the English ones.** They are
+  suffix siblings (`remote.md` / `remote.zh-TW.md`), so an edit to one silently
+  leaves the other stale — `fallback_to_default: true` means a missing page
+  falls back rather than 404s, which hides drift.
+- `[S]` **Consider surfacing `pitfalls/` and `backlog/` on the site.** They are
+  repo-only today and linked by absolute GitHub URL, because MkDocs cannot
+  resolve a relative `.md` link that leaves `docs/`.
+- `[?]` **`--strict` is off in CI.** `mkdocs-llmstxt` and `mkdocs-static-i18n`
+  are incompatible under it: llmstxt's source-path lookups break once i18n
+  remaps the page index. We kept `/llms.txt`. Revisit if llmstxt gains i18n
+  awareness.
+
 ## v0.3.0 candidates
 
 Connection UX is done; these are the next layer.
@@ -43,6 +61,24 @@ Connection UX is done; these are the next layer.
 - `[S]` **Per-connection menu bar counts** — the menu bar follows one connection
   today. Showing `2 local · 5 lab` would need a read per connection on every
   interval, which is affordable now but should be opt-in.
+
+## Docs site
+
+Live at <https://daviddwlee84.github.io/Pueue-Raycast-Extension/>, bilingual
+(en + zh-TW), deployed by `.github/workflows/docs.yml` on every push touching
+`docs/`, `mkdocs.yml`, or `pyproject.toml`.
+
+- `[S]` **Keep the zh-TW pages in step with the English ones.** They are
+  suffix siblings (`remote.md` / `remote.zh-TW.md`), so an edit to one silently
+  leaves the other stale — `fallback_to_default: true` means a missing page
+  falls back rather than 404s, which hides drift.
+- `[S]` **Consider surfacing `pitfalls/` and `backlog/` on the site.** They are
+  repo-only today and linked by absolute GitHub URL, because MkDocs cannot
+  resolve a relative `.md` link that leaves `docs/`.
+- `[?]` **`--strict` is off in CI.** `mkdocs-llmstxt` and `mkdocs-static-i18n`
+  are incompatible under it: llmstxt's source-path lookups break once i18n
+  remaps the page index. We kept `/llms.txt`. Revisit if llmstxt gains i18n
+  awareness.
 
 ## v0.3.0 candidates
 
