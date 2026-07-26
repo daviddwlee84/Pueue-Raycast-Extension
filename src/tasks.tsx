@@ -9,7 +9,7 @@
  * we parse rather than what the daemon sends.
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Action,
   ActionPanel,
@@ -34,7 +34,7 @@ import {
   statusTag,
   type SectionKey,
 } from "./lib/format";
-import { act, type ActOptions } from "./lib/actions";
+import { actOnTasks, type ActOptions } from "./lib/actions";
 import { canFollow, TaskFollowView, TaskLogView } from "./lib/task-log";
 import { ALL_GROUPS, GroupDropdown } from "./lib/group-dropdown";
 import {
@@ -65,12 +65,25 @@ import {
 } from "./lib/pueue";
 
 export default function Command(
-  props: LaunchProps<{ arguments: Arguments.Tasks }>,
+  props: LaunchProps<{
+    arguments: Arguments.Tasks;
+    launchContext?: { group?: string };
+  }>,
 ) {
   const prefs = getPreferenceValues<Preferences.Tasks>();
   const query = props.arguments?.query ?? "";
 
-  const [group, setGroup] = useCachedState("tasks.group", ALL_GROUPS);
+  // The Groups view launches this command with a group in its context; that
+  // choice must win over the remembered filter, or "Show Tasks in Group" would
+  // silently show a different group.
+  const [group, setGroup] = useCachedState(
+    "tasks.group",
+    props.launchContext?.group ?? ALL_GROUPS,
+  );
+  const contextGroup = props.launchContext?.group;
+  useEffect(() => {
+    if (contextGroup) setGroup(contextGroup);
+  }, [contextGroup]);
   const [showDetail, setShowDetail] = useCachedState(
     "tasks.showDetail",
     prefs.showDetail,
@@ -215,7 +228,9 @@ export default function Command(
                   logLines={logLines}
                   onToggleDetail={() => setShowDetail((v) => !v)}
                   onReload={reload}
-                  onAct={(mutation, options) => act(mutation, state, options)}
+                  onAct={(mutation, options) =>
+                    actOnTasks(mutation, state, options)
+                  }
                 />
               ))}
             </List.Section>

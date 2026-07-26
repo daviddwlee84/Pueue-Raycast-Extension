@@ -15,6 +15,11 @@ lint:
 fix:
     ([ -d node_modules ] || npm install) && npm run fix-lint
 
+# real typecheck. `ray build` bundles but does NOT typecheck — it happily
+# shipped a State/GroupMap mismatch and a ReactNode clash.
+typecheck:
+    ([ -d node_modules ] || npm install) && npx tsc --noEmit -p tsconfig.json
+
 # assert the pure normalizers against src/lib/fixtures/state.json
 verify:
     ([ -d node_modules ] || npm install) && rm -rf .build/verify && \
@@ -23,7 +28,7 @@ verify:
       node .build/verify/dev-check.js
 
 # the pre-commit gate
-check: verify lint build
+check: typecheck verify lint build
 
 # prove the committed lockfile still works from scratch
 ci:

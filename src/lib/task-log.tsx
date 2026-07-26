@@ -40,7 +40,10 @@ function asCodeBlock(text: string): string {
   return ["```text", text.replace(/```/g, "``​`"), "```"].join("\n");
 }
 
-function logActions(task: Task, extra?: React.ReactNode) {
+// Typed as an element rather than ReactNode: @raycast/api bundles its own
+// copy of @types/react, so the root React.ReactNode is a structurally
+// different type and won't assign to ActionPanel's children.
+function logActions(task: Task, extra?: React.JSX.Element | null) {
   const path = taskLogPath(task.id);
   return (
     <ActionPanel>

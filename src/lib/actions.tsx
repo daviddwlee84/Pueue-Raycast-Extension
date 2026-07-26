@@ -16,11 +16,12 @@ import {
 } from "@raycast/api";
 import { showFailureToast, type MutatePromise } from "@raycast/utils";
 
-import { applyMutation } from "./optimistic";
+import { applyGroupMutation, applyMutation } from "./optimistic";
 import {
   firstLine,
   mutate as runMutation,
   PueueError,
+  type GroupMap,
   type Mutation,
   type State,
 } from "./pueue";
@@ -68,12 +69,17 @@ export interface ActOptions {
 /**
  * Run a mutation with an optimistic paint and a delayed reconcile.
  *
+ * Generic over what the calling hook holds, because the two list views cache
+ * different shapes: Tasks caches a whole `State`, Groups caches a `GroupMap`.
+ * Each supplies the pure updater for its own shape.
+ *
  * Returns true when the mutation ran (i.e. wasn't cancelled at the confirmation).
  */
-export async function act(
+export async function act<T>(
   mutation: Mutation,
-  state: { mutate: MutatePromise<State | undefined>; revalidate: () => void },
+  state: { mutate: MutatePromise<T | undefined>; revalidate: () => void },
   options: ActOptions,
+  optimistic: (data: T | undefined, m: Mutation) => T | undefined,
 ): Promise<boolean> {
   const prefs = getPreferenceValues<Preferences>();
 
@@ -99,7 +105,7 @@ export async function act(
 
   try {
     await state.mutate(runMutation(mutation), {
-      optimisticUpdate: (data) => applyMutation(data, mutation),
+      optimisticUpdate: (data) => optimistic(data, mutation),
       rollbackOnError: true,
       // The load-bearing line. See the module comment.
       shouldRevalidateAfter: false,
@@ -121,4 +127,25 @@ export async function act(
     });
     return false;
   }
+}
+
+/** `act` bound to the Tasks view's `State`. */
+export function actOnTasks(
+  mutation: Mutation,
+  state: { mutate: MutatePromise<State | undefined>; revalidate: () => void },
+  options: ActOptions,
+): Promise<boolean> {
+  return act(mutation, state, options, applyMutation);
+}
+
+/** `act` bound to the Groups view's `GroupMap`. */
+export function actOnGroups(
+  mutation: Mutation,
+  state: {
+    mutate: MutatePromise<GroupMap | undefined>;
+    revalidate: () => void;
+  },
+  options: ActOptions,
+): Promise<boolean> {
+  return act(mutation, state, options, applyGroupMutation);
 }
