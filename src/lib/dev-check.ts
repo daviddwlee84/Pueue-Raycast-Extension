@@ -34,9 +34,36 @@ import {
   unwrapLocked,
 } from "./pueue/normalize";
 import fixture from "./fixtures/state.json";
+import stderrFixture from "./fixtures/stderr.json";
+import {
+  classify,
+  cleanStderr,
+  firstLine,
+  fromExecError,
+  isDaemonDown,
+  PueueError,
+  type PueueErrorKind,
+} from "./pueue/errors";
 
 const state = fixture as unknown as State;
 const t = (id: number) => state.tasks[String(id)];
+
+const stderrCases = stderrFixture as {
+  name: string;
+  exitCode: number;
+  stderr: string;
+}[];
+
+/** What each captured failure must bucket into. Wrong bucket = wrong onboarding view. */
+const expectedKinds: Record<string, PueueErrorKind> = {
+  "daemon-never-started": "daemon-not-running",
+  "config-missing": "config-missing",
+  "clap-bad-argument": "bad-arguments",
+  "bad-query": "bad-query",
+  "plain-client-error": "command-failed",
+  "socket-absent": "daemon-not-running",
+  "socket-refused": "daemon-not-running",
+};
 
 let failures = 0;
 
@@ -228,6 +255,113 @@ check(
   "taskList sorts numerically, not lexically",
   taskList(state.tasks).map((x) => x.id),
   [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+);
+
+console.log("\nstderr normalization (fixtures captured from pueue 4.0.4)");
+for (const c of stderrCases) {
+  const detail = cleanStderr(c.stderr);
+  check(`${c.name}: no ANSI escapes survive`, detail.includes("\u001b"), false);
+  check(`${c.name}: no Location: block`, /Location:/.test(detail), false);
+  check(
+    `${c.name}: no backtrace hints`,
+    /RUST_BACKTRACE|Backtrace omitted/.test(detail),
+    false,
+  );
+  check(
+    `${c.name}: classified`,
+    classify(detail, c.exitCode),
+    expectedKinds[c.name],
+  );
+}
+
+const byName = (n: string) => stderrCases.find((c) => c.name === n)!;
+
+check(
+  "config-missing collapses eyre's cause chain into plain lines",
+  cleanStderr(byName("config-missing").stderr),
+  'Failed to read configuration.\nI/O error at path "/tmp/pueue-cap/nope.yml" while opening config file:\n      No such file or directory (os error 2)',
+);
+check(
+  "socket-refused keeps the OS error that distinguishes it",
+  /Connection refused \(os error 61\)/.test(
+    cleanStderr(byName("socket-refused").stderr),
+  ),
+  true,
+);
+check(
+  "socket-absent and socket-refused classify the same",
+  classify(cleanStderr(byName("socket-absent").stderr), 1) ===
+    classify(cleanStderr(byName("socket-refused").stderr), 1),
+  true,
+);
+check(
+  "the pest diagnostic gutter survives — its alignment is the whole message",
+  cleanStderr(byName("bad-query").stderr).includes("1 | status=Nope"),
+  true,
+);
+check(
+  "bad-query keeps the list of accepted tokens",
+  /expected status_queued, status_stashed/.test(
+    cleanStderr(byName("bad-query").stderr),
+  ),
+  true,
+);
+check(
+  "the 'Pueue: ' prefix is dropped from plain client errors",
+  cleanStderr(byName("plain-client-error").stderr),
+  "The task to be followed doesn't exist.",
+);
+check(
+  "clap output is left alone apart from trimming",
+  cleanStderr(byName("clap-bad-argument").stderr).startsWith(
+    "error: unexpected argument '--color' found",
+  ),
+  true,
+);
+check(
+  "firstLine gives a toast-sized title",
+  firstLine(cleanStderr(byName("socket-absent").stderr)),
+  "Failed to initialize client.",
+);
+
+console.log("\nerror predicates");
+check(
+  "a missing binary is not a daemon problem",
+  isDaemonDown(new PueueError("binary-not-found", "x")),
+  false,
+);
+check(
+  "both daemon shapes read as down",
+  [
+    isDaemonDown(new PueueError("daemon-not-running", "x")),
+    isDaemonDown(new PueueError("config-missing", "x")),
+  ],
+  [true, true],
+);
+check(
+  "ENOENT on spawn means the binary, not the daemon",
+  fromExecError({ code: "ENOENT" }, ["pueue"]).kind,
+  "binary-not-found",
+);
+check(
+  "an execFile timeout is reported as a timeout, not a command failure",
+  fromExecError({ killed: true, signal: "SIGTERM", stderr: "" }, ["pueue"])
+    .kind,
+  "timeout",
+);
+check(
+  "a real failure is classified from its stderr",
+  fromExecError({ code: 1, stderr: byName("socket-refused").stderr }, [
+    "pueue",
+    "status",
+  ]).kind,
+  "daemon-not-running",
+);
+check(
+  "PueueError.message is the first line, not the whole report",
+  fromExecError({ code: 1, stderr: byName("config-missing").stderr }, [])
+    .message,
+  "Failed to read configuration.",
 );
 
 console.log(

@@ -1,0 +1,37 @@
+[
+  {
+    "name": "daemon-never-started",
+    "exitCode": 1,
+    "stderr": "Error: \n   0: \u001b[91mI/O error at path \"/tmp/pueue-cap/data/shared_secret\" while opening secret file. Did you start the daemon at least once?:\n      No such file or directory (os error 2)\u001b[0m\n\nLocation:\n   \u001b[35mpueue/src/bin/pueue.rs\u001b[0m:\u001b[35m91\u001b[0m\n\nBacktrace omitted. Run with RUST_BACKTRACE=1 environment variable to display it.\nRun with RUST_BACKTRACE=full to include source snippets.\n"
+  },
+  {
+    "name": "config-missing",
+    "exitCode": 1,
+    "stderr": "Error: \n   0: \u001b[91mFailed to read configuration.\u001b[0m\n   1: \u001b[91mI/O error at path \"/tmp/pueue-cap/nope.yml\" while opening config file:\n      No such file or directory (os error 2)\u001b[0m\n\nLocation:\n   \u001b[35mpueue/src/bin/pueue.rs\u001b[0m:\u001b[35m51\u001b[0m\n\nBacktrace omitted. Run with RUST_BACKTRACE=1 environment variable to display it.\nRun with RUST_BACKTRACE=full to include source snippets.\n"
+  },
+  {
+    "name": "clap-bad-argument",
+    "exitCode": 2,
+    "stderr": "error: unexpected argument '--color' found\n\n  tip: to pass '--color' as a value, use '-- --color'\n\nUsage: pueue status [OPTIONS] [QUERY]...\n\nFor more information, try '--help'.\n"
+  },
+  {
+    "name": "bad-query",
+    "exitCode": 1,
+    "stderr": "Error: \n   0: \u001b[91mFailed to parse query\u001b[0m\n   1: \u001b[91m --> 1:8\n        |\n      1 | status=Nope\n        |        ^---\n        |\n        = expected status_queued, status_stashed, status_paused, status_running, status_success, or status_failed\u001b[0m\n\nLocation:\n   \u001b[35mpueue/src/client/commands/state/query/mod.rs\u001b[0m:\u001b[35m163\u001b[0m\n\nBacktrace omitted. Run with RUST_BACKTRACE=1 environment variable to display it.\nRun with RUST_BACKTRACE=full to include source snippets.\n"
+  },
+  {
+    "name": "plain-client-error",
+    "exitCode": 1,
+    "stderr": "Pueue: The task to be followed doesn't exist.\n"
+  },
+  {
+    "name": "socket-absent",
+    "exitCode": 1,
+    "stderr": "Error: \n   0: \u001b[91mFailed to initialize client.\u001b[0m\n   1: \u001b[91mFailed to initialize stream.\u001b[0m\n   2: \u001b[91mI/O error at path \"/tmp/pueue-cap/data/pueue_david.socket\" while connecting to daemon. Did you start it?:\n      No such file or directory (os error 2)\u001b[0m\n\nLocation:\n   \u001b[35m/private/tmp/pueue-20260302-7494-smgwtn/pueue-4.0.4/pueue_lib/src/network/client.rs\u001b[0m:\u001b[35m85\u001b[0m\n\nBacktrace omitted. Run with RUST_BACKTRACE=1 environment variable to display it.\nRun with RUST_BACKTRACE=full to include source snippets.\n"
+  },
+  {
+    "name": "socket-refused",
+    "exitCode": 1,
+    "stderr": "Error: \n   0: \u001b[91mFailed to initialize client.\u001b[0m\n   1: \u001b[91mFailed to initialize stream.\u001b[0m\n   2: \u001b[91mI/O error at path \"/tmp/pueue-cap/data/pueue_david.socket\" while connecting to daemon. Did you start it?:\n      Connection refused (os error 61)\u001b[0m\n\nLocation:\n   \u001b[35m/private/tmp/pueue-20260302-7494-smgwtn/pueue-4.0.4/pueue_lib/src/network/client.rs\u001b[0m:\u001b[35m85\u001b[0m\n\nBacktrace omitted. Run with RUST_BACKTRACE=1 environment variable to display it.\nRun with RUST_BACKTRACE=full to include source snippets.\n"
+  }
+]
