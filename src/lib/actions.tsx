@@ -9,9 +9,11 @@
 
 import {
   Alert,
+  LaunchType,
   Toast,
   confirmAlert,
   getPreferenceValues,
+  launchCommand,
   showToast,
 } from "@raycast/api";
 import { showFailureToast, type MutatePromise } from "@raycast/utils";
@@ -49,6 +51,25 @@ const RECONCILE_DELAY_MS = 400;
  * This is also what keeps a mis-tuned first delay from being visible at all.
  */
 const RECONCILE_SETTLE_MS = 1_500;
+
+/**
+ * Ask the menu bar to re-read, rather than leaving it up to a minute stale.
+ *
+ * This is the documented use of `launchCommand` with `LaunchType.Background` —
+ * forcing a sibling command's background refresh. It resolves when the command
+ * is *launched*, not when it finishes, so awaiting it would buy nothing.
+ *
+ * It throws when the target command is disabled, which is a perfectly normal
+ * state (menu bar commands are off by default for store installs) and not
+ * something to report — hence the swallowed rejection.
+ */
+function nudgeMenuBar(): void {
+  // Give the daemon's update loop the same head start the reconcile gets, so
+  // the menu bar doesn't re-read the pre-change state we just worked around.
+  setTimeout(() => {
+    launchCommand({ name: "queue-menu", type: LaunchType.Background }).catch(() => {});
+  }, RECONCILE_DELAY_MS);
+}
 
 export interface ActOptions {
   /** Present continuous, e.g. "Killing task 4". Becomes the toast title. */
@@ -116,6 +137,7 @@ export async function act<T>(
 
     setTimeout(() => state.revalidate(), RECONCILE_DELAY_MS);
     setTimeout(() => state.revalidate(), RECONCILE_SETTLE_MS);
+    nudgeMenuBar();
     return true;
   } catch (error) {
     // pueue refuses some things outright — removing a running task, for one.
