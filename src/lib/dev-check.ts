@@ -949,8 +949,14 @@ check(
 
 console.log("\nunreachable host is not a pueue failure");
 for (const [name, text] of [
-  ["connect timeout", "ssh: connect to host 192.0.2.1 port 22: Operation timed out"],
-  ["dns failure", "ssh: Could not resolve hostname nope.invalid: nodename nor servname provided"],
+  [
+    "connect timeout",
+    "ssh: connect to host 192.0.2.1 port 22: Operation timed out",
+  ],
+  [
+    "dns failure",
+    "ssh: Could not resolve hostname nope.invalid: nodename nor servname provided",
+  ],
   ["no route", "ssh: connect to host 10.0.0.9 port 22: No route to host"],
   ["refused", "ssh: connect to host box port 22: Connection refused"],
   ["auth", "daviddwlee84@host: Permission denied (publickey)."],

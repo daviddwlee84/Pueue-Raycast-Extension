@@ -254,7 +254,9 @@ export function describeError(
         "",
         "### Things to check",
         "",
-        "- Is the host reachable at all? `ssh " + (connection?.name ?? "your-host") + " true`",
+        "- Is the host reachable at all? `ssh " +
+          (connection?.name ?? "your-host") +
+          " true`",
         "- Is the name right? The connection's host field is passed to `ssh`",
         "  verbatim, so a `~/.ssh/config` alias works — but a typo looks exactly",
         "  like an unreachable machine.",
