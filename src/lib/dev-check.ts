@@ -35,6 +35,8 @@ import {
 } from "./pueue/normalize";
 import fixture from "./fixtures/state.json";
 import stderrFixture from "./fixtures/stderr.json";
+import { argvFor, longFlagsOf, subcommandOf } from "./pueue/argv";
+import type { Mutation } from "./pueue/transport";
 import {
   classify,
   cleanStderr,
@@ -44,6 +46,17 @@ import {
   PueueError,
   type PueueErrorKind,
 } from "./pueue/errors";
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+
+/**
+ * The live `--help` check needs a real binary. binary.ts can't be imported here
+ * because it pulls in @raycast/api, which only exists inside Raycast — so probe
+ * the same directories it does.
+ */
+const PUEUE_BIN =
+  ["/opt/homebrew/bin/pueue", "/usr/local/bin/pueue"].find(existsSync) ??
+  "pueue";
 
 const state = fixture as unknown as State;
 const t = (id: number) => state.tasks[String(id)];
@@ -363,6 +376,97 @@ check(
     .message,
   "Failed to read configuration.",
 );
+
+/* -- argv, checked against the real binary's --help ----------------------- */
+
+/**
+ * One representative Mutation per variant, with every optional field set so
+ * that every flag we can emit gets exercised.
+ */
+const MUTATIONS: Mutation[] = [
+  {
+    op: "add",
+    command: "echo hi && ls",
+    group: "g",
+    label: "l",
+    priority: 3,
+    workingDirectory: "/tmp",
+    after: [1, 2],
+    delay: "2h",
+    stashed: true,
+    immediate: true,
+    escape: true,
+  },
+  { op: "start", ids: [1], group: "g", all: true },
+  { op: "pause", ids: [1], group: "g", all: true, wait: true },
+  { op: "kill", ids: [1], group: "g", all: true, signal: "int" },
+  { op: "restart", ids: [1], inPlace: true, stashed: true, immediate: true },
+  { op: "restart", ids: [1], inPlace: false },
+  { op: "remove", ids: [1, 2] },
+  { op: "stash", ids: [1], group: "g", delay: "1h" },
+  { op: "enqueue", ids: [1], group: "g", delay: "1h" },
+  { op: "clean", group: "g", successfulOnly: true },
+  { op: "switch", a: 1, b: 2 },
+  { op: "parallel", count: 4, group: "g" },
+  { op: "group-add", name: "g", parallel: 2 },
+  { op: "group-remove", name: "g" },
+  { op: "send", id: 1, input: "y\n" },
+  { op: "reset", groups: ["g"] },
+];
+
+console.log("\nargv shape");
+check(
+  "add puts the command last, after --, as one element",
+  argvFor({ op: "add", command: "echo a && echo b" }).slice(-3),
+  ["--print-task-id", "--", "echo a && echo b"],
+);
+check(
+  "a command is never shell-quoted — pueue hands it to sh -c itself",
+  argvFor({ op: "add", command: "echo 'it works'" }).at(-1),
+  "echo 'it works'",
+);
+check(
+  "restart is explicit about in-place, since the default is the user's config",
+  [
+    argvFor({ op: "restart", ids: [1], inPlace: true })[1],
+    argvFor({ op: "restart", ids: [1], inPlace: false })[1],
+  ],
+  ["--in-place", "--not-in-place"],
+);
+check(
+  "reset always forces, since we confirm in the UI",
+  argvFor({ op: "reset" }),
+  ["reset", "--force"],
+);
+check(
+  "ids are stringified and trail the flags",
+  argvFor({ op: "kill", ids: [3, 4], signal: "int" }),
+  ["kill", "--signal", "int", "3", "4"],
+);
+check(
+  "group subcommands are two words",
+  subcommandOf(argvFor({ op: "group-add", name: "g" })),
+  ["group", "add"],
+);
+
+console.log("\nargv flags exist in pueue --help (live check)");
+let helpChecked = 0;
+for (const m of MUTATIONS) {
+  const argv = argvFor(m);
+  const sub = subcommandOf(argv);
+  const flags = longFlagsOf(argv);
+  let help: string;
+  try {
+    help = execFileSync(PUEUE_BIN, [...sub, "--help"], { encoding: "utf8" });
+  } catch {
+    console.log(`  skip ${sub.join(" ")} — could not run --help`);
+    continue;
+  }
+  const missing = flags.filter((f) => !help.includes(f));
+  check(`${m.op}: ${flags.join(" ") || "(no flags)"}`, missing, []);
+  helpChecked += 1;
+}
+check("every mutation variant was checked", helpChecked, MUTATIONS.length);
 
 console.log(
   failures === 0

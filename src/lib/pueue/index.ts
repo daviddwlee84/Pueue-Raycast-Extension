@@ -1,0 +1,119 @@
+/**
+ * The public API. Views import from here and nowhere else inside `pueue/`.
+ *
+ * Keeping the factory here rather than in `transport.ts` keeps that module
+ * types-only, so `cli-transport.ts` can depend on it without an import cycle.
+ */
+
+import {
+  createCliTransport,
+  readLogFromDisk,
+  readTaskEnvs,
+} from "./cli-transport";
+import type {
+  FollowHandlers,
+  LogOptions,
+  Mutation,
+  PueueTransport,
+  StatusOptions,
+} from "./transport";
+import type { GroupMap, LogMap, Snapshot, State } from "./types";
+
+export * from "./types";
+export * from "./normalize";
+export {
+  PueueError,
+  cleanStderr,
+  firstLine,
+  isBadQuery,
+  isBinaryMissing,
+  isDaemonDown,
+} from "./errors";
+export type { PueueErrorKind } from "./errors";
+export {
+  isBrewManagedDaemon,
+  pueueDirectory,
+  resolveBrew,
+  resolvePueue,
+  resolvePueued,
+  taskLogPath,
+} from "./binary";
+export type {
+  FollowHandlers,
+  LogOptions,
+  Mutation,
+  PueueTransport,
+  StatusOptions,
+} from "./transport";
+export { readLogFromDisk } from "./cli-transport";
+
+let active: PueueTransport | undefined;
+
+/** The active transport. Swap point for `backlog/socket-transport.md`. */
+export function transport(): PueueTransport {
+  return (active ??= createCliTransport());
+}
+
+/** Testing / future-transport hook. */
+export function setTransport(t: PueueTransport | undefined): void {
+  active = t;
+}
+
+export const status = (o?: StatusOptions): Promise<State> =>
+  transport().readState(o);
+export const groups = (signal?: AbortSignal): Promise<GroupMap> =>
+  transport().readGroups(signal);
+export const logs = (ids: number[], o?: LogOptions): Promise<LogMap> =>
+  transport().readLogs(ids, o);
+export const mutate = (m: Mutation): Promise<number | void> =>
+  transport().mutate(m);
+export const follow = (
+  id: number,
+  lines: number,
+  h: FollowHandlers,
+): (() => void) => transport().followLog(id, lines, h);
+export const probe = () => transport().probe();
+
+/**
+ * A timestamped read.
+ *
+ * The menu bar keeps the data and its age in one cache entry so the two can
+ * never drift — which matters because Raycast restores a menu bar item from its
+ * database rather than by re-running the command, so a stale render can outlive
+ * a restart. Showing *when* it was read turns that from misleading into merely
+ * old.
+ */
+export async function snapshot(o?: StatusOptions): Promise<Snapshot> {
+  return { state: await status(o), fetchedAt: Date.now() };
+}
+
+/**
+ * A task's captured output, preferring the on-disk file and falling back to
+ * the CLI. Returns undefined when there is genuinely no output yet.
+ */
+export async function readLogText(
+  id: number,
+  o: { lines?: number; full?: boolean } = {},
+): Promise<{ text: string; truncated: boolean; path?: string } | undefined> {
+  if (o.full) {
+    const disk = await readLogFromDisk(id);
+    if (disk) return disk;
+  }
+  const map = await logs(
+    [id],
+    o.full ? { full: true } : { lines: o.lines ?? 20 },
+  );
+  const entry = map[String(id)];
+  return entry ? { text: entry.output, truncated: !o.full } : undefined;
+}
+
+/**
+ * A task's environment snapshot, on demand.
+ *
+ * Uncached and never called from a render path: this is the field the transport
+ * strips from every parsed task precisely so it cannot reach Raycast's
+ * disk-backed cache. Only fetch it when a user explicitly asks to see it.
+ */
+export async function taskEnvs(id: number): Promise<Record<string, string>> {
+  return (await readTaskEnvs(id)) ?? {};
+}
