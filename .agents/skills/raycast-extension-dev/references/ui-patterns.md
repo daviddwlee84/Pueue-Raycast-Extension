@@ -143,16 +143,82 @@ log view.
 
 - The **first action is the ⏎ action.** Order matters more than any other UI
   decision in the panel.
-- Prefer `Keyboard.Shortcut.Common.*` (`Refresh`, `Copy`, `Open`, `Remove`,
-  `New`, `Duplicate`) so bindings match the rest of Raycast.
-- **`⌘K` and `⌘P` are reserved** (Open Action Panel, Open Search Bar Dropdown).
-  Bind them and they are silently ignored — nothing throws. Only `ray lint`
-  catches this.
+- Prefer `Keyboard.Shortcut.Common.*` so bindings match the rest of Raycast —
+  and read the table below before writing one into a README, because their key
+  combinations are not what the names suggest.
 - **Name a shortcut after what it does, not after its family.** If you have two
   restarts, one destructive and one not, `⌘⇧R` and `⌘⌥R` need to be documented by
   behaviour or someone will lose work.
 - `ActionPanel.Submenu` for a set of alternatives (accounts, groups) that would
   otherwise flood the panel.
+
+### Shortcuts Raycast has already taken
+
+Three separate sets, and only the first is enforced by anything.
+
+**1. Reserved globally — `ray lint` fails the build.**
+
+| Key | Raycast's use |
+| --- | --- |
+| `⌘K` | Open Action Panel |
+| `⌘P` | Open Search Bar Dropdown |
+
+Bind these and they are silently ignored at runtime; nothing throws. `ray lint`
+is the only thing that catches it, which is one of the reasons `lint` belongs in
+the gate alongside `tsc`.
+
+**2. The Debug section — injected into *every* action panel while an extension
+is in development, and NOT caught by `ray lint`.**
+
+| Key | Raycast's use |
+| --- | --- |
+| `⌘R` | Reload |
+| `⇧⌘S` | Open Support Directory |
+| `⇧⌘D` | Open Documentation |
+| `⇧⌘X` | Clear Assets Cache |
+| `⌘⌥D` | Open React Developer Tools |
+
+These are the dangerous ones. They pass lint, they pass typecheck, and a store
+user never sees the conflict — but **you** develop against it, so your own
+action does nothing and looks broken for reasons that have nothing to do with
+your code. A detail-pane toggle on `⇧⌘D` was dead for exactly this reason and
+took a screenshot to diagnose.
+
+`⌘R` is unavoidable if you use `Keyboard.Shortcut.Common.Refresh`, which is what
+you should use. Leave it — fighting Raycast's own recommended constant is worse
+than a dev-mode duplicate. Everything else in this table, avoid.
+
+**3. `Keyboard.Shortcut.Common.*` — free to use, but check the actual keys.**
+
+| Constant | macOS |
+| --- | --- |
+| `Copy` | `⌘⇧C` |
+| `CopyDeeplink` | `⌘⇧C` |
+| `CopyName` | `⌘⇧.` |
+| `CopyPath` | `⌘⇧,` |
+| `Save` | `⌘S` |
+| `Duplicate` | **`⌘D`** |
+| `Edit` | `⌘E` |
+| `MoveUp` / `MoveDown` | `⌘⇧↑` / `⌘⇧↓` |
+| `New` | `⌘N` |
+| `Open` | `⌘O` |
+| `OpenWith` | `⌘⇧O` |
+| `Pin` | `⌘⇧P` |
+| `Refresh` | `⌘R` |
+| `Remove` | **`⌃X`** |
+| `RemoveAll` | `⌃⇧X` |
+| `ToggleQuickLook` | `⌘Y` |
+
+The two in bold are the ones people guess wrong. `Remove` is **not** `⌘⌫`, and
+`Duplicate` is **not** `⌘⇧D`. Both were written into a README from memory and
+were wrong for months, because nothing checks documentation against bindings.
+If you list shortcuts in a README, copy them from this table or from
+`developers.raycast.com/api-reference/keyboard` — not from what you remember
+typing.
+
+Note also that `Pin` is `⌘⇧P`. Reusing that key for something else (a Pause
+action, say) is legal and works, but the moment a panel gains a real pin action
+you have a silent conflict.
 
 ## Confirmations and toasts
 

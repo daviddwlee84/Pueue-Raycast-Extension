@@ -444,9 +444,15 @@ Load one only when its condition fires. Do not preload.
 - **A `List.Dropdown` silently resets when its `value` is not among its children.**
   Seed a static fallback so the first paint is never empty, and render a synthetic
   `(gone)` item for an unknown current value.
-- **`⌘K` and `⌘P` are Raycast's own** (Open Action Panel, Open Search Bar
-  Dropdown). Bind them and they are silently ignored — nothing throws. Only
-  `ray lint` catches this.
+- **Raycast has taken more shortcuts than `ray lint` knows about.** `⌘K` and
+  `⌘P` are reserved (Open Action Panel, Open Search Bar Dropdown) and lint fails
+  on them. But while an extension is *in development* Raycast also injects a
+  Debug section into every action panel — `⌘R`, `⇧⌘S`, `⇧⌘D`, `⇧⌘X`, `⌘⌥D` —
+  and **those pass lint, pass typecheck, and silently win over yours.** Your own
+  action just does nothing, on your machine only. Full table, plus the real key
+  combinations behind every `Keyboard.Shortcut.Common.*` (`Remove` is `⌃X`, not
+  `⌘⌫`; `Duplicate` is `⌘D`, not `⌘⇧D`), in
+  `references/ui-patterns.md` → *Shortcuts Raycast has already taken*.
 - **`@raycast/api` bundles its own copy of `@types/react`.** Type props that hold
   JSX as `React.JSX.Element`, not `React.ReactNode` — the root `ReactNode` is a
   structurally different type that silently fails to match `ActionPanel`'s

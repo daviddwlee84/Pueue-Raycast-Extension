@@ -80516,3 +80516,453 @@ info  - checked TypeScript
 ready  - built extension successfully
 ```
 </details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:45:31Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit the connection mirror
+
+```bash
+python3 - <<'PY'
+p='backlog/ai-tools.md'
+s=open(p).read()
+old='''## Requirements'''
+new='''## Preferences do not reach a tool
+
+Found by using it: the menu bar listed `lab` and `nas` while a tool in the same
+session reported `availableConnections: ["Local"]`. Raycast passes
+extension-level preferences to *commands*; a tool gets an empty preference
+object, so `connections` comes back `undefined` and every remote disappears.
+
+Nothing fails loudly. `pueuePath` degrades into the probe, which finds Homebrew's
+pueue anyway, so the tools work perfectly against the local daemon and simply
+cannot see any other one.
+
+Two fixes were possible:
+
+| | |
+| --- | --- |
+| a `preferences` array on each `tools[]` entry | schema-valid — `ray lint` accepts it, measured — but it would mean configuring the same connection list once per tool, eight times over |
+| mirror the raw preference into `LocalStorage` | one write when the value changes, read by the tools as a fallback |
+
+The mirror won. `connections()` writes `AI_CONNECTIONS_KEY` whenever it sees a
+preference value that differs from the last one written, and **only** when it can
+see preferences at all — in a tool the value is `undefined`, and writing then
+would erase what the commands put there. The commands run constantly; the menu
+bar alone refreshes every minute.
+
+`toolConnections()` prefers the real preference and falls back to the mirror, so
+nothing has to change if Raycast ever starts passing them through.
+
+When a tool can still see only `Local` it says which of the two things is true —
+"no remotes are configured" and "I cannot see your remotes" are different claims,
+and only one of them is safe to make.
+
+## Requirements'''
+assert s.count(old)==1
+s=s.replace(old,new)
+open(p,'w').write(s)
+print('ok')
+PY
+git add -A && git commit -q -F - <<'EOF'
+Let the AI tools see the remote connections
+
+The menu bar listed `lab` and `nas` while a tool in the same session reported
+`availableConnections: ["Local"]`. Raycast passes extension-level preferences to
+*commands*; a tool gets an empty preference object, so `connections` came back
+undefined and every remote vanished.
+
+Nothing failed loudly, which is why it looked like it worked: `pueuePath`
+degrades into the probe and finds Homebrew's pueue anyway, so the tools ran
+correctly against the local daemon and simply could not see any other one.
+
+A `preferences` array on each `tools[]` entry is schema-valid — measured, `ray
+lint` accepts it — but would mean configuring the same connection list once per
+tool, eight times over. So the commands mirror the raw preference into
+LocalStorage instead, and `toolConnections()` prefers the real preference and
+falls back to the mirror. If Raycast ever starts passing preferences through,
+nothing here has to change.
+
+The mirror is written only by a context that can actually see preferences: in a
+tool the value is undefined, and writing then would erase what the commands put
+there.
+
+A tool that can still see only Local now says which of the two things is true.
+"You have no remote connections" and "I cannot see your remote connections" are
+different claims, and only one of them was ever safe to make.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+EOF
+git log --oneline -1
+```
+
+```text
+ok
+20e97a7 Let the AI tools see the remote connections
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:45:38Z)**_
+
+Now the skill update. Let me see what's there:
+
+_**Agent (claude-opus-5 2026-07-26 21:45:39Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Inspect the raycast-extension-dev skill
+
+`S=~/Documents/Program/agent-skills/skills/local/raycast-extension-dev; ls -R "$S" | head -40; echo "=== SKILL.md"; wc -l "$S/SKILL.md"; grep -n "shortcut\|Shortcut\|⌘" "$S/SKILL.md" "$S/references/"*.md 2>/dev/null | head -20`
+
+```text
+assets
+references
+scripts
+SKILL.md
+
+/Users/david/Documents/Program/agent-skills/skills/local/raycast-extension-dev/assets:
+dev-check.ts.template
+error-descriptor.tsx.template
+eslint.config.mjs.template
+extension-icon.placeholder.png
+Justfile.template
+metadata-README.md.template
+package.json.template
+transport.ts.template
+tsconfig.json.template
+
+/Users/david/Documents/Program/agent-skills/skills/local/raycast-extension-dev/references:
+data-and-state.md
+manifest-and-commands.md
+menu-bar.md
+runtime-and-subprocess.md
+store-publishing.md
+ui-patterns.md
+
+/Users/david/Documents/Program/agent-skills/skills/local/raycast-extension-dev/scripts:
+check-store-readiness.sh
+new-raycast-extension.sh
+=== SKILL.md
+     485 /Users/david/Documents/Program/agent-skills/skills/local/raycast-extension-dev/SKILL.md
+/Users/david/Documents/Program/agent-skills/skills/local/raycast-extension-dev/SKILL.md:59:| `ray lint` | manifest schema, icons, ESLint, Prettier, **reserved-shortcut collisions** | types |
+/Users/david/Documents/Program/agent-skills/skills/local/raycast-extension-dev/SKILL.md:372:| `references/ui-patterns.md` | building a List/Detail/Form surface, adding a dropdown or shortcut, rendering program output as markdown, or designing empty and error states |
+/Users/david/Documents/Program/agent-skills/skills/local/raycast-extension-dev/SKILL.md:396:  and icon validation. It alone catches reserved-shortcut collisions, so you need
+/Users/david/Documents/Program/agent-skills/skills/local/raycast-extension-dev/SKILL.md:447:- **`⌘K` and `⌘P` are Raycast's own** (Open Action Panel, Open Search Bar
+/Users/david/Documents/Program/agent-skills/skills/local/raycast-extension-dev/references/store-publishing.md:100:| reserved-shortcut collisions | CHANGELOG placeholder present |
+/Users/david/Documents/Program/agent-skills/skills/local/raycast-extension-dev/references/ui-patterns.md:4:shortcut, rendering program output as markdown, or designing the empty and error
+/Users/david/Documents/Program/agent-skills/skills/local/raycast-extension-dev/references/ui-patterns.md:14:- [ActionPanel and shortcuts](#actionpanel-and-shortcuts)
+/Users/david/Documents/Program/agent-skills/skills/local/raycast-extension-dev/references/ui-patterns.md:129:## ActionPanel and shortcuts
+/Users/david/Documents/Program/agent-skills/skills/local/raycast-extension-dev/references/ui-patterns.md:136:            shortcut={{ modifiers: ["cmd", "shift"], key: "k" }} onAction={kill} />
+/Users/david/Documents/Program/agent-skills/skills/local/raycast-extension-dev/references/ui-patterns.md:139:    <Action.CopyToClipboard content={t.command} shortcut={Keyboard.Shortcut.Common.Copy} />
+/Users/david/Documents/Program/agent-skills/skills/local/raycast-extension-dev/references/ui-patterns.md:146:- Prefer `Keyboard.Shortcut.Common.*` (`Refresh`, `Copy`, `Open`, `Remove`,
+/Users/david/Documents/Program/agent-skills/skills/local/raycast-extension-dev/references/ui-patterns.md:148:- **`⌘K` and `⌘P` are reserved** (Open Action Panel, Open Search Bar Dropdown).
+/Users/david/Documents/Program/agent-skills/skills/local/raycast-extension-dev/references/ui-patterns.md:151:- **Name a shortcut after what it does, not after its family.** If you have two
+/Users/david/Documents/Program/agent-skills/skills/local/raycast-extension-dev/references/ui-patterns.md:152:  restarts, one destructive and one not, `⌘⇧R` and `⌘⌥R` need to be documented by
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:45:45Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read the shortcut guidance
+
+`S=~/Documents/Program/agent-skills/skills/local/raycast-extension-dev; sed -n 125,160p "$S/references/ui-patterns.md"; echo "=== SKILL.md 440-460"; sed -n 440,460p "$S/SKILL.md"`
+
+```text
+A standalone `<Detail>` takes `isLoading`, `navigationTitle`, `markdown`,
+`metadata`, and `actions`, and is the right surface for a full error page or a
+log view.
+
+## ActionPanel and shortcuts
+
+```tsx
+<ActionPanel>
+  <ActionPanel.Section>
+    <Action.Push title="Show Log" target={<LogView id={t.id} />} />
+    <Action title="Kill" style={Action.Style.Destructive}
+            shortcut={{ modifiers: ["cmd", "shift"], key: "k" }} onAction={kill} />
+  </ActionPanel.Section>
+  <ActionPanel.Section title="Copy">
+    <Action.CopyToClipboard content={t.command} shortcut={Keyboard.Shortcut.Common.Copy} />
+  </ActionPanel.Section>
+</ActionPanel>
+```
+
+- The **first action is the ⏎ action.** Order matters more than any other UI
+  decision in the panel.
+- Prefer `Keyboard.Shortcut.Common.*` (`Refresh`, `Copy`, `Open`, `Remove`,
+  `New`, `Duplicate`) so bindings match the rest of Raycast.
+- **`⌘K` and `⌘P` are reserved** (Open Action Panel, Open Search Bar Dropdown).
+  Bind them and they are silently ignored — nothing throws. Only `ray lint`
+  catches this.
+- **Name a shortcut after what it does, not after its family.** If you have two
+  restarts, one destructive and one not, `⌘⇧R` and `⌘⌥R` need to be documented by
+  behaviour or someone will lose work.
+- `ActionPanel.Submenu` for a set of alternatives (accounts, groups) that would
+  otherwise flood the panel.
+
+## Confirmations and toasts
+
+```ts
+if (needsConfirm && prefs.confirmDestructive) {
+=== SKILL.md 440-460
+  persistent banner.
+- **Scope `useCachedState` and `LocalStorage` keys** by whatever the value belongs
+  to — account, host, workspace. One shared key meant switching machines left a
+  list filtered by a group that only existed elsewhere, showing nothing.
+- **A `List.Dropdown` silently resets when its `value` is not among its children.**
+  Seed a static fallback so the first paint is never empty, and render a synthetic
+  `(gone)` item for an unknown current value.
+- **`⌘K` and `⌘P` are Raycast's own** (Open Action Panel, Open Search Bar
+  Dropdown). Bind them and they are silently ignored — nothing throws. Only
+  `ray lint` catches this.
+- **`@raycast/api` bundles its own copy of `@types/react`.** Type props that hold
+  JSX as `React.JSX.Element`, not `React.ReactNode` — the root `ReactNode` is a
+  structurally different type that silently fails to match `ActionPanel`'s
+  children.
+- **`@types/node` must match Raycast's runtime (Node 22), not your shell's node.**
+  Typing against 24 lets you write APIs that compile and throw at runtime.
+- **Never `shell: true`.** Use `execFile` with an argv array. And raise
+  `maxBuffer` — the 1 MB default truncates a large JSON read into a confusing
+  parse error instead of a clear failure.
+- **Global flags of clap-based CLIs must precede the subcommand.** `foo status
+  --color never` exits **2** with a clap error; `foo --color never status` is
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:46:21Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm documenting the actual behavior of the linting tool and the debug shortcuts—`ray lint` catches the reserved `⌘K` and `⌘P` but misses dev-mode collisions like `⌘⇧D`, which still gets shadowed despite passing validation. The Debug section adds several bindings in dev mode including reload, support directory, documentation, and cache clearing, plus `⌘⌥D` for React DevTools.
+
+Now I'm cross-referencing the `Keyboard.Shortcut.Common` table from the docs to correct the documented key combos—I had a couple wrong. I'm also spotting a real collision: the Common table lists Pin as `⌘⇧P`, but the repo already binds that same combo to Pause, which is a direct conflict I need to flag.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:46:22Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Add the shortcut reference to the skill
+
+```bash
+S=~/Documents/Program/agent-skills/skills/local/raycast-extension-dev
+python3 - <<'PY'
+import os
+S=os.path.expanduser('~/Documents/Program/agent-skills/skills/local/raycast-extension-dev')
+p=S+'/references/ui-patterns.md'
+s=open(p).read()
+
+old = '''- The **first action is the ⏎ action.** Order matters more than any other UI
+  decision in the panel.
+- Prefer `Keyboard.Shortcut.Common.*` (`Refresh`, `Copy`, `Open`, `Remove`,
+  `New`, `Duplicate`) so bindings match the rest of Raycast.
+- **`⌘K` and `⌘P` are reserved** (Open Action Panel, Open Search Bar Dropdown).
+  Bind them and they are silently ignored — nothing throws. Only `ray lint`
+  catches this.
+- **Name a shortcut after what it does, not after its family.** If you have two
+  restarts, one destructive and one not, `⌘⇧R` and `⌘⌥R` need to be documented by
+  behaviour or someone will lose work.
+- `ActionPanel.Submenu` for a set of alternatives (accounts, groups) that would
+  otherwise flood the panel.'''
+
+new = '''- The **first action is the ⏎ action.** Order matters more than any other UI
+  decision in the panel.
+- Prefer `Keyboard.Shortcut.Common.*` so bindings match the rest of Raycast —
+  and read the table below before writing one into a README, because their key
+  combinations are not what the names suggest.
+- **Name a shortcut after what it does, not after its family.** If you have two
+  restarts, one destructive and one not, `⌘⇧R` and `⌘⌥R` need to be documented by
+  behaviour or someone will lose work.
+- `ActionPanel.Submenu` for a set of alternatives (accounts, groups) that would
+  otherwise flood the panel.
+
+### Shortcuts Raycast has already taken
+
+Three separate sets, and only the first is enforced by anything.
+
+**1. Reserved globally — `ray lint` fails the build.**
+
+| Key | Raycast's use |
+| --- | --- |
+| `⌘K` | Open Action Panel |
+| `⌘P` | Open Search Bar Dropdown |
+
+Bind these and they are silently ignored at runtime; nothing throws. `ray lint`
+is the only thing that catches it, which is one of the reasons `lint` belongs in
+the gate alongside `tsc`.
+
+**2. The Debug section — injected into *every* action panel while an extension
+is in development, and NOT caught by `ray lint`.**
+
+| Key | Raycast's use |
+| --- | --- |
+| `⌘R` | Reload |
+| `⇧⌘S` | Open Support Directory |
+| `⇧⌘D` | Open Documentation |
+| `⇧⌘X` | Clear Assets Cache |
+| `⌘⌥D` | Open React Developer Tools |
+
+These are the dangerous ones. They pass lint, they pass typecheck, and a store
+user never sees the conflict — but **you** develop against it, so your own
+action does nothing and looks broken for reasons that have nothing to do with
+your code. A detail-pane toggle on `⇧⌘D` was dead for exactly this reason and
+took a screenshot to diagnose.
+
+`⌘R` is unavoidable if you use `Keyboard.Shortcut.Common.Refresh`, which is what
+you should use. Leave it — fighting Raycast's own recommended constant is worse
+than a dev-mode duplicate. Everything else in this table, avoid.
+
+**3. `Keyboard.Shortcut.Common.*` — free to use, but check the actual keys.**
+
+| Constant | macOS |
+| --- | --- |
+| `Copy` | `⌘⇧C` |
+| `CopyDeeplink` | `⌘⇧C` |
+| `CopyName` | `⌘⇧.` |
+| `CopyPath` | `⌘⇧,` |
+| `Save` | `⌘S` |
+| `Duplicate` | **`⌘D`** |
+| `Edit` | `⌘E` |
+| `MoveUp` / `MoveDown` | `⌘⇧↑` / `⌘⇧↓` |
+| `New` | `⌘N` |
+| `Open` | `⌘O` |
+| `OpenWith` | `⌘⇧O` |
+| `Pin` | `⌘⇧P` |
+| `Refresh` | `⌘R` |
+| `Remove` | **`⌃X`** |
+| `RemoveAll` | `⌃⇧X` |
+| `ToggleQuickLook` | `⌘Y` |
+
+The two in bold are the ones people guess wrong. `Remove` is **not** `⌘⌫`, and
+`Duplicate` is **not** `⌘⇧D`. Both were written into a README from memory and
+were wrong for months, because nothing checks documentation against bindings.
+If you list shortcuts in a README, copy them from this table or from
+`developers.raycast.com/api-reference/keyboard` — not from what you remember
+typing.
+
+Note also that `Pin` is `⌘⇧P`. Reusing that key for something else (a Pause
+action, say) is legal and works, but the moment a panel gains a real pin action
+you have a silent conflict.'''
+
+assert s.count(old)==1
+s=s.replace(old,new)
+open(p,'w').write(s)
+print('ui-patterns.md updated')
+PY
+```
+
+```text
+ui-patterns.md updated
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:46:34Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Update SKILL.md
+
+```bash
+python3 - <<'PY'
+import os
+S=os.path.expanduser('~/Documents/Program/agent-skills/skills/local/raycast-extension-dev')
+p=S+'/SKILL.md'
+s=open(p).read()
+
+old = '''- **`⌘K` and `⌘P` are Raycast's own** (Open Action Panel, Open Search Bar
+  Dropdown). Bind them and they are silently ignored — nothing throws. Only
+  `ray lint` catches this.'''
+
+new = '''- **Raycast has taken more shortcuts than `ray lint` knows about.** `⌘K` and
+  `⌘P` are reserved (Open Action Panel, Open Search Bar Dropdown) and lint fails
+  on them. But while an extension is *in development* Raycast also injects a
+  Debug section into every action panel — `⌘R`, `⇧⌘S`, `⇧⌘D`, `⇧⌘X`, `⌘⌥D` —
+  and **those pass lint, pass typecheck, and silently win over yours.** Your own
+  action just does nothing, on your machine only. Full table, plus the real key
+  combinations behind every `Keyboard.Shortcut.Common.*` (`Remove` is `⌃X`, not
+  `⌘⌫`; `Duplicate` is `⌘D`, not `⌘⇧D`), in
+  `references/ui-patterns.md` → *Shortcuts Raycast has already taken*.'''
+
+assert s.count(old)==1
+s=s.replace(old,new)
+open(p,'w').write(s)
+print('SKILL.md updated')
+PY
+grep -n "Shortcuts Raycast has already taken" ~/Documents/Program/agent-skills/skills/local/raycast-extension-dev/references/ui-patterns.md
+```
+
+```text
+SKILL.md updated
+155:### Shortcuts Raycast has already taken
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:46:42Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check the skill repo state
+
+`cd ~/Documents/Program/agent-skills && git status --short && git diff --stat`
+
+```text
+ M skills/local/raycast-extension-dev/SKILL.md
+ M skills/local/raycast-extension-dev/references/ui-patterns.md
+ skills/local/raycast-extension-dev/SKILL.md        | 12 +++-
+ .../references/ui-patterns.md                      | 76 ++++++++++++++++++++--
+ 2 files changed, 80 insertions(+), 8 deletions(-)
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:46:52Z)**_
+
+<think><details><summary>Thought Process</summary>
+The skill repo is separate, so I need to be careful about committing there without explicit permission. They asked me to update it, but that's different from asking me to commit the changes. I'll leave the changes staged and let them know, since they might want to review it first in their own repo.
+
+Actually, I should also check whether the extension repo vendors this skill as a copy — there was mention of `.agents/skills/raycast-extension-dev` in the Justfile, so I need to see if that's a vendored version that needs updating too.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:46:53Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check for a vendored copy in the extension repo
+
+`ls .agents/skills/ 2>/dev/null && echo "---" && diff -q .agents/skills/raycast-extension-dev/SKILL.md ~/Documents/Program/agent-skills/skills/local/raycast-extension-dev/SKILL.md 2>/dev/null; echo "exit=$?"`
+
+```text
+agent-history-hygiene
+mkdocs-site-bootstrap
+project-knowledge-harness
+pueue-job-queue
+raycast-extension-dev
+---
+Files .agents/skills/raycast-extension-dev/SKILL.md and /Users/david/Documents/Program/agent-skills/skills/local/raycast-extension-dev/SKILL.md differ
+exit=1
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:47:33Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Sync the vendored copy
+
+```bash
+S=~/Documents/Program/agent-skills/skills/local/raycast-extension-dev
+cp "$S/SKILL.md" .agents/skills/raycast-extension-dev/SKILL.md
+cp "$S/references/ui-patterns.md" .agents/skills/raycast-extension-dev/references/ui-patterns.md
+git status --short .agents/ && just check 2>&1 | grep -E "FAIL|error|✖|assertions passed|built extension" | tail -3
+```
+
+```text
+ M .agents/skills/raycast-extension-dev/SKILL.md
+ M .agents/skills/raycast-extension-dev/references/ui-patterns.md
+  ok   a FailedToSpawn keeps the OS error, which is the actual diagnosis
+all assertions passed
+ready  - built extension successfully
+```
+</details></tool-use>

@@ -43895,3 +43895,381 @@ no dynamic import
 Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
 ```
 </details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:45:37Z)**_
+
+Now the last command — the no-view root-search jump.
+
+_**Agent (claude-opus-5 2026-07-26 21:45:38Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```tsx
+/**
+ * Focus Agent.
+ *
+ * Type a name, land in the terminal. No window, no list — the whole point is
+ * that it is faster than opening a list, so it either does the thing or says
+ * precisely why it could not.
+ *
+ * Matching is deliberately ordered rather than fuzzy. With ~50 agents running,
+ * a fuzzy match on a short string is a coin flip, and focusing the wrong
+ * terminal is worse than being asked to be more specific.
+ */
+
+import { LaunchType, Toast, getPreferenceValues, launchCommand, open, showToast } from "@raycast/api";
+
+import { act, liveAgents, probeHerdr } from "./lib/agents";
+import { normalizeCwd } from "./lib/agents/normalize";
+import type { LiveAgent } from "./lib/agents/types";
+import { describeError } from "./lib/error-states";
+import { statusLabel } from "./lib/format";
+
+interface Args {
+  arguments: { target: string };
+}
+
+export default async function FocusAgent(props: Args) {
+  const target = props.arguments.target.trim();
+  if (!target) return;
+
+  await probeHerdr();
+
+  const snapshot = await liveAgents();
+  const agents = snapshot.data;
+
+  if (agents.length === 0) {
+    const failure = snapshot.failed[0]?.error;
+    await showToast({
+      style: Toast.Style.Failure,
+      title: failure ? describeError(failure).title : "No agents are running",
+      message: failure ? describeError(failure).description.split("\n")[0] : undefined,
+    });
+    return;
+  }
+
+  const matches = findMatches(agents, target);
+
+  if (matches.length === 0) {
+    await showToast({
+      style: Toast.Style.Failure,
+      title: `Nothing matches "${target}"`,
+      message: `${agents.length} agent${agents.length === 1 ? "" : "s"} running. Open Live Agents to see them.`,
+      primaryAction: {
+        title: "Open Live Agents",
+        onAction: () => void launchCommand({ name: "agents", type: LaunchType.UserInitiated }),
+      },
+    });
+    return;
+  }
+
+  if (matches.length > 1) {
+    // Ambiguity is handed back rather than guessed at. Focusing the wrong one of
+    // fifty terminals costs more than one extra keystroke.
+    await showToast({
+      style: Toast.Style.Failure,
+      title: `"${target}" matches ${matches.length} agents`,
+      message: matches
+        .slice(0, 4)
+        .map((a) => a.title ?? folderOf(a) ?? a.handle)
+        .join(", "),
+      primaryAction: {
+        title: "Choose in Live Agents",
+        onAction: () => void launchCommand({ name: "agents", type: LaunchType.UserInitiated }),
+      },
+    });
+    return;
+  }
+
+  const agent = matches[0];
+
+  if (!agent.paneId) {
+    // The Claude session registry knows a process exists but not which terminal
+    // pane it is in, and `herdr agent focus` accepts nothing but a pane id.
+    await showToast({
+      style: Toast.Style.Failure,
+      title: "Found it, but it cannot be focused",
+      message:
+        `${agent.title ?? folderOf(agent) ?? "That agent"} was found through Claude Code's session ` +
+        "registry, which does not record which terminal pane it is in. herdr can focus a pane it owns.",
+    });
+    return;
+  }
+
+  try {
+    await act({ op: "focus", agent });
+    // Two steps: herdr moves focus inside its own session and cannot raise the
+    // window that session runs in. Without this the command appears to no-op.
+    const app = getPreferenceValues<Preferences>().terminalApp;
+    if (app?.path) await open(app.path);
+
+    await showToast({
+      style: Toast.Style.Success,
+      title: agent.title ?? folderOf(agent) ?? agent.paneId,
+      message: statusLabel(agent.status),
+    });
+  } catch (e) {
+    const d = describeError(e);
+    await showToast({ style: Toast.Style.Failure, title: d.title, message: d.description.split("\n")[0] });
+  }
+}
+
+/**
+ * Ordered matching, most specific first.
+ *
+ * Each tier is tried in full before the next, so an exact pane id never loses
+ * to a substring of somebody's folder name. Only the first tier that produces
+ * anything is used — collecting across tiers would make every exact match
+ * ambiguous the moment some other agent's title contained it.
+ */
+export function findMatches(agents: readonly LiveAgent[], target: string): LiveAgent[] {
+  const q = target.toLowerCase();
+
+  const tiers: ((a: LiveAgent) => boolean)[] = [
+    // 1. The pane id, exactly. Unambiguous by construction.
+    (a) => a.paneId?.toLowerCase() === q,
+    // 2. A session id, or its short form as shown in the UI.
+    (a) => a.session?.sessionId.toLowerCase() === q || a.session?.sessionId.toLowerCase().startsWith(q) === true,
+    // 3. The title, exactly.
+    (a) => a.title?.toLowerCase() === q,
+    // 4. The folder name, exactly.
+    (a) => folderOf(a)?.toLowerCase() === q,
+    // 5. Title or folder, as a substring. The only fuzzy tier, and the last.
+    (a) => (a.title?.toLowerCase().includes(q) ?? false) || (folderOf(a)?.toLowerCase().includes(q) ?? false),
+  ];
+
+  for (const tier of tiers) {
+    const hits = agents.filter(tier);
+    if (hits.length > 0) return hits;
+  }
+  return [];
+}
+
+function folderOf(agent: LiveAgent): string | undefined {
+  return normalizeCwd(agent.cwd)?.split("/").filter(Boolean).pop();
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/focus-agent.tsx (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:46:18Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Typecheck and lint all four commands
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && npx tsc --noEmit 2>&1 | head -15; echo "=== tsc ==="; npx ray lint --fix >/dev/null 2>&1; npx ray lint 2>&1 | grep -A6 "error" | head -20; echo "=== lint done ==="`
+
+```text
+=== tsc ===
+=== lint done ===
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+[This command modified 3 files you've previously read: ../Agent-Deck-Raycast-Extension/src/agents.tsx, ../Agent-Deck-Raycast-Extension/src/focus-agent.tsx, ../Agent-Deck-Raycast-Extension/src/agent-menu.tsx. Call Read before editing.]
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:46:34Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to extract `findMatches` into a pure module since it's currently in focus-agent.tsx which has API dependencies that would prevent dev-check from testing it. Moving it to lib/agents/match.ts will let me add proper assertions for the ordered tier matching logic, then run the full gate and commit.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:46:34Z)**_
+
+`findMatches` is pure logic sitting in a file that imports `@raycast/api`, so the harness can't reach it. Moving it out.
+
+_**Agent (claude-opus-5 2026-07-26 21:46:35Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Matching a typed string to one running agent.
+ *
+ * Pure, so the harness can drive it — which matters more here than it looks:
+ * this is the code path that decides which of ~50 terminals you land in, and
+ * getting it wrong is not a visual glitch, it is typing into someone else's
+ * session.
+ */
+
+import { normalizeCwd } from "./normalize";
+import type { LiveAgent } from "./types";
+
+export function folderOf(agent: LiveAgent): string | undefined {
+  return normalizeCwd(agent.cwd)?.split("/").filter(Boolean).pop();
+}
+
+/**
+ * Ordered matching, most specific first.
+ *
+ * Each tier is tried in full before the next, and the FIRST tier that produces
+ * anything wins. Two consequences worth stating, because both are deliberate:
+ *
+ *  - An exact pane id can never lose to a substring of someone else's folder
+ *    name. Collecting hits across tiers instead would make every exact match
+ *    ambiguous the moment another agent's title happened to contain it.
+ *  - A tier returning two hits stops the search rather than falling through to
+ *    a broader one. Ambiguity at a specific tier is real ambiguity; widening
+ *    the net cannot resolve it, only hide it behind more candidates.
+ *
+ * Nothing here is fuzzy except the last tier. With this many agents running, a
+ * fuzzy match on a short string is a coin flip, and the caller asks the user to
+ * be more specific rather than guessing.
+ */
+export function findMatches(agents: readonly LiveAgent[], target: string): LiveAgent[] {
+  const q = target.trim().toLowerCase();
+  if (!q) return [];
+
+  const tiers: ((a: LiveAgent) => boolean)[] = [
+    // 1. The pane id, exactly. Unambiguous by construction.
+    (a) => a.paneId?.toLowerCase() === q,
+    // 2. A session id, whole or as the short prefix the UI displays.
+    (a) => a.session?.sessionId.toLowerCase() === q,
+    (a) => q.length >= 6 && a.session?.sessionId.toLowerCase().startsWith(q) === true,
+    // 3. The title, exactly.
+    (a) => a.title?.toLowerCase() === q,
+    // 4. The folder name, exactly.
+    (a) => folderOf(a)?.toLowerCase() === q,
+    // 5. Title or folder, as a substring. The only fuzzy tier, and the last.
+    (a) => (a.title?.toLowerCase().includes(q) ?? false) || (folderOf(a)?.toLowerCase().includes(q) ?? false),
+  ];
+
+  for (const tier of tiers) {
+    const hits = agents.filter(tier);
+    if (hits.length > 0) return hits;
+  }
+  return [];
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/agents/match.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:46:50Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Move matching to the pure module
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PY'
+import pathlib, re
+p = pathlib.Path("src/focus-agent.tsx")
+t = p.read_text()
+# Drop the local copies; the pure module owns them now.
+t = re.sub(r"/\*\*\n \* Ordered matching, most specific first\..*?\n}\n\nfunction folderOf\(agent: LiveAgent\): string \| undefined \{\n  return normalizeCwd\(agent\.cwd\)\?\.split\(\"/\"\)\.filter\(Boolean\)\.pop\(\);\n}\n", "", t, flags=re.S)
+t = t.replace('import { normalizeCwd } from "./lib/agents/normalize";\n', 'import { findMatches, folderOf } from "./lib/agents/match";\n')
+p.write_text(t)
+print("patched")
+PY
+grep -c "findMatches\|folderOf" src/focus-agent.tsx && npx tsc --noEmit 2>&1 | head -8; echo "tsc done"
+```
+
+```text
+patched
+5
+tsc done
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:47:14Z)**_
+
+Now the assertions for it, since this decides which of ~50 terminals you land in.
+
+_**Agent (claude-opus-5 2026-07-26 21:47:27Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Add focus matching assertions
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PY'
+import pathlib
+p = pathlib.Path("src/lib/dev-check.ts")
+t = p.read_text()
+
+t = t.replace(
+  'import { PROBE_DIRS, expandTilde, pickBinary } from "./agents/probe";',
+  'import { findMatches, folderOf } from "./agents/match";\nimport { PROBE_DIRS, expandTilde, pickBinary } from "./agents/probe";'
+)
+
+anchor = '// ---------------------------------------------------------------------------\nsection("errors: absent is not broken");'
+new = '''// ---------------------------------------------------------------------------
+section("focus: which of fifty terminals you land in");
+
+// Not a cosmetic path. Getting this wrong means typing into someone else's
+// session, so every tier boundary is asserted rather than assumed.
+const FLEET: LiveAgent[] = [
+  liveAgentFor("w3:p7"),
+  { ...liveAgentFor("w3:p8"), title: "deck", cwd: "/Users/dev/Projects/agent-deck" },
+  { ...liveAgentFor("w3:p9"), title: "agent-deck-docs", cwd: "/Users/dev/Projects/docs" },
+  {
+    ...liveAgentFor("w3:p10"),
+    title: "other",
+    cwd: "/Users/dev/Projects/deck",
+    session: { agent: "claude", sessionId: "abcdef12-3456-7890-abcd-ef1234567890" },
+  },
+];
+
+check("empty target matches nothing", findMatches(FLEET, "   "), []);
+check("an exact pane id wins", findMatches(FLEET, "w3:p8").map((a) => a.paneId), ["w3:p8"]);
+// The tier order is the point: "deck" is an exact TITLE on p8, a substring of
+// p9's title, and an exact FOLDER on p10. Without ordered tiers this is a
+// three-way tie and the command refuses to act on an unambiguous request.
+check("an exact title beats a folder and a substring", findMatches(FLEET, "deck").map((a) => a.paneId), ["w3:p8"]);
+check("an exact folder is its own tier", findMatches(FLEET, "agent-deck").map((a) => a.paneId), ["w3:p8"]);
+check("a substring is the last resort", findMatches(FLEET, "doc").map((a) => a.paneId), ["w3:p9"]);
+check("a full session id matches", findMatches(FLEET, "abcdef12-3456-7890-abcd-ef1234567890").length, 1);
+check("a long session prefix matches", findMatches(FLEET, "abcdef12").length, 1);
+// A two-character prefix would match half the fleet by accident.
+check("a short session prefix does not", findMatches(FLEET, "ab").length, 0);
+check("case is ignored", findMatches(FLEET, "DECK").map((a) => a.paneId), ["w3:p8"]);
+check("no match returns empty, never throws", findMatches(FLEET, "nothing-like-this"), []);
+check("matching an empty fleet returns empty", findMatches([], "deck"), []);
+
+// A tier with two hits stops the search rather than widening it. Widening
+// cannot resolve real ambiguity, only bury it under more candidates.
+const TWINS: LiveAgent[] = [
+  { ...liveAgentFor("w1:p1"), title: "build", cwd: "/Users/dev/a" },
+  { ...liveAgentFor("w2:p1"), title: "build", cwd: "/Users/dev/b" },
+];
+check("an ambiguous tier returns both, for the caller to reject", findMatches(TWINS, "build").length, 2);
+
+check("folderOf takes the last path component", folderOf(FLEET[1]), "agent-deck");
+check("folderOf survives no cwd", folderOf({ ...liveAgentFor("w9:p9"), cwd: "" }), undefined);
+
+// ---------------------------------------------------------------------------
+section("errors: absent is not broken");'''
+assert anchor in t
+t = t.replace(anchor, new)
+p.write_text(t)
+print("patched")
+PY
+just verify 2>&1 | grep -E "^(FAIL|  expected|  actual|[0-9]+/[0-9]+)" | head -12
+```
+
+```text
+patched
+332/332 checks passed
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:47:33Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Run the full gate
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && just check 2>&1 | grep -E "error|FAIL|ready|checks passed|built" | tail -12`
+</details></tool-use>
