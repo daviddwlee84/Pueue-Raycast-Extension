@@ -31,6 +31,7 @@ import {
   getPreferenceValues,
   launchCommand,
   open,
+  openExtensionPreferences,
   showHUD,
   updateCommandMetadata,
   type Image,
@@ -135,7 +136,13 @@ export default function Command() {
         isLoading
       />
     ) : (
-      <ErrorMenu error={error} onRetry={revalidate} connection={connection} />
+      <ErrorMenu
+        error={error}
+        onRetry={revalidate}
+        connection={connection}
+        all={allConnections}
+        onSelect={setConnectionName}
+      />
     );
   }
 
@@ -304,20 +311,11 @@ export default function Command() {
         </MenuBarExtra.Section>
       ) : null}
 
-      {allConnections.length > 1 ? (
-        <MenuBarExtra.Section title="Connection">
-          {allConnections.map((c) => (
-            <MenuBarExtra.Item
-              key={c.name}
-              title={c.sshHost ? `${c.name} (${c.sshHost})` : c.name}
-              icon={
-                c.name === connection.name ? Icon.Checkmark : connectionIcon(c)
-              }
-              onAction={() => setConnectionName(c.name)}
-            />
-          ))}
-        </MenuBarExtra.Section>
-      ) : null}
+      <ConnectionSection
+        all={allConnections}
+        current={connection}
+        onSelect={setConnectionName}
+      />
 
       <MenuBarExtra.Section>
         <MenuBarExtra.Item
@@ -380,6 +378,14 @@ export default function Command() {
           title="Refresh"
           icon={Icon.ArrowClockwise}
           onAction={() => revalidate()}
+        />
+        {/* Reachable while things work, not only after a failure — adding or
+            correcting a connection is a thing you do deliberately, not just
+            in response to an error. */}
+        <MenuBarExtra.Item
+          title="Extension Preferences…"
+          icon={Icon.Gear}
+          onAction={openExtensionPreferences}
         />
       </MenuBarExtra.Section>
     </MenuBarExtra>
@@ -478,14 +484,51 @@ function TaskSection(props: {
   );
 }
 
+/**
+ * The connection switcher, shared by the normal menu and the error menu.
+ *
+ * It has to exist in BOTH. Selecting a remote that turns out to be
+ * unreachable renders the error menu, and if the switcher only lived in the
+ * normal menu there would be no way back to Local — the menu bar would be
+ * permanently stuck on a daemon it cannot reach. Escape routes have to live
+ * in the broken state, not only in the working one.
+ */
+function ConnectionSection({
+  all,
+  current,
+  onSelect,
+}: {
+  all: Connection[];
+  current: Connection;
+  onSelect: (name: string) => void;
+}) {
+  if (all.length < 2) return null;
+  return (
+    <MenuBarExtra.Section title="Connection">
+      {all.map((c) => (
+        <MenuBarExtra.Item
+          key={c.name}
+          title={c.sshHost ? `${c.name} (${c.sshHost})` : c.name}
+          icon={c.name === current.name ? Icon.Checkmark : connectionIcon(c)}
+          onAction={() => onSelect(c.name)}
+        />
+      ))}
+    </MenuBarExtra.Section>
+  );
+}
+
 function ErrorMenu({
   error,
   onRetry,
   connection,
+  all,
+  onSelect,
 }: {
   error: unknown;
   onRetry: () => void;
   connection: Connection;
+  all: Connection[];
+  onSelect: (name: string) => void;
 }) {
   const d = describeError(error, connection);
   return (
@@ -513,6 +556,9 @@ function ErrorMenu({
           />
         ))}
       </MenuBarExtra.Section>
+
+      {/* The way out. Without it a broken remote is a one-way door. */}
+      <ConnectionSection all={all} current={connection} onSelect={onSelect} />
     </MenuBarExtra>
   );
 }
