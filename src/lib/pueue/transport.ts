@@ -30,7 +30,15 @@ export type Mutation =
       delay?: string;
       stashed?: boolean;
       immediate?: boolean;
-      /** Disables shell-syntax handling — and with it `&&`, `|`, and `>`. */
+      /**
+       * pueue's `--escape`. Deliberately NOT exposed in the UI.
+       *
+       * It escapes every shell metacharacter *including spaces*, and we pass the
+       * command as a single argv element, so it collapses the whole command line
+       * into one token. Verified: `--escape` on `echo not-a-pipe | wc -l`
+       * produces `sh: echo not-a-pipe | wc -l: command not found`. The flag is
+       * only meaningful for the multi-word argv form we don't use.
+       */
       escape?: boolean;
     }
   | { op: "start"; ids?: number[]; group?: string; all?: boolean }
