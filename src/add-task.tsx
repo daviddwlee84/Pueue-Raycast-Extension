@@ -29,7 +29,6 @@ import { ErrorDetail } from "./lib/error-states";
 import { connectionIcon, useConnection } from "./lib/connection-ui";
 import {
   connectionByName,
-  groups as readGroups,
   isBinaryMissing,
   isDaemonDown,
   mutate,
@@ -74,12 +73,8 @@ export default function Command(
   const [priorityError, setPriorityError] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
 
-  const groupState = useCachedPromise(
-    (connectionName: string) =>
-      readGroups({ connection: connectionByName(connectionName) }),
-    [conn.connection.name],
-    { keepPreviousData: true },
-  );
+  // One read serves both the group dropdown and the dependency picker:
+  // `status --json` carries the same groups map `group --json` returns.
   const state = useCachedPromise(
     (connectionName: string) =>
       readStatus({ connection: connectionByName(connectionName) }),
@@ -108,20 +103,12 @@ export default function Command(
     ),
   );
 
-  const groupNames = Object.keys(groupState.data ?? {});
+  const groupNames = Object.keys(state.data?.groups ?? {});
   const knownGroups = groupNames.length > 0 ? groupNames.sort() : ["default"];
 
-  const fatal = groupState.error ?? state.error;
+  const fatal = state.error;
   if (fatal && (isBinaryMissing(fatal) || isDaemonDown(fatal))) {
-    return (
-      <ErrorDetail
-        error={fatal}
-        onRetry={() => {
-          groupState.revalidate();
-          state.revalidate();
-        }}
-      />
-    );
+    return <ErrorDetail error={fatal} onRetry={() => state.revalidate()} />;
   }
 
   async function submit() {
@@ -200,7 +187,7 @@ export default function Command(
 
   return (
     <Form
-      isLoading={submitting || state.isLoading || groupState.isLoading}
+      isLoading={submitting || state.isLoading}
       enableDrafts
       actions={
         <ActionPanel>

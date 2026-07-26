@@ -27,7 +27,7 @@ import {
   underlyingKind,
 } from "./pueue/normalize";
 import type { Mutation } from "./pueue/transport";
-import type { Group, GroupMap, State, Task, TaskResult } from "./pueue/types";
+import type { Group, State, Task, TaskResult } from "./pueue/types";
 
 const iso = (d: Date | undefined, fallback: string): string =>
   (d ?? new Date(fallback)).toISOString();
@@ -244,65 +244,5 @@ export function applyMutation(state: State | undefined, m: Mutation): State {
     case "switch":
     case "send":
       return state;
-  }
-}
-
-/**
- * The same idea over a `GroupMap`, for the Groups view.
- *
- * That view caches `group --json`, which is only the groups — a different
- * top-level shape from `status --json`. Only the mutations that change a group
- * itself are predicted; a kill or a pause of individual tasks leaves the map
- * alone.
- */
-export function applyGroupMutation(
-  groups: GroupMap | undefined,
-  m: Mutation,
-): GroupMap {
-  if (!groups) return {};
-  const next: GroupMap = { ...groups };
-
-  const setStatus = (status: Group["status"]) => {
-    for (const [name, group] of Object.entries(groups)) {
-      if (m.op === "kill" || m.op === "pause" || m.op === "start") {
-        if (m.all || name === (m.group ?? "default")) {
-          next[name] = { ...group, status };
-        }
-      }
-    }
-  };
-
-  switch (m.op) {
-    case "pause":
-      // Only a group-wide pause changes the group's own status; pausing one
-      // task leaves the group running.
-      if (m.group || m.all) setStatus("Paused");
-      return next;
-
-    case "start":
-      if (m.group || m.all) setStatus("Running");
-      return next;
-
-    case "kill":
-      // Verified in `pueue kill --help`: killing a group also pauses it.
-      if (m.group || m.all) setStatus("Paused");
-      return next;
-
-    case "parallel": {
-      const name = m.group ?? "default";
-      if (next[name]) next[name] = { ...next[name], parallel_tasks: m.count };
-      return next;
-    }
-
-    case "group-add":
-      next[m.name] = { status: "Running", parallel_tasks: m.parallel ?? 1 };
-      return next;
-
-    case "group-remove":
-      delete next[m.name];
-      return next;
-
-    default:
-      return next;
   }
 }

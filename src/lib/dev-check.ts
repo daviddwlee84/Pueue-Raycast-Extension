@@ -39,7 +39,7 @@ import {
 import fixture from "./fixtures/state.json";
 import stderrFixture from "./fixtures/stderr.json";
 import { argvFor, longFlagsOf, subcommandOf } from "./pueue/argv";
-import { applyGroupMutation, applyMutation } from "./optimistic";
+import { applyMutation } from "./optimistic";
 import type { Mutation } from "./pueue/transport";
 import {
   classify,
@@ -557,6 +557,18 @@ check(
   "Running",
 );
 check(
+  "pausing a single task does NOT pause its group",
+  applyMutation(state, { op: "pause", ids: [3] }).groups["default"].status,
+  "Running",
+);
+check(
+  "--all touches every group",
+  Object.values(applyMutation(state, { op: "pause", all: true }).groups).map(
+    (g) => g.status,
+  ),
+  ["Paused", "Paused", "Paused"],
+);
+check(
   "pausing a running task",
   underlyingKind(
     applyMutation(state, { op: "pause", ids: [3] }).tasks["3"].status,
@@ -666,71 +678,6 @@ check(
     applyMutation(state, { op: "remove", ids: [0] });
     applyMutation(state, { op: "group-remove", name: "gpu" });
     return JSON.stringify(state) === before;
-  })(),
-  true,
-);
-
-console.log("\noptimistic updates over the group map");
-const groups = state.groups;
-check(
-  "pausing a group flips only that group",
-  applyGroupMutation(groups, { op: "pause", group: "gpu" }),
-  {
-    default: { status: "Running", parallel_tasks: 1 },
-    build: { status: "Paused", parallel_tasks: 4 },
-    gpu: { status: "Paused", parallel_tasks: 0 },
-  },
-);
-check(
-  "pausing a single task does NOT pause its group",
-  applyGroupMutation(groups, { op: "pause", ids: [3] }),
-  groups,
-);
-check(
-  "killing a group also pauses it, matching pueue",
-  applyGroupMutation(groups, { op: "kill", group: "default" }).default.status,
-  "Paused",
-);
-check(
-  "killing one task leaves the group alone",
-  applyGroupMutation(groups, { op: "kill", ids: [3] }),
-  groups,
-);
-check(
-  "--all touches every group",
-  Object.values(applyGroupMutation(groups, { op: "pause", all: true })).map(
-    (g) => g.status,
-  ),
-  ["Paused", "Paused", "Paused"],
-);
-check(
-  "parallelism lands on the named group",
-  applyGroupMutation(groups, { op: "parallel", count: 6, group: "build" }).build
-    .parallel_tasks,
-  6,
-);
-check(
-  "adding a group",
-  applyGroupMutation(groups, { op: "group-add", name: "io", parallel: 2 }).io,
-  { status: "Running", parallel_tasks: 2 },
-);
-check(
-  "removing a group",
-  "gpu" in applyGroupMutation(groups, { op: "group-remove", name: "gpu" }),
-  false,
-);
-check(
-  "a task-only mutation is a no-op on the group map",
-  applyGroupMutation(groups, { op: "remove", ids: [1] }),
-  groups,
-);
-check(
-  "the group map is never mutated in place",
-  (() => {
-    const before = JSON.stringify(groups);
-    applyGroupMutation(groups, { op: "pause", all: true });
-    applyGroupMutation(groups, { op: "group-remove", name: "gpu" });
-    return JSON.stringify(groups) === before;
   })(),
   true,
 );

@@ -56,7 +56,6 @@ import {
   endedAt,
   enqueuedAt,
   exitCode,
-  groups as readGroups,
   hasEverRun,
   isLocked,
   logs as readLogs,
@@ -127,10 +126,9 @@ export default function Command(
   const pushedLog = useRef(false);
   const logTaskId = props.launchContext?.logTaskId;
 
-  // Separate controllers: a superseded state read must not cancel an in-flight
-  // group read, and vice versa.
+  // Separate controller kept for the state read; a superseded read must be
+  // cancellable without touching the log preview's own request.
   const stateAbort = useRef<AbortController>(null);
-  const groupsAbort = useRef<AbortController>(null);
 
   const state = useCachedPromise(
     // The connection is an argument rather than a closure capture so that
@@ -147,18 +145,10 @@ export default function Command(
     { keepPreviousData: true, abortable: stateAbort },
   );
 
-  const groupState = useCachedPromise(
-    (connectionName: string) =>
-      readGroups({
-        signal: groupsAbort.current?.signal,
-        connection: connectionByName(connectionName),
-      }),
-    [conn.connection.name],
-    {
-      keepPreviousData: true,
-      abortable: groupsAbort,
-    },
-  );
+  // The dropdown reads the groups off the same payload. `status --json` carries
+  // the whole groups map even when `--group` narrows the tasks — verified — so
+  // a second `group --json` call was a spare subprocess per revalidate.
+  const groupMap = state.data?.groups;
 
   const logLines = Math.max(1, Number(prefs.detailLogLines) || 20);
 
@@ -182,8 +172,8 @@ export default function Command(
     { execute: showDetail && canHaveLog, keepPreviousData: false },
   );
 
-  const error = state.error ?? groupState.error;
-  const isLoading = state.isLoading || groupState.isLoading;
+  const error = state.error;
+  const isLoading = state.isLoading;
   const tasks = taskList(state.data?.tasks ?? {});
 
   const bySection = new Map<SectionKey, Task[]>();
@@ -196,7 +186,6 @@ export default function Command(
 
   const reload = () => {
     state.revalidate();
-    groupState.revalidate();
   };
 
   useEffect(() => {
@@ -240,11 +229,7 @@ export default function Command(
       onSelectionChange={setSelectedId}
       searchBarPlaceholder={`Search ${tasks.length} task${tasks.length === 1 ? "" : "s"}…`}
       searchBarAccessory={
-        <GroupDropdown
-          groups={groupState.data}
-          value={group}
-          onChange={setGroup}
-        />
+        <GroupDropdown groups={groupMap} value={group} onChange={setGroup} />
       }
     >
       {stale || conn.switchable || conn.invalid.length > 0 ? (

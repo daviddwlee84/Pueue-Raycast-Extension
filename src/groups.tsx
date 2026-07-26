@@ -22,7 +22,7 @@ import {
 } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 
-import { actOnGroups, type ActOptions } from "./lib/actions";
+import { actOnTasks, type ActOptions } from "./lib/actions";
 import {
   describeError,
   ErrorEmptyView,
@@ -38,7 +38,6 @@ import {
 } from "./lib/connection-ui";
 import {
   connectionByName,
-  groups as readGroups,
   isPaused,
   isQueued,
   isRunning,
@@ -53,24 +52,13 @@ const PARALLEL_CHOICES = [1, 2, 3, 4, 6, 8, 12, 0];
 
 export default function Command() {
   const conn = useConnection();
-  const groupsAbort = useRef<AbortController>(null);
   const stateAbort = useRef<AbortController>(null);
 
-  // `group --json` is authoritative for status and parallelism; `status --json`
-  // supplies the per-group task counts. Separate controllers so a superseded
-  // read of one can't cancel the other.
-  const groupState = useCachedPromise(
-    (connectionName: string) =>
-      readGroups({
-        signal: groupsAbort.current?.signal,
-        connection: connectionByName(connectionName),
-      }),
-    [conn.connection.name],
-    {
-      keepPreviousData: true,
-      abortable: groupsAbort,
-    },
-  );
+  // One read, not two. `status --json` returns the same groups map that
+  // `group --json` does — verified byte-identical against 4.0.4, and a
+  // `--group` filter narrows only the tasks, never the map. A second call
+  // bought nothing but a spare subprocess and a second cache entry that could
+  // disagree with the first.
   const state = useCachedPromise(
     (connectionName: string) =>
       readStatus({
@@ -84,13 +72,10 @@ export default function Command() {
     },
   );
 
-  const error = groupState.error ?? state.error;
-  const reload = () => {
-    groupState.revalidate();
-    state.revalidate();
-  };
+  const error = state.error;
+  const reload = () => state.revalidate();
 
-  if (error && !groupState.data) {
+  if (error && !state.data) {
     return (
       <List searchBarPlaceholder="Search groups…">
         <ErrorEmptyView
@@ -105,13 +90,13 @@ export default function Command() {
   const stale =
     error !== undefined && describeError(error, conn.connection).structural;
   const tasks = taskList(state.data?.tasks ?? {});
-  const entries = Object.entries(groupState.data ?? {}).sort(([a], [b]) =>
+  const entries = Object.entries(state.data?.groups ?? {}).sort(([a], [b]) =>
     a.localeCompare(b),
   );
 
   return (
     <List
-      isLoading={groupState.isLoading || state.isLoading}
+      isLoading={state.isLoading}
       searchBarPlaceholder={`Search ${entries.length} group${entries.length === 1 ? "" : "s"}…`}
     >
       {stale || conn.switchable || conn.invalid.length > 0 ? (
@@ -152,7 +137,7 @@ export default function Command() {
             total={tasks.filter((t) => t.group === name).length}
             onReload={reload}
             onAct={(mutation, options) =>
-              actOnGroups(mutation, groupState, {
+              actOnTasks(mutation, state, {
                 ...options,
                 connection: conn.connection,
               })

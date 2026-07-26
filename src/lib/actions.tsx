@@ -18,13 +18,12 @@ import {
 } from "@raycast/api";
 import { showFailureToast, type MutatePromise } from "@raycast/utils";
 
-import { applyGroupMutation, applyMutation } from "./optimistic";
+import { applyMutation } from "./optimistic";
 import {
   firstLine,
   mutate as runMutation,
   PueueError,
   type Connection,
-  type GroupMap,
   type Mutation,
   type State,
 } from "./pueue";
@@ -159,23 +158,17 @@ export async function act<T>(
   }
 }
 
-/** `act` bound to the Tasks view's `State`. */
+/**
+ * `act` bound to the `State` both list views cache.
+ *
+ * Groups reads the same `status --json` payload Tasks does, so one updater
+ * serves both — and a group-scoped kill correctly flips its tasks too, which
+ * is what the per-group progress numbers are computed from.
+ */
 export function actOnTasks(
   mutation: Mutation,
   state: { mutate: MutatePromise<State | undefined>; revalidate: () => void },
   options: ActOptions,
 ): Promise<boolean> {
   return act(mutation, state, options, applyMutation);
-}
-
-/** `act` bound to the Groups view's `GroupMap`. */
-export function actOnGroups(
-  mutation: Mutation,
-  state: {
-    mutate: MutatePromise<GroupMap | undefined>;
-    revalidate: () => void;
-  },
-  options: ActOptions,
-): Promise<boolean> {
-  return act(mutation, state, options, applyGroupMutation);
 }
