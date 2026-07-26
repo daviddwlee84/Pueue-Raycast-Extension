@@ -50,6 +50,7 @@ plugins:
             Reference: 參考資料
             The pueue JSON contract: pueue JSON 契約
             Raycast surfaces: Raycast 介面型態
+            Prior art: 相關擴充
   - search
   - llmstxt:
       full_output: llms-full.txt
@@ -64,6 +65,7 @@ plugins:
         Reference:
           - pueue-json-contract.md
           - raycast-surfaces.md
+          - prior-art.md
   - copy-to-llm:
       repo_url: "https://daviddwlee84.github.io/Pueue-Raycast-Extension/"
       button_hover_color: "var(--md-primary-fg-color)"
@@ -97,6 +99,7 @@ nav:
   - Reference:
       - The pueue JSON contract: pueue-json-contract.md
       - Raycast surfaces: raycast-surfaces.md
+      - Prior art: prior-art.md
 extra:
   social:
     - icon: fontawesome/brands/github
