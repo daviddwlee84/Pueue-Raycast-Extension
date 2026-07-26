@@ -323,7 +323,7 @@ function TaskItem(props: {
           <ActionPanel.Section title="Control">
             {canRestart ? (
               <Action
-                title="Restart"
+                title="Restart (New Task)"
                 icon={Icon.Redo}
                 shortcut={{ modifiers: ["cmd", "shift"], key: "r" }}
                 onAction={() =>
@@ -338,8 +338,8 @@ function TaskItem(props: {
               <Action
                 // Reusing the id means the old log is gone, which is exactly
                 // what you don't want if you were about to read it.
-                title="Restart in Place (Overwrites Log)"
-                icon={Icon.Redo}
+                title="Restart in Place (Same ID, Overwrites Log)"
+                icon={Icon.Repeat}
                 shortcut={{ modifiers: ["cmd", "opt"], key: "r" }}
                 onAction={() =>
                   onAct(

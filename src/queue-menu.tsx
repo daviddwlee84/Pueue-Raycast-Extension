@@ -184,11 +184,20 @@ export default function Command() {
         tasks={failed}
         limit={perSection}
         actionsFor={(task) => [
+          // Two genuinely different operations, verified against the daemon:
+          // --not-in-place mints a new task id and keeps the old log; --in-place
+          // reuses the id and overwrites the log.
           {
-            title: "Restart",
+            title: "Restart (New Task)",
             icon: Icon.Redo,
             m: { op: "restart", ids: [task.id] } as Mutation,
-            done: `Restarted task ${task.id}`,
+            done: `Restarted task ${task.id} as a new task`,
+          },
+          {
+            title: "Restart in Place (Overwrites Log)",
+            icon: Icon.Repeat,
+            m: { op: "restart", ids: [task.id], inPlace: true } as Mutation,
+            done: `Restarted task ${task.id} in place`,
           },
           {
             title: "Remove",
