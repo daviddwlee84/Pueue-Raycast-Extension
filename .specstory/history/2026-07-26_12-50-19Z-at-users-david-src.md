@@ -73212,3 +73212,1040 @@ all assertions passed
 ready  - built extension successfully
 ```
 </details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:42:53Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit step 5
+
+```bash
+git add -A && git commit -q -F - <<'EOF'
+Lead the Groups view with progress, not with slot occupancy
+
+The row said `running (0/1)` — running tasks over parallelism. Both numbers
+usually sit at their resting values, and neither one answers the question a
+group exists to answer: how far through is the batch I queued into it.
+
+Now the row is a filled ring, `5/12 done · 1 running · 2 failed`, and a
+`~3m left` accessory when there is enough history to estimate from. The section
+heading carries the same roll-up for the whole queue, which costs nothing since
+the rows were already sitting under it.
+
+The ring replaces the play/pause glyph, so the tint has to carry the state the
+glyph did: red for any failure, orange for a paused group, blue while running,
+green when complete and clean. Ordered by what you would want to be told first
+— a paused group is a decision, a failed task is a surprise. An empty group
+keeps the old glyph, because a 0 % ring on a group with no tasks reads as stuck
+rather than as empty.
+
+⌘⇧D opens a detail pane with the rest: the breakdown as tags, average duration,
+estimated remaining, elapsed, and the failed ids ready to copy. Defaults on —
+groups are few, so the pane costs no scrolling.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+EOF
+git log --oneline -1
+```
+
+```text
+a1f4704 Lead the Groups view with progress, not with slot occupancy
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:42:59Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #26 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:42:59Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #27 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:43:07Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to verify the `restart --failed-in-group` command works with the actual daemon before integrating it into the UI. I'll set up a temporary test group with some failed tasks to validate the behavior, making sure not to interfere with the user's existing queue, then clean it up afterward. Let me start by checking what's currently in the queue.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 20:43:08Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Current local queue
+
+```bash
+/usr/local/bin/pueue status --json | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print('groups', json.dumps(d['groups']))
+for k,t in sorted(d['tasks'].items(), key=lambda x:int(x[0])):
+    print(k, t['group'], t['command'][:40], list(t['status'].keys())[0])
+"
+```
+
+```text
+groups {"default": {"status": "Running", "parallel_tasks": 1}}
+0 default echo "hihi" Done
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:43:17Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Seed a verification group with failures
+
+```bash
+set -x
+/usr/local/bin/pueue group add rc-verify --parallel 4
+/usr/local/bin/pueue add -g rc-verify -- 'false'
+/usr/local/bin/pueue add -g rc-verify -- 'exit 3'
+/usr/local/bin/pueue add -g rc-verify -- 'echo fine'
+sleep 2
+/usr/local/bin/pueue status --json -- 2>/dev/null | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+for k,t in sorted(d['tasks'].items(), key=lambda x:int(x[0])):
+    if t['group']=='rc-verify': print(k, t['command'], json.dumps(t['status']))
+"
+```
+
+```text
++(eval):2> /usr/local/bin/pueue group add rc-verify --parallel 4
+New group "rc-verify" has been created
++(eval):3> /usr/local/bin/pueue add -g rc-verify -- false
+New task added (id 1).
++(eval):4> /usr/local/bin/pueue add -g rc-verify -- 'exit 3'
+New task added (id 2).
++(eval):5> /usr/local/bin/pueue add -g rc-verify -- 'echo fine'
+New task added (id 3).
++(eval):6> sleep 2
++(eval):7> /usr/local/bin/pueue status --json --
++(eval):7> python3 -c $'\nimport json,sys\nd=json.load(sys.stdin)\nfor k,t in sorted(d[\'tasks\'].items(), key=lambda x:int(x[0])):\n    if t[\'group\']==\'rc-verify\': print(k, t[\'command\'], json.dumps(t[\'status\']))\n'
+1 false {"Done": {"enqueued_at": "2026-07-27T04:43:15.434077+08:00", "start": "2026-07-27T04:43:15.546506+08:00", "end": "2026-07-27T04:43:15.862111+08:00", "result": {"Failed": 1}}}
+2 exit 3 {"Done": {"enqueued_at": "2026-07-27T04:43:15.584859+08:00", "start": "2026-07-27T04:43:15.937988+08:00", "end": "2026-07-27T04:43:16.273630+08:00", "result": {"Failed": 3}}}
+3 echo fine {"Done": {"enqueued_at": "2026-07-27T04:43:15.684117+08:00", "start": "2026-07-27T04:43:15.967938+08:00", "end": "2026-07-27T04:43:16.273828+08:00", "result": "Success"}}
++zsh:12> pwd -P
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:43:25Z)**_
+
+Now the two flag combinations the plan flagged as unverified:
+
+_**Agent (claude-opus-5 2026-07-26 20:43:28Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Verify restart --in-place --failed-in-group
+
+```bash
+echo "=== --failed-in-group with --in-place"; /usr/local/bin/pueue --color never restart --in-place --failed-in-group rc-verify; echo "exit=$?"
+sleep 2
+/usr/local/bin/pueue status --json | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+for k,t in sorted(d['tasks'].items(), key=lambda x:int(x[0])):
+    if t['group']=='rc-verify': print(' ',k, t['command'], json.dumps(t['status'])[:90])
+"
+```
+
+```text
+=== --failed-in-group with --in-place
+Restarted tasks: [1, 2]
+exit=0
+  1 false {"Done": {"enqueued_at": "2026-07-27T04:43:25.794449+08:00", "start": "2026-07-27T04:43:26
+  2 exit 3 {"Done": {"enqueued_at": "2026-07-27T04:43:25.796436+08:00", "start": "2026-07-27T04:43:26
+  3 echo fine {"Done": {"enqueued_at": "2026-07-27T04:43:15.684117+08:00", "start": "2026-07-27T04:43:15
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:43:34Z)**_
+
+<think><details><summary>Thought Process</summary>
+The `--in-place --failed-in-group` flags successfully reused task IDs 1 and 2 while preserving the successful task 3, exiting cleanly with the output showing which tasks were restarted. Now I'm testing the behavior when using `--not-in-place` with the same `--failed-in-group` flag.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 20:43:38Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Verify restart --not-in-place --failed-in-group
+
+```bash
+echo "=== --failed-in-group with --not-in-place"; /usr/local/bin/pueue --color never restart --not-in-place --failed-in-group rc-verify; echo "exit=$?"
+sleep 2
+/usr/local/bin/pueue status --json | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+for k,t in sorted(d['tasks'].items(), key=lambda x:int(x[0])):
+    if t['group']=='rc-verify': print(' ',k, t['command'], list(t['status'].keys())[0], json.dumps(t['status'].get('Done',{}).get('result')))
+"
+```
+
+```text
+=== --failed-in-group with --not-in-place
+Restarted tasks: [1, 2]
+exit=0
+  1 false Done {"Failed": 1}
+  2 exit 3 Done {"Failed": 3}
+  3 echo fine Done "Success"
+  4 false Done {"Failed": 1}
+  5 exit 3 Done {"Failed": 3}
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:43:47Z)**_
+
+<think><details><summary>Thought Process</summary>
+I've confirmed both behaviors: the `--in-place` flag reuses task IDs and exits cleanly with a restart message, while `--not-in-place` mints new IDs for the restarted tasks. Now I need to verify that `clean --group` works as expected, and also check whether `--failed-in-group` properly errors when given an empty group.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 20:43:48Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Verify edge cases and clean --group
+
+```bash
+echo "=== restart --failed-in-group on a group with no failures"; /usr/local/bin/pueue --color never restart --not-in-place --failed-in-group default; echo "exit=$?"
+echo "=== restart --failed-in-group on a group that does not exist"; /usr/local/bin/pueue --color never restart --not-in-place --failed-in-group nope; echo "exit=$?"
+echo "=== clean --group"; /usr/local/bin/pueue --color never clean --group rc-verify --successful-only; echo "exit=$?"
+/usr/local/bin/pueue status --json | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(' remaining in rc-verify:', sorted(int(k) for k,t in d['tasks'].items() if t['group']=='rc-verify'))
+"
+```
+
+```text
+=== restart --failed-in-group on a group with no failures
+exit=0
+=== restart --failed-in-group on a group that does not exist
+exit=0
+=== clean --group
+All successfully finished tasks have been removed from group 'rc-verify'
+exit=0
+ remaining in rc-verify: [1, 2, 4, 5]
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:43:55Z)**_
+
+<think><details><summary>Thought Process</summary>
+The verification checks out—`restart --failed-in-group` on a nonexistent group silently does nothing and returns exit 0, so the UI should only show that action when there are actually failed tasks. The cleanup with `--successful-only` worked as expected, removing just the completed task. Now I need to clean up the test group itself.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 20:43:57Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Remove the verification group
+
+`/usr/local/bin/pueue --color never reset --force --groups rc-verify && sleep 1 && /usr/local/bin/pueue --color never group remove rc-verify; /usr/local/bin/pueue status`
+
+```text
+Everything is being reset right now.
+Group "rc-verify" has been removed
+Group "default" (1 parallel): running
+─────────────────────────────────────────────────────────────────────────
+ Id   Status    Label   Command       Path           Start      End      
+═════════════════════════════════════════════════════════════════════════
+ 0    Success   damn    echo "hihi"   /Users/david   01:52:33   01:52:33 
+─────────────────────────────────────────────────────────────────────────
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:44:07Z)**_
+
+Verified against the real daemon. Now the plumbing:
+
+_**Agent (claude-opus-5 2026-07-26 20:44:09Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/src/lib/pueue/transport.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:44:20Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/src/lib/pueue/argv.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:44:35Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/src/lib/optimistic.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:44:45Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/src/lib/optimistic.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:44:52Z)**_
+
+Now the assertions for the new argv and optimistic branches:
+
+_**Agent (claude-opus-5 2026-07-26 20:44:54Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Find the restart argv assertion
+
+`grep -n "restart is explicit about in-place" -A 12 -B 6 src/lib/dev-check.ts | head -40`
+
+```text
+452-check(
+453-  "a command is never shell-quoted — pueue hands it to sh -c itself",
+454-  argvFor({ op: "add", command: "echo 'it works'" }).at(-1),
+455-  "echo 'it works'",
+456-);
+457-check(
+458:  "restart is explicit about in-place, since the default is the user's config",
+459-  [
+460-    argvFor({ op: "restart", ids: [1], inPlace: true })[1],
+461-    argvFor({ op: "restart", ids: [1], inPlace: false })[1],
+462-  ],
+463-  ["--in-place", "--not-in-place"],
+464-);
+465-check(
+466-  "reset always forces, since we confirm in the UI",
+467-  argvFor({ op: "reset" }),
+468-  ["reset", "--force"],
+469-);
+470-check(
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:45:04Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/src/lib/dev-check.ts has been updated successfully. (note: the file had been modified on disk since you last read it — the edit applied cleanly, but the file contains other changes not in your context. Read it before edits that depend on surrounding content.)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:45:12Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Find the restart optimistic assertion
+
+`grep -n "a fresh restart is NOT predicted" -A 8 src/lib/dev-check.ts`
+
+```text
+653:  "a fresh restart is NOT predicted — the new id is unknowable",
+654-  kinds(applyMutation(state, { op: "restart", ids: [5] })),
+655-  kinds(state),
+656-);
+657-check(
+658-  "parallelism is set on the named group",
+659-  applyMutation(state, { op: "parallel", count: 8, group: "gpu" }).groups["gpu"]
+660-    .parallel_tasks,
+661-  8,
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:45:23Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/src/lib/dev-check.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:45:43Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Run the restart assertions
+
+`just verify 2>&1 | grep -E "FAIL|restart|--all-failed" -A3 | head -30`
+
+```text
+  ok   restart is explicit about in-place, since the default is the user's config
+  ok   restarting a group's failures selects them by flag, not by id
+  ok   and every failure everywhere has its own flag
+  ok   reset always forces, since we confirm in the UI
+  ok   ids are stringified and trail the flags
+--
+  ok   restart: --in-place --stashed --immediate
+  ok   restart: --not-in-place
+  ok   remove: (no flags)
+  ok   stash: --group --delay
+  ok   enqueue: --group --delay
+--
+  ok   an in-place restart keeps the id and requeues
+  ok   a fresh restart is NOT predicted — the new id is unknowable
+  ok   restarting a group's failures in place requeues exactly those
+  ok   restarting a group's failures leaves the other groups alone
+  ok   --all-failed reaches across groups
+  ok   parallelism is set on the named group
+  ok   adding a group
+  ok   removing a group drops it
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:45:51Z)**_
+
+<think><details><summary>Thought Process</summary>
+Now I need to update the live `--help` check to include these new flags.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 20:45:51Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read the live --help check
+
+`grep -n "restart: --in-place" -B 30 src/lib/dev-check.ts | head -45`
+
+```text
+(Bash completed with no output)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:45:57Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Locate the help-flag verification
+
+`grep -n "restart: " src/lib/dev-check.ts; grep -n "longFlagsOf\|subcommandOf\|--help" src/lib/dev-check.ts | head`
+
+```text
+41:import { argvFor, longFlagsOf, subcommandOf } from "./pueue/argv";
+82: * The live `--help` check needs a real binary. binary.ts can't be imported here
+409:/* -- argv, checked against the real binary's --help ----------------------- */
+487:  subcommandOf(argvFor({ op: "group-add", name: "g" })),
+491:console.log("\nargv flags exist in pueue --help (live check)");
+495:  const sub = subcommandOf(argv);
+496:  const flags = longFlagsOf(argv);
+499:    help = execFileSync(PUEUE_BIN, [...sub, "--help"], { encoding: "utf8" });
+501:    console.log(`  skip ${sub.join(" ")} — could not run --help`);
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:46:07Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read the mutation coverage list
+
+`sed -n 505,560p src/lib/dev-check.ts`
+
+```text
+  check(`${m.op}: ${flags.join(" ") || "(no flags)"}`, missing, []);
+  helpChecked += 1;
+}
+check("every mutation variant was checked", helpChecked, MUTATIONS.length);
+
+console.log("\nlog output — pueue hides its own errors in the output field");
+// Captured verbatim from `pueue log 1 --json` on a stashed task (exit code 0).
+const PUEUE_ERROR_OUTPUT =
+  '(Pueue error) Failed to get log file handle: I/O error at path "/Users/david/Library/Application Support/pueue/task_logs/1.log" while getting log file handle:\nNo such file or directory (os error 2)';
+check(
+  "a pueue error in the output field is recognised",
+  isPueueErrorOutput(PUEUE_ERROR_OUTPUT),
+  true,
+);
+check(
+  "and is not passed off as task output",
+  cleanLogOutput(PUEUE_ERROR_OUTPUT),
+  undefined,
+);
+check("real output survives", cleanLogOutput("hello\nworld\n"), "hello\nworld");
+check("whitespace-only output is nothing", cleanLogOutput("  \n\n"), undefined);
+check("empty output is nothing", cleanLogOutput(""), undefined);
+check("undefined output is nothing", cleanLogOutput(undefined), undefined);
+check(
+  "output that merely mentions the phrase is kept",
+  cleanLogOutput("building (Pueue error) handling\n"),
+  "building (Pueue error) handling",
+);
+check("a stashed task cannot have a log", hasEverRun(t(0)), false);
+check("a queued task cannot have a log", hasEverRun(t(2)), false);
+check("a running task can", hasEverRun(t(3)), true);
+check("a finished task can, even through a lock", hasEverRun(t(5)), true);
+
+console.log("\noptimistic updates");
+const kinds = (s: State) =>
+  Object.fromEntries(
+    taskList(s.tasks).map((x) => [x.id, underlyingKind(x.status)]),
+  );
+
+check(
+  "killing a running task finishes it as Killed",
+  resultKind(
+    taskResult(
+      applyMutation(state, { op: "kill", ids: [3] }).tasks["3"].status,
+    ),
+  ),
+  "killed",
+);
+check(
+  "killing preserves the original start time rather than inventing one",
+  startedAt(
+    applyMutation(state, { op: "kill", ids: [3] }).tasks["3"].status,
+  )?.toISOString(),
+  startedAt(t(3).status)?.toISOString(),
+);
+check(
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:46:13Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read MUTATIONS list
+
+`grep -n "const MUTATIONS" -A 30 src/lib/dev-check.ts | head -35`
+
+```text
+415:const MUTATIONS: Mutation[] = [
+416-  {
+417-    op: "add",
+418-    command: "echo hi && ls",
+419-    group: "g",
+420-    label: "l",
+421-    priority: 3,
+422-    workingDirectory: "/tmp",
+423-    after: [1, 2],
+424-    delay: "2h",
+425-    stashed: true,
+426-    immediate: true,
+427-    escape: true,
+428-  },
+429-  { op: "start", ids: [1], group: "g", all: true },
+430-  { op: "pause", ids: [1], group: "g", all: true, wait: true },
+431-  { op: "kill", ids: [1], group: "g", all: true, signal: "int" },
+432-  { op: "restart", ids: [1], inPlace: true, stashed: true, immediate: true },
+433-  { op: "restart", ids: [1], inPlace: false },
+434-  { op: "remove", ids: [1, 2] },
+435-  { op: "stash", ids: [1], group: "g", delay: "1h" },
+436-  { op: "enqueue", ids: [1], group: "g", delay: "1h" },
+437-  { op: "clean", group: "g", successfulOnly: true },
+438-  { op: "switch", a: 1, b: 2 },
+439-  { op: "parallel", count: 4, group: "g" },
+440-  { op: "group-add", name: "g", parallel: 2 },
+441-  { op: "group-remove", name: "g" },
+442-  { op: "send", id: 1, input: "y\n" },
+443-  { op: "reset", groups: ["g"] },
+444-];
+445-
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:46:21Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/src/lib/dev-check.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:46:52Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check the live help verification
+
+`just verify 2>&1 | grep -E "FAIL|restart:|every mutation variant" `
+
+```text
+  ok   restart: --in-place --stashed --immediate
+  ok   restart: --not-in-place
+  ok   restart: --in-place --failed-in-group
+  ok   restart: --in-place --all-failed
+  ok   every mutation variant was checked
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:46:58Z)**_
+
+Now wire the actions into the Groups view:
+
+_**Agent (claude-opus-5 2026-07-26 20:46:59Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="Read"><details>
+<summary>Tool use: **Read**</summary>
+ `./src/groups.tsx`
+
+```text
+300	                />
+301	              ))}
+302	            </ActionPanel.Submenu>
+303	          </ActionPanel.Section>
+304	
+305	          <ActionPanel.Section title="Manage">
+306	            <Action
+307	              title="Add Group…"
+308	              icon={Icon.Plus}
+309	              shortcut={Keyboard.Shortcut.Common.New}
+310	              onAction={() =>
+311	                push(<AddGroupForm onAct={onAct} onDone={props.onReload} />)
+312	              }
+313	            />
+314	            <Action
+315	              title="Kill Running Tasks in Group"
+316	              icon={Icon.Stop}
+317	              style={Action.Style.Destructive}
+318	              shortcut={{ modifiers: ["cmd", "shift"], key: "k" }}
+319	              onAction={() =>
+320	                onAct(
+321	                  { op: "kill", group: name },
+322	                  {
+323	                    verb: `Killing tasks in ${name}`,
+324	                    done: `Killed running tasks in ${name}`,
+325	                    confirm: {
+326	                      title: `Kill running tasks in “${name}”?`,
+327	                      // Verified in `pueue kill --help`: "Kill all running tasks
+328	                      // in a group. This also pauses the group".
+329	                      message: `${s.running} running task${s.running === 1 ? "" : "s"} will be killed, and the group will also be paused.`,
+330	                      actionTitle: "Kill and Pause",
+331	                      destructive: true,
+332	                    },
+333	                  },
+334	                )
+335	              }
+336	            />
+337	            {!isDefault ? (
+338	              <Action
+339	                title="Remove Group"
+340	                icon={Icon.Trash}
+341	                style={Action.Style.Destructive}
+342	                shortcut={Keyboard.Shortcut.Common.Remove}
+343	                onAction={() =>
+344	                  onAct(
+345	                    { op: "group-remove", name },
+346	                    {
+347	                      verb: `Removing ${name}`,
+348	                      done: `Removed ${name}`,
+349	                      confirm: {
+350	                        title: `Remove the group “${name}”?`,
+351	                        // Verified in `pueue group remove --help`: "This will
+352	                        // move all tasks in this group to the default group!"
+353	                        message:
+354	                          s.total > 0
+355	                            ? `Its ${s.total} task${s.total === 1 ? "" : "s"} will be moved to the default group, not deleted.`
+356	                            : "The group is empty.",
+357	                        actionTitle: "Remove Group",
+358	                        destructive: true,
+359	                      },
+360	                    },
+361	                  )
+362	                }
+363	              />
+364	            ) : null}
+365	            <Action
+366	              title="Reset Group"
+367	              icon={Icon.ExclamationMark}
+368	              style={Action.Style.Destructive}
+369	              onAction={() =>
+370	                onAct(
+371	                  { op: "reset", groups: [name] },
+372	                  {
+373	                    verb: `Resetting ${name}`,
+374	                    done: `Reset ${name}`,
+375	                    confirm: {
+376	                      title: `Reset “${name}”?`,
+377	                      message:
+378	                        "Every task in this group is killed and removed, along with its logs. This cannot be undone.",
+379	                      actionTitle: "Reset",
+380	                      destructive: true,
+381	                      // No rememberChoice: this one should ask every time.
+382	                    },
+383	                  },
+384	                )
+385	              }
+386	            />
+387	            <Action
+388	              title={props.showDetail ? "Hide Detail" : "Show Detail"}
+389	              icon={Icon.Sidebar}
+390	              shortcut={{ modifiers: ["cmd", "shift"], key: "d" }}
+391	              onAction={props.onToggleDetail}
+392	            />
+393	            <Action
+394	              title="Reload"
+395	              icon={Icon.ArrowClockwise}
+396	              shortcut={Keyboard.Shortcut.Common.Refresh}
+397	              onAction={props.onReload}
+398	            />
+399	            <ConnectionSubmenu state={props.connection} />
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:47:18Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/src/groups.tsx has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:47:27Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/src/groups.tsx has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:48:09Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Format and gate
+
+`just fix >/dev/null 2>&1; just check 2>&1 | grep -E "FAIL|error|✖|assertions passed|built extension" | tail -6; echo "---"; just verify 2>&1 | grep -c "  ok   "`
+
+```text
+  ok   the 'Pueue: ' prefix is dropped from plain client errors
+error predicates
+log output — pueue hides its own errors in the output field
+  ok   a pueue error in the output field is recognised
+all assertions passed
+ready  - built extension successfully
+---
+247
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:48:16Z)**_
+
+Now the menu bar side of step 6, plus step 8 (progress in the group rows) — both in the same submenu:
+
+_**Agent (claude-opus-5 2026-07-26 20:48:16Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="Read"><details>
+<summary>Tool use: **Read**</summary>
+ `./src/queue-menu.tsx`
+
+```text
+292	            icon: Icon.Redo,
+293	            m: { op: "restart", ids: [task.id] } as Mutation,
+294	            done: `Restarted task ${task.id} as a new task`,
+295	          },
+296	          {
+297	            title: "Restart in Place (Overwrites Log)",
+298	            icon: Icon.Repeat,
+299	            m: { op: "restart", ids: [task.id], inPlace: true } as Mutation,
+300	            done: `Restarted task ${task.id} in place`,
+301	          },
+302	          {
+303	            title: "Remove",
+304	            icon: Icon.Trash,
+305	            alternate: true,
+306	            m: { op: "remove", ids: [task.id] } as Mutation,
+307	            done: `Removed task ${task.id}`,
+308	          },
+309	        ]}
+310	        run={run}
+311	      />
+312	
+313	      {prefs.showGroups && groups.length > 0 ? (
+314	        <MenuBarExtra.Section title="Groups">
+315	          {groups.map(([name, group]) => (
+316	            <MenuBarExtra.Submenu
+317	              key={name}
+318	              title={`${name} — ${group.status.toLowerCase()} (${
+319	                tasks.filter((t) => t.group === name && isRunning(t)).length
+320	              }/${group.parallel_tasks === 0 ? "∞" : group.parallel_tasks})`}
+321	              icon={group.status === "Running" ? Icon.Play : Icon.Pause}
+322	            >
+323	              {group.status === "Running" ? (
+324	                <MenuBarExtra.Item
+325	                  title="Pause Group"
+326	                  icon={Icon.Pause}
+327	                  onAction={() =>
+328	                    run({ op: "pause", group: name }, `Paused ${name}`)
+329	                  }
+330	                />
+331	              ) : (
+332	                <MenuBarExtra.Item
+333	                  title="Resume Group"
+334	                  icon={Icon.Play}
+335	                  onAction={() =>
+336	                    run({ op: "start", group: name }, `Resumed ${name}`)
+337	                  }
+338	                />
+339	              )}
+340	              <MenuBarExtra.Submenu
+341	                title="Parallelism"
+342	                icon={Icon.BulletPoints}
+343	              >
+344	                {[1, 2, 3, 4, 6, 8, 0].map((n) => (
+345	                  <MenuBarExtra.Item
+346	                    key={n}
+347	                    title={n === 0 ? "Unlimited" : String(n)}
+348	                    icon={
+349	                      n === group.parallel_tasks ? Icon.Checkmark : Icon.Circle
+350	                    }
+351	                    onAction={() =>
+352	                      run(
+353	                        { op: "parallel", count: n, group: name },
+354	                        `${name}: ${n === 0 ? "unlimited" : n} at a time`,
+355	                      )
+356	                    }
+357	                  />
+358	                ))}
+359	              </MenuBarExtra.Submenu>
+360	            </MenuBarExtra.Submenu>
+361	          ))}
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:48:29Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Replace the menu bar group section
+
+```bash
+python3 - <<'PY'
+p='src/queue-menu.tsx'
+s=open(p).read()
+
+old = '''      {prefs.showGroups && groups.length > 0 ? (
+        <MenuBarExtra.Section title="Groups">
+          {groups.map(([name, group]) => (
+            <MenuBarExtra.Submenu
+              key={name}
+              title={`${name} — ${group.status.toLowerCase()} (${
+                tasks.filter((t) => t.group === name && isRunning(t)).length
+              }/${group.parallel_tasks === 0 ? "∞" : group.parallel_tasks})`}
+              icon={group.status === "Running" ? Icon.Play : Icon.Pause}
+            >
+              {group.status === "Running" ? (
+                <MenuBarExtra.Item
+                  title="Pause Group"
+                  icon={Icon.Pause}
+                  onAction={() =>
+                    run({ op: "pause", group: name }, `Paused ${name}`)
+                  }
+                />
+              ) : (
+                <MenuBarExtra.Item
+                  title="Resume Group"
+                  icon={Icon.Play}
+                  onAction={() =>
+                    run({ op: "start", group: name }, `Resumed ${name}`)
+                  }
+                />
+              )}
+              <MenuBarExtra.Submenu
+                title="Parallelism"
+                icon={Icon.BulletPoints}
+              >
+                {[1, 2, 3, 4, 6, 8, 0].map((n) => (
+                  <MenuBarExtra.Item
+                    key={n}
+                    title={n === 0 ? "Unlimited" : String(n)}
+                    icon={
+                      n === group.parallel_tasks ? Icon.Checkmark : Icon.Circle
+                    }
+                    onAction={() =>
+                      run(
+                        { op: "parallel", count: n, group: name },
+                        `${name}: ${n === 0 ? "unlimited" : n} at a time`,
+                      )
+                    }
+                  />
+                ))}
+              </MenuBarExtra.Submenu>
+            </MenuBarExtra.Submenu>
+          ))}'''
+
+new = '''      {prefs.showGroups && groups.length > 0 ? (
+        <MenuBarExtra.Section title="Groups">
+          {groups.map((s) => (
+            <GroupSubmenu
+              key={s.name}
+              summary={s}
+              run={run}
+              guardDestructive={guardDestructive}
+            />
+          ))}'''
+assert s.count(old)==1
+s=s.replace(old,new)
+open(p,'w').write(s)
+print('ok')
+PY
+sed -n 305,330p src/queue-menu.tsx
+```
+
+```text
+ok
+            alternate: true,
+            m: { op: "remove", ids: [task.id] } as Mutation,
+            done: `Removed task ${task.id}`,
+          },
+        ]}
+        run={run}
+      />
+
+      {prefs.showGroups && groups.length > 0 ? (
+        <MenuBarExtra.Section title="Groups">
+          {groups.map((s) => (
+            <GroupSubmenu
+              key={s.name}
+              summary={s}
+              run={run}
+              guardDestructive={guardDestructive}
+            />
+          ))}
+        </MenuBarExtra.Section>
+      ) : null}
+
+      <ConnectionSection
+        all={allConnections}
+        current={connection}
+        onSelect={setConnectionName}
+      />
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:48:36Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Summarise groups in the menu bar
+
+```bash
+python3 - <<'PY'
+p='src/queue-menu.tsx'
+s=open(p).read()
+old = '''  const groups = Object.entries(data.state.groups).sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
+  const allPaused =
+    groups.length > 0 && groups.every(([, g]) => g.status === "Paused");'''
+new = '''  const groups = summarizeGroups(data.state.groups, tasks);
+  const allPaused =
+    groups.length > 0 && groups.every((g) => g.status === "Paused");'''
+assert s.count(old)==1
+s=s.replace(old,new)
+open(p,'w').write(s)
+print('ok')
+PY
+```
+
+```text
+ok
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:49:09Z)**_
+
+Now the `GroupSubmenu` component:
+
+_**Agent (claude-opus-5 2026-07-26 20:49:13Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/src/queue-menu.tsx has been updated successfully. (note: the file had been modified on disk since you last read it — the edit applied cleanly, but the file contains other changes not in your context. Read it before edits that depend on surrounding content.)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:49:32Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Add menu bar imports
+
+```bash
+python3 - <<'PY'
+p='src/queue-menu.tsx'
+s=open(p).read()
+s=s.replace('''import { connectionIcon } from "./lib/connection-ui";
+import { describeError } from "./lib/error-states";
+import { statusTag } from "./lib/format";''','''import { connectionIcon } from "./lib/connection-ui";
+import { describeError } from "./lib/error-states";
+import { formatDuration, groupProgressIcon, statusTag } from "./lib/format";
+import {
+  parallelLabel,
+  progressBar,
+  progressPercent,
+  summarizeGroups,
+  type GroupSummary,
+} from "./lib/group-summary";''')
+s=s.replace('''const MENU_ICON = "pueue-menubar.svg";''','''const MENU_ICON = "pueue-menubar.svg";
+
+/**
+ * Parallelism presets offered in the menu, kept shorter than the Groups view's.
+ * A menu is a list you scan, not a form you fill in; anything past this goes
+ * through "Other…", which opens the view where a number can be typed.
+ */
+const MENU_PARALLEL_CHOICES = [1, 2, 4, 6, 8, 12, 0];''')
+open(p,'w').write(s)
+print('ok')
+PY
+just typecheck 2>&1 | tail
+```
+
+```text
+ok
+([ -d node_modules ] || npm install) && npx tsc --noEmit -p tsconfig.json
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:50:07Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Format and run the gate
+
+`just fix >/dev/null 2>&1; just check 2>&1 | grep -E "FAIL|error|✖|assertions passed|built extension" | tail -6`
+
+```text
+  ok   the 'Pueue: ' prefix is dropped from plain client errors
+error predicates
+log output — pueue hides its own errors in the output field
+  ok   a pueue error in the output field is recognised
+all assertions passed
+ready  - built extension successfully
+```
+</details></tool-use>

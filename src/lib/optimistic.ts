@@ -22,6 +22,7 @@
 import {
   enqueuedAt,
   isDone,
+  isFailed,
   isSuccess,
   startedAt,
   underlyingKind,
@@ -192,15 +193,29 @@ export function applyMutation(state: State | undefined, m: Mutation): State {
       return next;
     }
 
-    case "restart":
+    case "restart": {
       // Only an in-place restart keeps the id. A fresh restart mints a new task
       // whose id we cannot know until the daemon answers.
-      return m.inPlace
-        ? mapTasks(state, new Set(m.ids), (t) => ({
-            ...t,
-            status: { Queued: { enqueued_at: now } },
-          }))
-        : state;
+      if (!m.inPlace) return state;
+      // The selectors resolve here rather than in `targets()`, because "the
+      // failures" is not a set `targets()` knows about — it filters by group
+      // membership, not by outcome.
+      const ids =
+        m.ids && m.ids.length > 0
+          ? new Set(m.ids)
+          : new Set(
+              Object.values(state.tasks)
+                .filter(
+                  (t) =>
+                    isFailed(t) && (m.allFailed || t.group === m.failedInGroup),
+                )
+                .map((t) => t.id),
+            );
+      return mapTasks(state, ids, (t) => ({
+        ...t,
+        status: { Queued: { enqueued_at: now } },
+      }));
+    }
 
     case "parallel": {
       const next = clone(state);

@@ -58,9 +58,20 @@ export type Mutation =
       all?: boolean;
       signal?: string;
     }
+  /**
+   * Requeue finished tasks.
+   *
+   * The three selectors are pueue's, not ours: explicit ids, every failure in
+   * one group, or every failure anywhere. `failedInGroup` on a group with no
+   * failures — or on a group that doesn't exist — is a silent no-op at exit 0,
+   * so the UI is responsible for only offering it when there is something to
+   * restart. Verified against 4.0.4.
+   */
   | {
       op: "restart";
-      ids: number[];
+      ids?: number[];
+      failedInGroup?: string;
+      allFailed?: boolean;
       inPlace?: boolean;
       stashed?: boolean;
       immediate?: boolean;

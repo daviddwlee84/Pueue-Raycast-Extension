@@ -431,6 +431,8 @@ const MUTATIONS: Mutation[] = [
   { op: "kill", ids: [1], group: "g", all: true, signal: "int" },
   { op: "restart", ids: [1], inPlace: true, stashed: true, immediate: true },
   { op: "restart", ids: [1], inPlace: false },
+  { op: "restart", failedInGroup: "g", inPlace: true },
+  { op: "restart", allFailed: true, inPlace: true },
   { op: "remove", ids: [1, 2] },
   { op: "stash", ids: [1], group: "g", delay: "1h" },
   { op: "enqueue", ids: [1], group: "g", delay: "1h" },
@@ -461,6 +463,16 @@ check(
     argvFor({ op: "restart", ids: [1], inPlace: false })[1],
   ],
   ["--in-place", "--not-in-place"],
+);
+check(
+  "restarting a group's failures selects them by flag, not by id",
+  argvFor({ op: "restart", failedInGroup: "wf", inPlace: true }),
+  ["restart", "--in-place", "--failed-in-group", "wf"],
+);
+check(
+  "and every failure everywhere has its own flag",
+  argvFor({ op: "restart", allFailed: true }),
+  ["restart", "--not-in-place", "--all-failed"],
 );
 check(
   "reset always forces, since we confirm in the UI",
@@ -643,6 +655,45 @@ check(
   "a fresh restart is NOT predicted — the new id is unknowable",
   kinds(applyMutation(state, { op: "restart", ids: [5] })),
   kinds(state),
+);
+check(
+  "restarting a group's failures in place requeues exactly those",
+  taskList(
+    applyMutation(state, {
+      op: "restart",
+      failedInGroup: "default",
+      inPlace: true,
+    }).tasks,
+  )
+    .filter((x) => underlyingKind(x.status) === "queued")
+    .map((x) => x.id),
+  // 7, 8, 9 are the default group's failures; 2 is the queued task in `build`,
+  // and 11 is Locked over Queued. The successful 6 stays finished.
+  [2, 7, 8, 9, 11],
+);
+check(
+  "restarting a group's failures leaves the other groups alone",
+  underlyingKind(
+    applyMutation(state, {
+      op: "restart",
+      failedInGroup: "default",
+      inPlace: true,
+    }).tasks["5"].status,
+  ),
+  "done",
+);
+check(
+  "--all-failed reaches across groups",
+  taskList(
+    applyMutation(state, {
+      op: "restart",
+      allFailed: true,
+      inPlace: true,
+    }).tasks,
+  )
+    .filter((x) => isFailed(x))
+    .map((x) => x.id),
+  [],
 );
 check(
   "parallelism is set on the named group",

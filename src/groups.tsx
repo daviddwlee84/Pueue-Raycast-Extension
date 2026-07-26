@@ -178,6 +178,20 @@ function overallLine(o: OverallSummary): string | undefined {
   return parts.join(" · ");
 }
 
+/**
+ * `#4, #5 and #6` — or `#4, #5 and 8 others` once naming them all stops helping.
+ *
+ * A confirmation that says "6 tasks" and one that says which six are different
+ * things to agree to.
+ */
+function failedIdList(ids: readonly number[], max = 6): string {
+  const shown = ids.slice(0, max).map((id) => `#${id}`);
+  const rest = ids.length - shown.length;
+  if (rest > 0) return `${shown.join(", ")} and ${rest} more`;
+  if (shown.length === 1) return shown[0];
+  return `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}`;
+}
+
 function GroupItem(props: {
   summary: GroupSummary;
   showDetail: boolean;
@@ -300,6 +314,103 @@ function GroupItem(props: {
                 />
               ))}
             </ActionPanel.Submenu>
+          </ActionPanel.Section>
+
+          <ActionPanel.Section title="Batch">
+            {/* Only offered when there is something to restart: pueue accepts
+                `--failed-in-group` on a group with no failures and exits 0
+                without a word, so an always-visible action would silently do
+                nothing. Verified against 4.0.4. */}
+            {s.failed > 0 ? (
+              <Action
+                title={`Restart ${s.failed} Failed (New Tasks)`}
+                icon={Icon.Redo}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "r" }}
+                onAction={() =>
+                  onAct(
+                    { op: "restart", failedInGroup: name },
+                    {
+                      verb: `Restarting failures in ${name}`,
+                      done: `Restarted ${s.failed} task${s.failed === 1 ? "" : "s"} in ${name}`,
+                      confirm: {
+                        title: `Restart ${s.failed} failed task${s.failed === 1 ? "" : "s"} in “${name}”?`,
+                        message: `${failedIdList(s.failedIds)} will be queued again as new tasks. The originals keep their logs.`,
+                        actionTitle: "Restart",
+                        rememberChoice: true,
+                      },
+                    },
+                  )
+                }
+              />
+            ) : null}
+            {s.failed > 0 ? (
+              <Action
+                title={`Restart ${s.failed} Failed in Place (Overwrites Logs)`}
+                icon={Icon.Repeat}
+                shortcut={{ modifiers: ["cmd", "opt"], key: "r" }}
+                onAction={() =>
+                  onAct(
+                    { op: "restart", failedInGroup: name, inPlace: true },
+                    {
+                      verb: `Restarting failures in ${name}`,
+                      done: `Restarted ${s.failed} task${s.failed === 1 ? "" : "s"} in place`,
+                      confirm: {
+                        title: `Restart ${s.failed} failed task${s.failed === 1 ? "" : "s"} in place?`,
+                        message: `${failedIdList(s.failedIds)} keep their ids, and their existing output is overwritten. Read the logs first if you still need them.`,
+                        actionTitle: "Restart in Place",
+                        destructive: true,
+                      },
+                    },
+                  )
+                }
+              />
+            ) : null}
+            {s.finished > 0 ? (
+              <Action
+                title="Clean Finished Tasks in Group"
+                icon={Icon.Trash}
+                style={Action.Style.Destructive}
+                onAction={() =>
+                  onAct(
+                    { op: "clean", group: name },
+                    {
+                      verb: `Cleaning ${name}`,
+                      done: `Cleaned ${s.finished} task${s.finished === 1 ? "" : "s"} from ${name}`,
+                      confirm: {
+                        title: `Remove ${s.finished} finished task${s.finished === 1 ? "" : "s"} from “${name}”?`,
+                        message:
+                          s.failed > 0
+                            ? `The ${s.failed} failure${s.failed === 1 ? "" : "s"} go too, with their logs. Nothing running or queued is touched.`
+                            : "Their logs go with them. Nothing running or queued is touched.",
+                        actionTitle: "Clean",
+                        destructive: true,
+                      },
+                    },
+                  )
+                }
+              />
+            ) : null}
+            {s.succeeded > 0 && s.failed > 0 ? (
+              <Action
+                title="Clean Only the Successes in Group"
+                icon={Icon.Trash}
+                onAction={() =>
+                  onAct(
+                    { op: "clean", group: name, successfulOnly: true },
+                    {
+                      verb: `Cleaning ${name}`,
+                      done: `Cleaned ${s.succeeded} successful task${s.succeeded === 1 ? "" : "s"}`,
+                      confirm: {
+                        title: `Remove ${s.succeeded} successful task${s.succeeded === 1 ? "" : "s"} from “${name}”?`,
+                        message: `The ${s.failed} failure${s.failed === 1 ? " stays" : "s stay"} put, so you can still read the logs.`,
+                        actionTitle: "Clean Successes",
+                        rememberChoice: true,
+                      },
+                    },
+                  )
+                }
+              />
+            ) : null}
           </ActionPanel.Section>
 
           <ActionPanel.Section title="Manage">

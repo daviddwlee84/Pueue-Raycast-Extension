@@ -60,7 +60,12 @@ export function argvFor(m: Mutation): string[] {
       a.push(m.inPlace ? "--in-place" : "--not-in-place");
       if (m.stashed) a.push("--stashed");
       if (m.immediate) a.push("--immediate");
-      a.push(...m.ids.map(String));
+      // Selectors, before the positional ids. Both combinations were run
+      // against a live 4.0.4 daemon: --in-place reused the ids, --not-in-place
+      // minted new ones, and neither touched the group's successful tasks.
+      if (m.allFailed) a.push("--all-failed");
+      if (m.failedInGroup) a.push("--failed-in-group", m.failedInGroup);
+      a.push(...(m.ids ?? []).map(String));
       return a;
     }
     case "remove":

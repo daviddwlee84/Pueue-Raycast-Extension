@@ -40,7 +40,14 @@ import { useCachedPromise, useCachedState } from "@raycast/utils";
 
 import { connectionIcon } from "./lib/connection-ui";
 import { describeError } from "./lib/error-states";
-import { statusTag } from "./lib/format";
+import { formatDuration, groupProgressIcon, statusTag } from "./lib/format";
+import {
+  parallelLabel,
+  progressBar,
+  progressPercent,
+  summarizeGroups,
+  type GroupSummary,
+} from "./lib/group-summary";
 import {
   connectionByName,
   connections,
@@ -61,6 +68,13 @@ import {
 } from "./lib/pueue";
 
 const MENU_ICON = "pueue-menubar.svg";
+
+/**
+ * Parallelism presets offered in the menu, kept shorter than the Groups view's.
+ * A menu is a list you scan, not a form you fill in; anything past this goes
+ * through "Other…", which opens the view where a number can be typed.
+ */
+const MENU_PARALLEL_CHOICES = [1, 2, 4, 6, 8, 12, 0];
 
 export default function Command() {
   const prefs = getPreferenceValues<Preferences.QueueMenu>();
@@ -179,11 +193,9 @@ export default function Command() {
   const queued = tasks.filter(isQueued);
   const paused = tasks.filter(isPaused);
   const failed = tasks.filter(isFailed);
-  const groups = Object.entries(data.state.groups).sort(([a], [b]) =>
-    a.localeCompare(b),
-  );
+  const groups = summarizeGroups(data.state.groups, tasks);
   const allPaused =
-    groups.length > 0 && groups.every(([, g]) => g.status === "Paused");
+    groups.length > 0 && groups.every((g) => g.status === "Paused");
 
   // Data for this connection, but the latest read failed. What is on screen is
   // not a moment old — it is a snapshot of a queue we can no longer see, and
@@ -312,52 +324,13 @@ export default function Command() {
 
       {prefs.showGroups && groups.length > 0 ? (
         <MenuBarExtra.Section title="Groups">
-          {groups.map(([name, group]) => (
-            <MenuBarExtra.Submenu
-              key={name}
-              title={`${name} — ${group.status.toLowerCase()} (${
-                tasks.filter((t) => t.group === name && isRunning(t)).length
-              }/${group.parallel_tasks === 0 ? "∞" : group.parallel_tasks})`}
-              icon={group.status === "Running" ? Icon.Play : Icon.Pause}
-            >
-              {group.status === "Running" ? (
-                <MenuBarExtra.Item
-                  title="Pause Group"
-                  icon={Icon.Pause}
-                  onAction={() =>
-                    run({ op: "pause", group: name }, `Paused ${name}`)
-                  }
-                />
-              ) : (
-                <MenuBarExtra.Item
-                  title="Resume Group"
-                  icon={Icon.Play}
-                  onAction={() =>
-                    run({ op: "start", group: name }, `Resumed ${name}`)
-                  }
-                />
-              )}
-              <MenuBarExtra.Submenu
-                title="Parallelism"
-                icon={Icon.BulletPoints}
-              >
-                {[1, 2, 3, 4, 6, 8, 0].map((n) => (
-                  <MenuBarExtra.Item
-                    key={n}
-                    title={n === 0 ? "Unlimited" : String(n)}
-                    icon={
-                      n === group.parallel_tasks ? Icon.Checkmark : Icon.Circle
-                    }
-                    onAction={() =>
-                      run(
-                        { op: "parallel", count: n, group: name },
-                        `${name}: ${n === 0 ? "unlimited" : n} at a time`,
-                      )
-                    }
-                  />
-                ))}
-              </MenuBarExtra.Submenu>
-            </MenuBarExtra.Submenu>
+          {groups.map((s) => (
+            <GroupSubmenu
+              key={s.name}
+              summary={s}
+              run={run}
+              guardDestructive={guardDestructive}
+            />
           ))}
         </MenuBarExtra.Section>
       ) : null}
@@ -582,6 +555,220 @@ function ConnectionSection({
         />
       ))}
     </MenuBarExtra.Section>
+  );
+}
+
+/**
+ * One group, with its progress in the title and its batch actions inside.
+ *
+ * The title used to be `name — running (0/1)`: running tasks over parallelism,
+ * neither of which moves while a batch works through. It now leads with
+ * `8/20`, which is the number you opened the menu for.
+ *
+ * Reset is not offered here as a plain item and never will be. It kills every
+ * task in the group, deletes them, and deletes their logs — and there is no
+ * dialog available in a menu bar to confirm that against. It sits behind an ⌥
+ * that, uniquely, does *not* answer to the confirmations preference, and
+ * "Open Groups…" is one click away for anyone who wants the real thing with a
+ * real alert.
+ */
+function GroupSubmenu(props: {
+  summary: GroupSummary;
+  run: (m: Mutation, done: string) => void;
+  guardDestructive: boolean;
+}) {
+  const { summary: s, run } = props;
+  const eta = formatDuration(s.etaMs);
+  const running = s.status === "Running";
+
+  return (
+    <MenuBarExtra.Submenu title={groupTitle(s)} icon={groupProgressIcon(s)}>
+      {/* No onAction: the disabled first row, the same slot a task submenu uses
+          for its status. This is what makes the menu glanceable — the numbers
+          are visible without opening anything further. */}
+      <MenuBarExtra.Item
+        title={
+          s.total === 0
+            ? "No tasks"
+            : `${progressBar(s.progress)} ${progressPercent(s.progress)}`
+        }
+        subtitle={
+          s.total === 0
+            ? undefined
+            : [
+                `${s.running}/${parallelLabel(s.parallel)} slots`,
+                ...(eta ? [`~${eta} left`] : []),
+              ].join(" · ")
+        }
+      />
+
+      <MenuBarExtra.Section>
+        <MenuBarExtra.Item
+          title={running ? "Pause Group" : "Resume Group"}
+          icon={running ? Icon.Pause : Icon.Play}
+          onAction={() =>
+            running
+              ? run({ op: "pause", group: s.name }, `Paused ${s.name}`)
+              : run({ op: "start", group: s.name }, `Resumed ${s.name}`)
+          }
+        />
+        <MenuBarExtra.Submenu title="Parallelism" icon={Icon.BulletPoints}>
+          {MENU_PARALLEL_CHOICES.map((n) => (
+            <MenuBarExtra.Item
+              key={n}
+              title={n === 0 ? "Unlimited" : String(n)}
+              icon={n === s.parallel ? Icon.Checkmark : Icon.Circle}
+              onAction={() =>
+                run(
+                  { op: "parallel", count: n, group: s.name },
+                  `${s.name}: ${n === 0 ? "unlimited" : n} at a time`,
+                )
+              }
+            />
+          ))}
+          {/* Free text is not enterable in a menu, so anything off this list
+              has to be set where a form can exist. */}
+          <MenuBarExtra.Item
+            title="Other…"
+            icon={Icon.Pencil}
+            onAction={() => openGroups()}
+          />
+        </MenuBarExtra.Submenu>
+      </MenuBarExtra.Section>
+
+      {s.failed > 0 || s.finished > 0 ? (
+        <MenuBarExtra.Section>
+          {/* pueue accepts --failed-in-group on a group with no failures and
+              exits 0 without a word, so this is hidden rather than disabled. */}
+          {s.failed > 0 ? (
+            <MenuBarExtra.Item
+              title={`Restart ${s.failed} Failed (New Tasks)`}
+              icon={Icon.Redo}
+              onAction={() =>
+                run(
+                  { op: "restart", failedInGroup: s.name },
+                  `Restarted ${s.failed} in ${s.name}`,
+                )
+              }
+            />
+          ) : null}
+          {s.failed > 0 ? (
+            <MenuBarExtra.Item
+              title={`Restart ${s.failed} Failed in Place (Overwrites Logs)`}
+              icon={Icon.Repeat}
+              onAction={() =>
+                run(
+                  { op: "restart", failedInGroup: s.name, inPlace: true },
+                  `Restarted ${s.failed} in place`,
+                )
+              }
+            />
+          ) : null}
+          {s.finished > 0 ? (
+            <GuardedItem
+              title="Clean Finished Tasks in Group"
+              icon={Icon.Trash}
+              guarded={props.guardDestructive}
+              onAction={() =>
+                run(
+                  { op: "clean", group: s.name },
+                  `Cleaned ${s.finished} from ${s.name}`,
+                )
+              }
+            />
+          ) : null}
+        </MenuBarExtra.Section>
+      ) : null}
+
+      <MenuBarExtra.Section>
+        {/* Always behind ⌥, regardless of the confirmations preference. This is
+            not the exception that was removed from Remove and Clean: the Groups
+            view already treats reset as categorically worse than the rest and
+            asks every single time, with no "don't show this again". Reset kills
+            every task in the group, deletes them, and deletes their logs. */}
+        <GuardedItem
+          title="Reset Group (Deletes Every Task and Log)"
+          icon={Icon.ExclamationMark}
+          guarded
+          onAction={() =>
+            run({ op: "reset", groups: [s.name] }, `Reset ${s.name}`)
+          }
+        />
+      </MenuBarExtra.Section>
+
+      <MenuBarExtra.Section>
+        <MenuBarExtra.Item
+          title="Show Tasks in Group"
+          icon={Icon.AppWindowList}
+          onAction={() =>
+            launchCommand({
+              name: "tasks",
+              type: LaunchType.UserInitiated,
+              context: { group: s.name },
+            }).catch(() => {})
+          }
+        />
+        <MenuBarExtra.Item
+          title="Open Groups…"
+          icon={Icon.Sidebar}
+          onAction={openGroups}
+        />
+      </MenuBarExtra.Section>
+    </MenuBarExtra.Submenu>
+  );
+}
+
+function openGroups() {
+  launchCommand({ name: "groups", type: LaunchType.UserInitiated }).catch(
+    () => {},
+  );
+}
+
+/** `wf · 6/6 · 5 failed`. `idle` when there is nothing to be a fraction of. */
+function groupTitle(s: GroupSummary): string {
+  if (s.total === 0) {
+    return `${s.name} · idle${s.status === "Paused" ? " · paused" : ""}`;
+  }
+  const parts = [s.name, `${s.finished}/${s.total}`];
+  if (s.failed > 0) parts.push(`${s.failed} failed`);
+  if (s.status === "Paused") parts.push("paused");
+  return parts.join(" · ");
+}
+
+/**
+ * A one-click item, or an ⌥-held one.
+ *
+ * ⌥ is this menu's confirmation — `confirmAlert` presents in the Raycast
+ * window, which is closed while the menu is open, so there is no dialog to
+ * show. That is why it normally answers to the same preference a dialog does.
+ */
+function GuardedItem(props: {
+  title: string;
+  icon: Icon;
+  guarded: boolean;
+  onAction: () => void;
+}) {
+  if (!props.guarded) {
+    return (
+      <MenuBarExtra.Item
+        title={props.title}
+        icon={props.icon}
+        onAction={props.onAction}
+      />
+    );
+  }
+  return (
+    <MenuBarExtra.Item
+      title={`Hold ⌥ to ${props.title}`}
+      icon={props.icon}
+      alternate={
+        <MenuBarExtra.Item
+          title={props.title}
+          icon={props.icon}
+          onAction={props.onAction}
+        />
+      }
+    />
   );
 }
 
