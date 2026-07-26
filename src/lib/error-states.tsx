@@ -10,6 +10,7 @@
 import {
   Action,
   ActionPanel,
+  Color,
   Detail,
   Icon,
   List,
@@ -60,6 +61,9 @@ export interface ErrorAction {
 export interface ErrorDescriptor {
   icon: Image.ImageLike;
   title: string;
+  /** A few words, for the stale banner — the list column is a third of the
+   * window when the detail pane is open and truncates anything longer. */
+  shortTitle: string;
   description: string;
   markdown: string;
   actions: ErrorAction[];
@@ -106,6 +110,7 @@ export function describeError(error: unknown): ErrorDescriptor {
     return {
       icon: Icon.Download,
       title: "Pueue CLI not found",
+      shortTitle: "Pueue not found",
       description:
         "Install pueue, then reopen. If it lives somewhere unusual, set its path in preferences.",
       markdown: [
@@ -165,6 +170,7 @@ export function describeError(error: unknown): ErrorDescriptor {
     return {
       icon: Icon.Plug,
       title: "Pueue daemon not running",
+      shortTitle: "Daemon not running",
       description:
         "pueue is installed but pueued isn't reachable. Start the daemon, then reload.",
       markdown: [
@@ -224,6 +230,7 @@ export function describeError(error: unknown): ErrorDescriptor {
     return {
       icon: Icon.MagnifyingGlass,
       title: "That query didn't parse",
+      shortTitle: "Bad query",
       description: "Clear the query argument, or fix the expression.",
       markdown: [
         "# That query didn't parse",
@@ -257,6 +264,7 @@ export function describeError(error: unknown): ErrorDescriptor {
   return {
     icon: Icon.Warning,
     title: firstLine(detail) || "Pueue command failed",
+    shortTitle: "Pueue error",
     description: "Something went wrong talking to pueue.",
     markdown: ["# Pueue command failed", "", fence(detail)].join("\n"),
     actions: [
@@ -327,6 +335,34 @@ export function ErrorEmptyView({
       icon={d.icon}
       title={d.title}
       description={d.description}
+      actions={renderActions(d, onRetry)}
+    />
+  );
+}
+
+/**
+ * A row that says the list underneath it can't be trusted.
+ *
+ * `useCachedPromise` keeps serving its last successful read when a fetch fails,
+ * which is the right default — but with the daemon stopped it means a dead
+ * queue renders as a live one, and Raycast's failure toast is a single line at
+ * the bottom that scrolls away. A task list that is quietly six hours old is
+ * worse than no task list, so structural failures get a row of their own,
+ * carrying the same recovery actions as the full-screen view.
+ */
+export function StaleBannerItem({
+  error,
+  onRetry,
+}: {
+  error: unknown;
+  onRetry?: () => void;
+}) {
+  const d = describeError(error);
+  return (
+    <List.Item
+      icon={{ source: Icon.Warning, tintColor: Color.Red }}
+      title={d.shortTitle}
+      accessories={[{ text: "cached" }]}
       actions={renderActions(d, onRetry)}
     />
   );

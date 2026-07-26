@@ -36,7 +36,11 @@ import {
 } from "./lib/format";
 import { act, type ActOptions } from "./lib/actions";
 import { ALL_GROUPS, GroupDropdown } from "./lib/group-dropdown";
-import { ErrorEmptyView } from "./lib/error-states";
+import {
+  describeError,
+  ErrorEmptyView,
+  StaleBannerItem,
+} from "./lib/error-states";
 import {
   cleanLogOutput,
   endedAt,
@@ -134,7 +138,7 @@ export default function Command(
   };
 
   // A failed first read has nothing to show alongside the error, so the error
-  // takes the whole screen. With cached data present we keep rendering it.
+  // takes the whole screen.
   if (error && !state.data) {
     return (
       <List searchBarPlaceholder="Search tasks…">
@@ -142,6 +146,11 @@ export default function Command(
       </List>
     );
   }
+
+  // With cached data we keep rendering it — but a structural failure means that
+  // data is not merely a moment old, it is a snapshot of a queue we can no
+  // longer see. Say so in the list itself rather than trusting a toast.
+  const stale = error !== undefined && describeError(error).structural;
 
   return (
     <List
@@ -157,6 +166,11 @@ export default function Command(
         />
       }
     >
+      {stale ? (
+        <List.Section title="Connection">
+          <StaleBannerItem error={error} onRetry={reload} />
+        </List.Section>
+      ) : null}
       {tasks.length === 0 ? (
         <List.EmptyView
           icon={Icon.Tray}
