@@ -1,45 +1,85 @@
 # AI tools
 
-**Status:** `P?` · **Effort:** `[M]` · not started
+**Status:** shipped · **Effort:** `[M]` · seven tools in `src/tools/`
 
-## What
+## What shipped
 
-A `tools[]` array in the manifest turns the extension into an AI Extension.
-Tools don't appear in root search; Raycast AI calls them, using each tool's
-`description` to decide when.
+`tools[]` in the manifest turns the extension into an AI Extension. Tools do not
+appear in root search; Raycast AI calls them, choosing by `description`.
 
-Natural candidates, all of which map onto existing transport calls:
+| Tool | Maps to | Confirms |
+| --- | --- | --- |
+| `get-tasks` | `status()` + client-side filtering | — |
+| `get-task-log` | `status()` + `readLogText()` | — |
+| `get-groups` | `status()` + `summarizeGroups()` | — |
+| `add-task` | `mutate({op:"add"})` | Regular |
+| `kill-tasks` | `mutate({op:"kill"})` | Destructive |
+| `restart-failed` | `mutate({op:"restart"})` | Destructive when in place |
+| `clean-tasks` | `mutate({op:"clean"})` | Destructive |
 
-| Tool | Maps to |
+The transport already returned structured data, so each tool is a thin wrapper.
+The work was prompt-shaped rather than code-shaped, as predicted — plus one piece
+of real code, the projection in `src/lib/ai-shape.ts`.
+
+## What the toolchain does, measured
+
+On a scratch extension, before writing anything here:
+
+| Claim | How it was checked |
 | --- | --- |
-| what's running | `status()` filtered to running |
-| queue this | `mutate({op: "add", …})` |
-| why did task N fail | `status()` + `readLogText(N)` |
-| kill everything in group X | `mutate({op: "kill", group: X})` |
+| `ray lint` accepts a `tools[]` entry of `{name, title, description}` | added one; the only error was an unrelated short `description` on a command |
+| `ray build` treats `src/tools/<name>.ts` as an entry point | `entry points [… "src/tools/running-tasks.ts"]` |
+| `ray build -e dist` typechecks tool files | `checked TypeScript`, exit 0 |
+| the manifest is **not** rewritten with a generated schema | `tools[]` was byte-identical after a build; the input schema is derived from the TypeScript `Input` type at bundle time |
+| `Tool.Confirmation<T>` exists in the installed `@raycast/api` | `types/index.d.ts`, `namespace Tool` |
 
-The transport already returns structured data, so a tool is a thin wrapper — the
-work is prompt-shaped, not code-shaped.
+So the whole thing is covered by the existing gate: `just check` lints and
+builds it, `just dist` typechecks it, and `just verify` asserts the projection.
 
-## Why it isn't done
+## The objection that retired itself
 
-**AI Extensions require Raycast Pro.** From
-[developers.raycast.com/ai/getting-started](https://developers.raycast.com/ai/getting-started):
+An earlier version of this note said:
 
-> "To use AI APIs or AI Extensions, you need to subscribe to Raycast Pro."
+> there is no confirmation surface in an AI tool call comparable to
+> `confirmAlert`. If this ships, the first version should be **read-only**.
 
-So this can only ever be an additive layer for Pro subscribers, never the
-primary way to use the extension. Everything it would offer already exists as a
-command.
+That is no longer true. `Tool.Confirmation<Input>` runs *before* the tool with
+the same input, returns `undefined` to skip or an object to prompt, and supports
+`Action.Style.Destructive` plus an `info` list of name/value pairs. It is
+strictly better than `confirmAlert` for this purpose, because the confirmation
+can read the queue first and name what it is about to touch — `#7 #8 #9` rather
+than "the wf group".
 
-## Caution if it is built
+Every mutating tool here uses it. None of them is silent.
 
-Mutating tools are the risk. An AI that decides "kill everything in the default
-group" from an ambiguous sentence is worse than no tool, and there is no
-confirmation surface in an AI tool call comparable to `confirmAlert`. If this
-ships, the first version should be **read-only** — status, logs, why-did-this-
-fail — with `add` at most, and nothing destructive.
+## Rules the tools follow
 
-## What would have to be true
+- **`envs` never reaches a model.** The transport strips it at the parse
+  boundary; `toAiTask` then names every field explicitly rather than spreading,
+  so a field pueue adds later cannot ride along. `dev-check.ts` asserts both the
+  absence of `envs` and the exact key set.
+- **An unknown connection name is an error.** The UI's `connectionByName` falls
+  back to Local, which is right for a stale dropdown value and wrong for a
+  sentence: task ids are per-daemon, so "kill everything on lab" landing here
+  stops someone else's work. `resolveConnectionStrict` throws and lists the real
+  names so the model can correct itself in one turn.
+- **Results are capped and say so.** 100 tasks maximum, newest first, with
+  `matched` / `returned` / `truncated` alongside — a silently short list is
+  indistinguishable from a short queue.
+- **`reset` is not exposed.** It kills and deletes everything in a group,
+  running tasks included. No sentence is ambiguous enough to be worth that; it
+  stays a deliberate action in the Groups view.
 
-A Pro subscription to test against, and a decision that read-only tools are
-worth the manifest surface.
+## Requirements
+
+Raycast's docs state that AI Extensions need a Pro subscription. In practice a
+configured custom model provider also works — this was developed against one.
+Either way it is additive: tools are invisible in root search, and an install
+with no AI access loses nothing.
+
+## Still open
+
+- **Evals.** Raycast supports `ai.yaml` eval files for tool selection. Not
+  written. The failure they would catch is the model choosing `clean-tasks` when
+  asked to "clear out" a group that has running work — the confirmation stops the
+  damage, but a wrong tool choice is still a bad turn.

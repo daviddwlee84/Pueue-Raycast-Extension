@@ -40,6 +40,7 @@ import fixture from "./fixtures/state.json";
 import stderrFixture from "./fixtures/stderr.json";
 import { argvFor, longFlagsOf, subcommandOf } from "./pueue/argv";
 import { applyMutation } from "./optimistic";
+import { capped, toAiGroup, toAiTask } from "./ai-shape";
 import {
   parallelLabel,
   progressBar,
@@ -875,6 +876,122 @@ check(
   ),
   "no tasks",
 );
+
+console.log("\nAI tool shaping — what a model actually receives");
+const aiNow = Date.parse("2026-07-26T09:15:00.000+08:00");
+const ai = (id: number) => toAiTask(t(id), aiNow);
+
+// The whole reason the projection exists: the wire shape is a two-level enum,
+// and a model should never have to unwrap it to answer a question.
+check(
+  "Locked{Done{Failed:127}} flattens to a status, a result and an exit code",
+  (() => {
+    const x = ai(5);
+    return [x.status, x.result, x.exitCode, x.beingEdited];
+  })(),
+  ["done", "failed", 127, true],
+);
+check(
+  "a FailedToSpawn keeps the OS error, which is the actual diagnosis",
+  ai(7).spawnError,
+  "No such file or directory (os error 2)",
+);
+check(
+  "a successful task carries no exit code, because the wire has none",
+  [ai(6).result, ai(6).exitCode],
+  ["success", undefined],
+);
+check(
+  "a running task has a start, no end, and a live duration",
+  (() => {
+    const x = ai(3);
+    return [x.status, x.result, x.endedAt, x.durationSeconds !== undefined];
+  })(),
+  ["running", undefined, undefined, true],
+);
+check(
+  "a stashed task with no scheduled time has no enqueuedAt — not 1970",
+  ai(0).enqueuedAt,
+  undefined,
+);
+check(
+  "timestamps are ISO strings a model can compare",
+  ai(6).endedAt,
+  "2026-07-26T01:06:02.250Z",
+);
+check(
+  "empty dependency lists are omitted rather than sent as []",
+  ai(6).dependsOn,
+  undefined,
+);
+
+// The security-relevant one. `envs` is a snapshot of the submitting shell's
+// environment and may hold secrets; a tool result is sent to a model. The
+// projection names every field explicitly so a new pueue field cannot ride
+// along, and this asserts that rather than trusting it.
+check(
+  "no task field named envs, ever",
+  taskList(state.tasks).some((task) => "envs" in toAiTask(task, aiNow)),
+  false,
+);
+check(
+  "and no unexpected keys at all",
+  [
+    ...new Set(
+      taskList(state.tasks).flatMap((task) =>
+        Object.keys(toAiTask(task, aiNow)),
+      ),
+    ),
+  ].sort(),
+  [
+    "beingEdited",
+    "command",
+    "dependsOn",
+    "durationSeconds",
+    "endedAt",
+    "enqueuedAt",
+    "exitCode",
+    "group",
+    "id",
+    "label",
+    "result",
+    "spawnError",
+    "startedAt",
+    "status",
+    "workingDirectory",
+  ],
+);
+
+const aiGroups = summarizeGroups(
+  state.groups,
+  taskList(state.tasks),
+  aiNow,
+).map(toAiGroup);
+const aiGroup = (name: string) => aiGroups.find((g) => g.name === name)!;
+check(
+  "unlimited parallelism is null rather than a misleading 0",
+  aiGroup("gpu").parallelTasks,
+  null,
+);
+check("a real limit survives", aiGroup("build").parallelTasks, 4);
+check("progress is a whole percent", aiGroup("default").percentComplete, 50);
+check(
+  "durations reach the model in seconds, not milliseconds",
+  aiGroup("default").estimatedSecondsRemaining,
+  6,
+);
+check(
+  "an absent estimate stays absent rather than becoming 0",
+  aiGroup("build").estimatedSecondsRemaining,
+  undefined,
+);
+
+check(
+  "capping reports the total, so a short list is never ambiguous",
+  capped([1, 2, 3, 4, 5], 2),
+  { items: [1, 2], total: 5, truncated: true },
+);
+check("an uncapped list says so", capped([1, 2], 5).truncated, false);
 
 console.log("\nconnection parsing");
 const parse = (raw: string | undefined) => parseConnections(raw);

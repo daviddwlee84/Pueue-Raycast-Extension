@@ -50,6 +50,31 @@ This is the single most likely "it's broken" report, and it isn't a bug in the e
 | **Groups** | Batch progress per group — `6/20 done · 3 failed`, a progress ring, an ETA, and a detail pane with the full breakdown. Restart a group's failures in one action, clean it, pause it, set its parallelism, add and remove groups. See [Groups and batch progress](https://daviddwlee84.github.io/Pueue-Raycast-Extension/groups/). |
 | **Queue Menu Bar** | Running / queued / failed counts in the menu bar, with per-task and per-group actions. Refreshes every minute. |
 
+### Ask AI
+
+Mention the extension in Raycast AI with `@pueue`, or run **Ask Pueue** from root search:
+
+```text
+@pueue what's failing on lab?
+@pueue why did task 6 fail?
+@pueue how far through is the wf group?
+@pueue queue 'cargo build --release' in the wf group on lab
+@pueue restart everything that failed in wf
+```
+
+Seven tools: `get-tasks`, `get-task-log`, `get-groups` read; `add-task`,
+`kill-tasks`, `restart-failed`, `clean-tasks` write. **Every writing tool
+confirms before it runs**, and the confirmation names the tasks and the daemon —
+`Kill 3 running tasks in "wf" on lab` beside `#7 #8 #9`, not just the sentence
+you typed back at you. `reset` is deliberately not exposed: it deletes every
+task in a group including running ones, and no sentence is worth that risk.
+
+An unknown connection name is an error rather than a fallback to this machine.
+Task ids are per-daemon, so pointing a kill at the wrong host is not a near miss.
+
+Requires an AI subscription or a configured custom model provider; the rest of
+the extension is unaffected if you have neither.
+
 ### Keyboard shortcuts (Tasks)
 
 | Shortcut | Action |

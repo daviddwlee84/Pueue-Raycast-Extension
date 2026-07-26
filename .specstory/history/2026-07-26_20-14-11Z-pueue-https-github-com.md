@@ -36926,3 +36926,2169 @@ FAIL pure module exists: lib/specstory/wire.ts
 Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
 ```
 </details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:12:03Z)**_
+
+<think><details><summary>Thought Process</summary>
+Most of my test cases are passing, but I'm hitting four real issues. The first one is tricky: when there's a lone `*` character, my sanitizer strips leading `-+~^` but misses the `*`, so it becomes `"*"*` — a quoted literal asterisk with a prefix operator. I need to figure out what that actually does in fts5 and whether it's valid or causes an error.
+
+The second problem is in my `mergeLiveAgents` logic — I'm getting 4 results instead of 3. My deduplication is broken because I'm checking if a registry row's pid is defined, but that's backwards. If a session was already claimed by a herdr agent and I grafted its pid onto it, I should skip that registry row. The rule should be: skip a registry agent whose session was already claimed by a herdr agent *and* whose pid was grafted onto that herdr agent.
+
+For the path issues, `dirname(__dirname)` from the compiled `.build/verify/dev-check.js` gives `.build`, not `src`. I need to resolve the src directory relative to the current working directory instead, since `just verify` runs from the repo root. I should also check the actual herdr schema to see where the AgentStatus enum lives and verify the `"*"*` token behavior.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:12:03Z)**_
+
+212/226. Four real failures — let me diagnose the two I need data for.
+
+_**Agent (claude-opus-5 2026-07-26 21:12:04Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Find herdr schema path and test quoted star
+
+```bash
+echo "=== herdr api schema: where is AgentStatus? ==="
+herdr api schema --json 2>&1 | jq -r 'paths(scalars) as $p | select($p[-1]=="enum" or ($p|tostring|test("AgentStatus"))) | ($p|join("."))' 2>/dev/null | grep -i agentstatus | head -5
+echo "--- top-level keys ---"; herdr api schema --json 2>&1 | jq -r 'keys' 2>&1 | head
+echo "--- search for AgentStatus ---"; herdr api schema --json 2>&1 | jq -r '[paths | select(.[-1] == "AgentStatus") | join(".")] | .[0:3]' 2>&1
+echo "--- its enum ---"; herdr api schema --json 2>&1 | jq -c '.. | objects | select(has("AgentStatus")) | .AgentStatus.enum' 2>&1 | head -3
+echo
+echo "=== does fts5 accept \"*\"* ? ==="
+sqlite3 "file:$HOME/.specstory/sessions.db?mode=ro" 'select count(*) from sessions_fts where sessions_fts match '"'"'"*"*'"'"';' 2>&1 | head -2
+```
+
+```text
+=== herdr api schema: where is AgentStatus? ===
+schemas.event.$defs.AgentStatus.enum.0
+schemas.event.$defs.AgentStatus.enum.1
+schemas.event.$defs.AgentStatus.enum.2
+schemas.event.$defs.AgentStatus.enum.3
+schemas.event.$defs.AgentStatus.enum.4
+--- top-level keys ---
+[
+  "$schema",
+  "protocol",
+  "schema_version",
+  "schemas",
+  "title"
+]
+--- search for AgentStatus ---
+[
+  "schemas.event.$defs.AgentStatus",
+  "schemas.request.$defs.AgentStatus",
+  "schemas.subscription_event.$defs.AgentStatus"
+]
+--- its enum ---
+["idle","working","blocked","done","unknown"]
+["idle","working","blocked","done","unknown"]
+["idle","working","blocked","done","unknown"]
+
+=== does fts5 accept "*"* ? ===
+0
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:12:16Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to search recursively through the schema to find AgentStatus since it's nested at `schemas.<any>.$defs.AgentStatus.enum` rather than at a fixed path, and my current union approach won't work. Also, I'm realizing that dropping the `*` wildcard is the right call—fts5 accepts it but matches nothing, which silently gives users "no results" instead of telling them the search syntax isn't valid.
+
+Now I'm fixing all four issues: stripping `*` from token edges along with other fts5 operators and dropping empty tokens, tracking consumed registry handles in merge.ts, finding src via cwd in dev-check, and implementing the recursive schema search for AgentStatus. I'll start by cleaning up the token sanitizer to strip meaningless operator characters from both ends of tokens.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:12:16Z)**_
+
+Both diagnosed: herdr's enum is at `schemas.*.$defs.AgentStatus` (and matches my union exactly), and `"*"*` is *accepted* by fts5 but silently matches 0 rows — worse than dropping it. Fixing all four.
+
+_**Agent (claude-opus-5 2026-07-26 21:12:21Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/specstory/fts.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:12:35Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/agents/merge.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:12:42Z)**_
+
+Now the two dev-check harness bugs — the `src/` path and the herdr schema lookup.
+
+_**Agent (claude-opus-5 2026-07-26 21:12:43Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/dev-check.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:12:57Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/dev-check.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:13:06Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/dev-check.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:13:17Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Recompile and rerun dev-check
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && sed -i '' 's/^import { dirname, join } from "node:path";$/import { join } from "node:path";/' src/lib/dev-check.ts && rm -rf .build/verify && npx tsc --outDir .build/verify --module commonjs --target ES2022 --lib ES2023 --moduleResolution node --esModuleInterop --skipLibCheck --strict --resolveJsonModule src/lib/dev-check.ts 2>&1 | head -20 && node .build/verify/dev-check.js 2>&1 | tail -30`
+
+```text
+— probe: binary resolution order
+
+— capabilities: no external tool is required
+
+— fts5 sanitizer
+
+— specstory: SQL builders
+
+— merge: the six-way FTS duplicate
+
+— merge: sessions from several indexes
+
+— merge: live agents (1:N, and the two-pid case)
+
+— merge: grouping (never by project_id)
+
+— rank: ordering invariants, not float equality
+
+— errors: absent is not broken
+
+— import discipline (the harness asserts itself)
+
+— live cross-checks (skipped when the tool is absent)
+
+— fixtures are redacted
+  (no fixtures yet)
+
+237/238 checks passed
+1 FAILED
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:13:22Z)**_
+
+237/238. Let me see the remaining failure.
+
+_**Agent (claude-opus-5 2026-07-26 21:13:23Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Show the remaining failure
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && node .build/verify/dev-check.js 2>&1 | grep -A3 "^FAIL"`
+
+```text
+FAIL title falls to a short id
+  expected "9a5bb46"
+  actual   "9a5bb463"
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:13:28Z)**_
+
+<think><details><summary>Thought Process</summary>
+I had the slice length wrong in my test — `slice(0,8)` correctly extracts 8 characters from the UUID, so I need to update my test expectation to match.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:13:28Z)**_
+
+My assertion was off by one — `slice(0, 8)` gives 8 characters. Fixing the test, not the code.
+
+_**Agent (claude-opus-5 2026-07-26 21:13:30Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/dev-check.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:13:41Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Verify all checks pass
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && rm -rf .build/verify && npx tsc --outDir .build/verify --module commonjs --target ES2022 --lib ES2023 --moduleResolution node --esModuleInterop --skipLibCheck --strict --resolveJsonModule src/lib/dev-check.ts && node .build/verify/dev-check.js 2>&1 | tail -8`
+
+```text
+— import discipline (the harness asserts itself)
+
+— live cross-checks (skipped when the tool is absent)
+
+— fixtures are redacted
+  (no fixtures yet)
+
+238/238 checks passed
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:13:51Z)**_
+
+<think><details><summary>Thought Process</summary>
+All 238 tests are passing, so the domain layer is solid and verified against the actual herdr schema and SpecStory database. Now I need to update the Justfile to use the correct verify command for this scaffold, check the tsconfig configuration, then move on to implementing the providers in task 4. Let me verify the Justfile works, commit this progress, and report back.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:13:51Z)**_
+
+238/238, including live cross-checks against the real herdr schema and SpecStory database. Let me wire up `just verify` and commit this milestone.
+
+_**Agent (claude-opus-5 2026-07-26 21:13:53Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check Justfile verify recipe and tsconfig
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && grep -A6 "^verify:" Justfile && echo "=== tsconfig ===" && cat tsconfig.json`
+
+```text
+verify:
+    ([ -d node_modules ] || npm install) && rm -rf .build/verify && \
+      npx tsc --outDir .build/verify --module commonjs --target ES2022 --lib ES2023 \
+        --esModuleInterop --resolveJsonModule --skipLibCheck --strict src/lib/dev-check.ts && \
+      node .build/verify/dev-check.js
+
+# the pre-commit gate — all four, in this order
+=== tsconfig ===
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "include": ["src/**/*", "raycast-env.d.ts"],
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "module": "commonjs",
+    "target": "ES2022",
+    "strict": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "jsx": "react-jsx",
+    "resolveJsonModule": true
+  }
+}
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:14:04Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Run just verify
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && just verify 2>&1 | tail -6`
+
+```text
+— live cross-checks (skipped when the tool is absent)
+
+— fixtures are redacted
+  (no fixtures yet)
+
+238/238 checks passed
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:14:23Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit the domain layer
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && cat > .gitignore <<'EOF'
+node_modules
+.build
+dist
+raycast-env.d.ts
+.DS_Store
+EOF
+git add -A && git -c user.name="Da-Wei Lee" commit -q -F - <<'MSG'
+Make every external tool optional, and prove it
+
+The pure domain layer plus its harness. 238 checks, including live
+cross-checks against the real herdr schema and the real SpecStory index.
+
+The load-bearing idea is lib/agents/capabilities.ts: herdr, SpecStory,
+sqlite3, codexbar, peon and pueue are all optional, and a missing one is
+not an error. Three capabilities need no binary and no third-party
+database at all — ~/.claude/sessions, ~/.claude/projects and
+~/.codex/sessions are plain filesystem reads — so "every optional tool
+absent" is a supported configuration, and dev-check asserts exactly that.
+
+Kept separate from it: a tool that is present but broken. herdr installed
+with its server down is an error with a fix, not an install hint. Showing
+someone "install herdr" when they have herdr is the worst message we
+could produce, so the two states are different types.
+
+Measured on the capture machine, and written into the comments:
+
+  snippet() on a 7.36 MB body   1144 ms, against 20 ms rank-only. 57x.
+  duplicate FTS rows            81 sessions have >1, one has 6
+  undated rows                  7, all project_id='unknown'
+  two pids, one sessionId       21952 idle and 95663 busy, both alive
+  herdr agent focus             accepts pane_id and nothing else
+  sqlite3                       only /usr/bin, no Homebrew build
+  opencode                      installs to ~/.opencode/bin, in none of
+                                the six conventional probe directories
+
+Two traps found by running the tools rather than reading about them:
+`sqlite3 -json` prints NOTHING for zero rows, not [], so JSON.parse("")
+throws on a search that simply matched nothing; and herdr prints a bare
+Rust Debug string instead of JSON when its server is down, with an exit
+code that does not distinguish the two — so the discriminator is "did
+stdout parse", never the exit code. Getting that backwards renders a dead
+server as "0 agents".
+
+lib/agents/probe.ts is pure, unlike the equivalent in the sibling Pueue
+extension, where binary.ts imports @raycast/api and dev-check re-declares
+PROBE_DIRS with a comment admitting the duplication. That list already
+needed two new entries here, so the copy would already have drifted.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+MSG
+git log --oneline -1
+```
+
+```text
+c7f1552 Make every external tool optional, and prove it
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:14:28Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #3 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:14:28Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #5 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:14:37Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to examine the wire format more carefully for the herdr agent commands—specifically what `herdr agent list` returns and what `herdr agent read` outputs—so I can capture the data structure properly.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:14:37Z)**_
+
+Now the herdr source. Let me capture its exact wire shapes first.
+
+_**Agent (claude-opus-5 2026-07-26 21:14:38Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Capture herdr agent list wire shape
+
+```bash
+echo "=== agent list: full key set across all agents ==="
+herdr agent list 2>/dev/null | jq -r '[.result.agents[] | keys] | flatten | unique' 2>&1
+echo "=== agent_session key set ==="
+herdr agent list 2>/dev/null | jq -r '[.result.agents[] | .agent_session | keys] | flatten | unique' 2>&1
+echo "=== agent_session.kind values ==="
+herdr agent list 2>/dev/null | jq -r '[.result.agents[].agent_session.kind] | unique' 2>&1
+echo "=== distinct agent values ==="
+herdr agent list 2>/dev/null | jq -r '[.result.agents[].agent] | unique' 2>&1
+echo "=== how many lack terminal_title / cwd / agent_session ==="
+herdr agent list 2>/dev/null | jq -r '.result.agents | {total: length, no_title: [.[]|select(has("terminal_title")|not)]|length, no_session: [.[]|select(.agent_session==null)]|length, cwd_is_home: [.[]|select(.cwd=="/Users/david")]|length}' 2>&1
+echo "=== agent read output shape ==="
+p=$(herdr agent list 2>/dev/null | jq -r '.result.agents[0].pane_id')
+herdr agent read "$p" --lines 5 2>&1 | head -c 400
+```
+
+```text
+=== agent list: full key set across all agents ===
+[
+  "agent",
+  "agent_session",
+  "agent_status",
+  "cwd",
+  "focused",
+  "foreground_cwd",
+  "pane_id",
+  "revision",
+  "state_change_seq",
+  "tab_id",
+  "terminal_id",
+  "terminal_title",
+  "terminal_title_stripped",
+  "workspace_id"
+]
+=== agent_session key set ===
+[
+  "agent",
+  "kind",
+  "source",
+  "value"
+]
+=== agent_session.kind values ===
+[
+  "id"
+]
+=== distinct agent values ===
+[
+  "claude"
+]
+=== how many lack terminal_title / cwd / agent_session ===
+{
+  "total": 52,
+  "no_title": 6,
+  "no_session": 0,
+  "cwd_is_home": 8
+}
+=== agent read output shape ===
+  Approx RAM ██████████ 32 GB / 32 GB (100%)
+  2 MCPs | 10 hooks
+  ✓ Bash ×18 | ✓ Edit ×2
+  ✓ All todos complete (5/5)
+  -- INSERT -- ⏵⏵ auto mode on (shift+tab to cycle) · ← 2 agents
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:15:11Z)**_
+
+<think><details><summary>Thought Process</summary>
+I've confirmed that `herdr agent read` outputs plain text directly without JSON wrapping. Now I'm setting up the three core modules: wire.ts for pure data handling, binary.ts for Raycast integration, and cli.ts as the spawner that ties everything together.
+
+Starting with the wire types...
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:15:11Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * herdr's wire format, transcribed from what it actually emits.
+ *
+ * Captured from herdr 0.7.5 on a machine running 52 agents. `herdr agent list`
+ * emits JSON natively — there is NO `--json` flag, and passing one is an error.
+ *
+ * Envelope, verbatim:
+ *
+ *   {"id":"cli:agent:list","result":{"agents":[ … ]}}
+ *   {"error":{"code":"agent_not_found","message":"agent target … not found"},"id":"cli:agent:get"}
+ *
+ * Field presence measured across all 52 agents:
+ *
+ *   terminal_title   ABSENT on 6           -> the title chain must not assume it
+ *   agent_session    present on all 52     -> but typed optional anyway; herdr
+ *                                            reports panes it has not yet
+ *                                            identified, and a pane that just
+ *                                            started has no session yet
+ *   cwd === $HOME    on 8                  -> this is the pane's SHELL cwd and
+ *                                            drifts from the project after a cd
+ *   agent            "claude" only here    -> herdr supports many more; the
+ *                                            union must not be closed to what
+ *                                            one machine happens to run
+ *
+ * Pure: no I/O, no @raycast/api.
+ */
+
+import { keyOf, normalizeAgent, normalizeStatus } from "../agents/normalize";
+import type { LiveAgent } from "../agents/types";
+
+/** The `agent_session` sub-object. `kind` was only ever "id" here. */
+export interface HerdrAgentSession {
+  agent?: string | null;
+  /** "id" observed; the schema also permits "path". */
+  kind?: string | null;
+  /** e.g. "herdr:claude" — which integration reported it. */
+  source?: string | null;
+  /**
+   * THE JOIN. For Claude this is the session UUID, and it resolves in both the
+   * SpecStory index and ~/.claude/projects/. Verified 52/52 on the capture
+   * machine — every live agent's session was findable in both.
+   */
+  value?: string | null;
+}
+
+export interface HerdrAgent {
+  agent?: string | null;
+  agent_session?: HerdrAgentSession | null;
+  /** idle | working | blocked | done | unknown — asserted against the schema. */
+  agent_status?: string | null;
+  cwd?: string | null;
+  /** The pane's live cwd. Usually the better of the two, when it differs. */
+  foreground_cwd?: string | null;
+  focused?: boolean | null;
+  /**
+   * The ONLY thing `herdr agent focus|get|read` accepts.
+   *
+   * Verified against 0.7.5: passing terminal_id or the session UUID returns
+   * {"error":{"code":"agent_not_found","message":"agent target … not found"}}.
+   * An agent without a pane_id therefore cannot be acted on, and the UI must
+   * not offer the action.
+   */
+  pane_id?: string | null;
+  tab_id?: string | null;
+  workspace_id?: string | null;
+  terminal_id?: string | null;
+  /** Absent on 6 of 52. Carries a "✳ " prefix when Claude set it. */
+  terminal_title?: string | null;
+  terminal_title_stripped?: string | null;
+  revision?: number | null;
+  state_change_seq?: number | null;
+}
+
+export interface HerdrEnvelope<T> {
+  id?: string;
+  result?: T;
+  error?: { code?: string; message?: string };
+}
+
+export type HerdrAgentList = HerdrEnvelope<{ agents?: HerdrAgent[] | null }>;
+
+/**
+ * Claude Code marks its terminal title with this.
+ *
+ * Stripped for display because it is redundant next to the agent icon, and
+ * because herdr already publishes `terminal_title_stripped` — but only
+ * sometimes, so we cannot rely on it.
+ */
+const TITLE_MARKER = /^\s*✳\s*/;
+
+export function cleanTitle(raw: string | null | undefined): string | undefined {
+  const v = raw?.replace(TITLE_MARKER, "").trim();
+  return v ? v : undefined;
+}
+
+/**
+ * One wire agent -> one LiveAgent, or undefined.
+ *
+ * Returns undefined only when there is no pane_id, because a pane_id is both
+ * the identity and the only actuator handle: without it we could render a row
+ * but every action on it would fail with agent_not_found. A row you cannot act
+ * on is worse than no row.
+ */
+export function toLiveAgent(raw: HerdrAgent): LiveAgent | undefined {
+  const paneId = raw.pane_id?.trim();
+  if (!paneId) return undefined;
+
+  const sessionValue = raw.agent_session?.value?.trim();
+  const agent = normalizeAgent(raw.agent ?? raw.agent_session?.agent);
+
+  return {
+    handle: `herdr:${paneId}`,
+    source: "herdr",
+    agent,
+    status: normalizeStatus(raw.agent_status),
+    // foreground_cwd is the pane's live directory and is the better answer when
+    // the two differ; cwd is where the pane was created.
+    cwd: (raw.foreground_cwd ?? raw.cwd ?? "").trim(),
+    session: sessionValue ? keyOf(agent, sessionValue) : undefined,
+    title: cleanTitle(raw.terminal_title_stripped) ?? cleanTitle(raw.terminal_title),
+    paneId,
+    workspaceId: raw.workspace_id ?? undefined,
+    tabId: raw.tab_id ?? undefined,
+  };
+}
+
+/**
+ * Parse the whole envelope.
+ *
+ * Tolerant of a missing `agents` array — an envelope with no agents is a real
+ * answer (a herdr session with no coding agents running), not a malformed one.
+ */
+export function parseAgentList(envelope: HerdrAgentList): LiveAgent[] {
+  const raw = envelope.result?.agents ?? [];
+  const out: LiveAgent[] = [];
+  for (const a of raw) {
+    const agent = toLiveAgent(a);
+    if (agent) out.push(agent);
+  }
+  return out;
+}
+
+/**
+ * Pull the running/version line out of `herdr status`.
+ *
+ * Output on the capture machine: "server: running, protocol 17". The check is
+ * "does it say running", not "did it exit 0" — see errors.ts for why herdr's
+ * exit codes are not a reliable discriminator.
+ */
+export function parseStatus(stdout: string): { running: boolean; detail: string } {
+  const text = stdout.trim();
+  return {
+    running: /\brunning\b/i.test(text) && !/\bnot running\b/i.test(text),
+    detail: text.split("\n").slice(0, 3).join(" ").trim(),
+  };
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/herdr/wire.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:15:48Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * The only file that spawns herdr.
+ *
+ * Everything above it — wire.ts, the classifiers in agents/errors.ts — is pure
+ * and tested; everything herdr-specific and impure is here.
+ *
+ * Three facts about the CLI shape everything below:
+ *
+ *  1. `herdr agent list` emits JSON natively. There is no --json flag and
+ *     passing one is an error.
+ *  2. Errors come back as structured JSON on STDOUT, not as prose on stderr —
+ *     which is better than most CLIs, and means the classifier reads stdout.
+ *  3. Except when the server is down, where it prints a bare Rust Debug string
+ *     and the exit code does not distinguish the two cases. See classifyHerdr.
+ */
+
+import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { promisify } from "node:util";
+
+import { AgentDeckError, classifyHerdr, fromExecError } from "../agents/errors";
+import { pickBinary } from "../agents/probe";
+import type { AgentAction, AgentActuator, LiveAgentSource, ReadOptions } from "../agents/transport";
+import type { LiveAgent } from "../agents/types";
+import { parseAgentList, parseStatus, type HerdrAgentList } from "./wire";
+
+const run = promisify(execFile);
+
+/**
+ * Measured: `herdr agent list` returned 52 agents in 52 ms.
+ *
+ * The timeout is generous relative to that because the failure it guards is a
+ * wedged server, not a slow one — and a menu-bar tick that hangs for 5 s is
+ * still better than one that gives up on a machine under load.
+ */
+const LIST_TIMEOUT_MS = 5_000;
+const ACT_TIMEOUT_MS = 8_000;
+const READ_TIMEOUT_MS = 8_000;
+
+/** Terminal scrollback can be large; the 1 MB default would truncate mid-line. */
+const BIG_BUFFER = 8 * 1024 * 1024;
+
+let cached: string | undefined;
+
+/**
+ * Absolute path to herdr, or undefined.
+ *
+ * Undefined is a normal answer, not an error: herdr is optional, and the
+ * capability model turns its absence into a fallback plus an install hint.
+ */
+export function resolveHerdr(configured?: string): string | undefined {
+  const found = pickBinary("herdr", existsSync, { configured, cached });
+  if (found) cached = found;
+  return found;
+}
+
+export function clearHerdrCache(): void {
+  cached = undefined;
+}
+
+function env(): NodeJS.ProcessEnv {
+  // HOME is passed through so herdr can find its socket at
+  // ~/.config/herdr/herdr.sock. Raycast's launchd environment has it, but
+  // being explicit costs nothing and documents the dependency.
+  return { ...process.env, HOME: process.env.HOME ?? homedir() };
+}
+
+interface ExecResult {
+  stdout: string;
+  stderr: string;
+}
+
+async function exec(
+  bin: string,
+  args: string[],
+  timeout: number,
+  opts?: ReadOptions,
+): Promise<ExecResult> {
+  try {
+    const { stdout, stderr } = await run(bin, args, {
+      timeout,
+      maxBuffer: BIG_BUFFER,
+      env: env(),
+      signal: opts?.signal,
+      encoding: "utf8",
+    });
+    return { stdout, stderr };
+  } catch (e) {
+    // herdr reports "no such agent" with a non-zero exit AND a JSON body, so a
+    // rejection is not necessarily a failure — hand it to the classifier first.
+    const err = e as { stdout?: string; stderr?: string; code?: number | string; killed?: boolean };
+    if (typeof err.stdout === "string" && err.stdout.trim()) {
+      const classified = classifyHerdr({
+        stdout: err.stdout,
+        stderr: err.stderr ?? "",
+        exitCode: typeof err.code === "number" ? err.code : null,
+      });
+      if (classified) throw classified;
+      return { stdout: err.stdout, stderr: err.stderr ?? "" };
+    }
+    throw fromExecError(e, "live.herdr", [bin, ...args]);
+  }
+}
+
+function parse(stdout: string, stderr: string, argv: string[]): HerdrAgentList {
+  const classified = classifyHerdr({ stdout, stderr, exitCode: 0 });
+  if (classified) throw classified;
+  const text = stdout.trim();
+  if (!text) return {};
+  try {
+    return JSON.parse(text) as HerdrAgentList;
+  } catch {
+    throw new AgentDeckError("bad-output", "herdr returned something that is not JSON", {
+      source: "live.herdr",
+      detail: text.slice(0, 400),
+      argv,
+    });
+  }
+}
+
+/**
+ * herdr as a live-agent source and as an actuator.
+ *
+ * One object implementing two interfaces, because they are backed by the same
+ * binary and the same socket — splitting them would mean resolving the path
+ * twice and probing twice for no gain.
+ */
+export function createHerdrSource(bin: string): LiveAgentSource & AgentActuator {
+  return {
+    capability: "live.herdr",
+
+    async list(opts?: ReadOptions): Promise<LiveAgent[]> {
+      const args = ["agent", "list"];
+      const { stdout, stderr } = await exec(bin, args, LIST_TIMEOUT_MS, opts);
+      return parseAgentList(parse(stdout, stderr, [bin, ...args]));
+    },
+
+    /**
+     * Health check, deliberately separate from list().
+     *
+     * `herdr status` prints "server: running, protocol 17" and is cheap. Using
+     * list() for this would conflate "no agents running" with "no server",
+     * which are the two states the whole capability model exists to keep apart.
+     */
+    async probe(opts?: ReadOptions) {
+      try {
+        const { stdout, stderr } = await exec(bin, ["status"], LIST_TIMEOUT_MS, opts);
+        const status = parseStatus(stdout || stderr);
+        return { reachable: status.running, detail: status.detail };
+      } catch (e) {
+        return {
+          reachable: false,
+          detail: e instanceof AgentDeckError ? e.message : String(e),
+        };
+      }
+    },
+
+    async act(action: AgentAction, opts?: ReadOptions): Promise<void> {
+      const target = requirePane(action.agent);
+      const args = argvFor(action, target);
+      await exec(bin, args, ACT_TIMEOUT_MS, opts);
+    },
+
+    async read(agent: LiveAgent, lines: number, opts?: ReadOptions): Promise<string> {
+      const target = requirePane(agent);
+      // Plain text, not JSON — verified. Do not run it through parse().
+      const { stdout } = await exec(
+        bin,
+        ["agent", "read", target, "--lines", String(clampLines(lines))],
+        READ_TIMEOUT_MS,
+        opts,
+      );
+      return stdout;
+    },
+
+    async explain(agent: LiveAgent, opts?: ReadOptions): Promise<string> {
+      const target = requirePane(agent);
+      const { stdout } = await exec(bin, ["agent", "explain", target], READ_TIMEOUT_MS, opts);
+      return stdout.trim();
+    },
+  };
+}
+
+/**
+ * The pane id, or a clear failure.
+ *
+ * Verified: `herdr agent focus|get|read` accepts a pane_id ("w3:p7") and
+ * nothing else — terminal_id and the session UUID both return
+ * {"error":{"code":"agent_not_found"}}. wire.ts already drops pane-less agents,
+ * so reaching this means a caller built a LiveAgent from the Claude registry
+ * and handed it to herdr, which is a programming error worth naming.
+ */
+function requirePane(agent: LiveAgent): string {
+  if (agent.paneId) return agent.paneId;
+  throw new AgentDeckError("command-failed", "This agent is not in a herdr pane", {
+    source: "act.herdr",
+    detail:
+      `${agent.handle} was found through ${agent.source === "herdr" ? "herdr" : "the Claude session registry"}, ` +
+      "which does not know which terminal pane it is in. herdr can only focus a pane it owns.",
+  });
+}
+
+/**
+ * Actions -> argv, in one place.
+ *
+ * Kept separate from act() so a test can assert the argv without spawning, the
+ * same way the sibling Pueue extension cross-checks its generated flags against
+ * `pueue <sub> --help`.
+ */
+export function argvFor(action: AgentAction, target: string): string[] {
+  switch (action.op) {
+    case "focus":
+      return ["agent", "focus", target];
+    case "prompt":
+      return ["agent", "prompt", target, action.text];
+    case "send-keys":
+      return ["agent", "send-keys", target, action.keys];
+    case "rename":
+      return ["agent", "rename", target, action.name];
+    case "wait":
+      return ["agent", "wait", target, "--state", action.until];
+  }
+}
+
+function clampLines(n: number): number {
+  const v = Math.trunc(Number(n));
+  return Number.isFinite(v) && v > 0 ? Math.min(v, 2000) : 40;
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/herdr/cli.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:15:54Z)**_
+
+<think><details><summary>Thought Process</summary>
+I should double-check that `herdr agent wait --state` is the correct flag syntax before finalizing the code, so let me pull up the help documentation to confirm.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:15:54Z)**_
+
+Let me verify the `herdr agent wait` flags before shipping that argv.
+
+_**Agent (claude-opus-5 2026-07-26 21:15:55Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Verify herdr agent subcommand flags
+
+```bash
+echo "=== agent wait ==="; herdr agent wait --help 2>&1 | head -25
+echo "=== agent prompt ==="; herdr agent prompt --help 2>&1 | head -20
+echo "=== agent read ==="; herdr agent read --help 2>&1 | head -20
+```
+
+```text
+=== agent wait ===
+Wait until an agent reaches one of the requested states
+
+Usage: herdr agent wait <TARGET> [OPTIONS]
+
+Arguments:
+  <TARGET>
+          
+
+Options:
+      --until <STATUS>
+          State to match; repeat for more than one state
+          
+          [possible values: idle, working, blocked, done, unknown]
+
+      --timeout <MS>
+          Fail after this many milliseconds
+
+Without --until, matches idle, done, or blocked. Use --until unknown explicitly when needed. Without --timeout, waits indefinitely.
+
+=== agent prompt ===
+Submit a prompt to an agent
+
+Usage: herdr agent prompt <TARGET> <TEXT> [OPTIONS]
+
+Arguments:
+  <TARGET>
+          
+
+  <TEXT>
+          
+
+Options:
+      --wait
+          Wait for the first matching state observed after submission
+
+      --until <STATUS>
+          State to match after --wait; repeat for more than one state
+          
+          [possible values: idle, working, blocked, done, unknown]
+
+=== agent read ===
+Read agent terminal output
+
+Usage: herdr agent read <TARGET> [OPTIONS]
+
+Arguments:
+  <TARGET>
+          
+
+Options:
+      --source <SOURCE>
+          Terminal snapshot source (default: recent)
+          
+          [possible values: visible, recent, recent-unwrapped, detection]
+
+      --lines <N>
+          
+
+      --format <FORMAT>
+          [possible values: text, ansi]
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:16:08Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to correct some key details about the Herdr agent commands. The `herdr agent wait` command uses `--until` instead of `--state`, and critically, it accepts a `--timeout` parameter in milliseconds—without it, the command waits indefinitely, which would freeze a Raycast subprocess. I should always include a timeout value. For `agent read`, there's a `--source` option (defaulting to `recent`) and a `--format` option; the TV channel uses `--source visible`, but `recent` is probably the better choice for a detail pane, so I'll explicitly specify that.
+
+Fixing the argument construction and the read call...
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:16:08Z)**_
+
+Two real corrections: it's `--until` not `--state`, and **without `--timeout` it waits indefinitely** — which would hang a Raycast subprocess forever.
+
+_**Agent (claude-opus-5 2026-07-26 21:16:10Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/herdr/cli.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:16:19Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/herdr/cli.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:16:50Z)**_
+
+Now the Claude registry — the herdr-free fallback.
+
+_**Agent (claude-opus-5 2026-07-26 21:16:50Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Claude Code's own live-process registry.
+ *
+ * The fallback that makes herdr optional. Claude Code writes one JSON file per
+ * running process to ~/.claude/sessions/<pid>.json:
+ *
+ *   {"pid":18984,"sessionId":"72938f9b-…","cwd":"/Users/dev","startedAt":1785096100468,
+ *    "procStart":"Sun Jul 26 19:48:07 2026","version":"2.1.220","peerProtocol":1,
+ *    "kind":"interactive","entrypoint":"cli","name":"dev-14","nameSource":"derived",
+ *    "status":"idle","updatedAt":1785096103741,"statusUpdatedAt":1785096103741}
+ *
+ * No binary, no third-party database, no herdr. Measured on the capture
+ * machine: 49 files, 49 live pids, covering 46 of herdr's 52 agents plus 3 that
+ * herdr could not see. It is Claude-only — that is the honest limit, and the
+ * capability model says so rather than pretending otherwise.
+ *
+ * Two things it cannot do, both consequences of having no pane_id: it cannot
+ * focus a terminal, and it cannot see Codex, OpenCode or Gemini.
+ */
+
+import { execFile } from "node:child_process";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { promisify } from "node:util";
+
+import { keyOf, normalizeStatus, parseTs } from "../agents/normalize";
+import type { LiveAgentSource, ReadOptions } from "../agents/transport";
+import type { LiveAgent } from "../agents/types";
+
+const run = promisify(execFile);
+
+/** One entry, as written. Everything optional — this is not our format. */
+interface RegistryEntry {
+  pid?: number;
+  sessionId?: string;
+  cwd?: string;
+  startedAt?: number;
+  procStart?: string;
+  version?: string;
+  /** "interactive" | "bg" observed. */
+  kind?: string;
+  entrypoint?: string;
+  /** A friendly name, derived from the cwd or set explicitly. */
+  name?: string;
+  nameSource?: string;
+  /** "idle" | "busy" observed — normalizeStatus maps busy -> working. */
+  status?: string;
+  updatedAt?: number;
+  statusUpdatedAt?: number;
+}
+
+export function sessionsDir(claudeHome: string): string {
+  return join(claudeHome, "sessions");
+}
+
+/**
+ * Read every registry entry.
+ *
+ * A file that will not parse is skipped rather than fatal: Claude Code writes
+ * these continuously, so catching one mid-write is expected, and one torn file
+ * must not blank the whole list.
+ */
+export function readRegistry(dir: string): LiveAgent[] {
+  if (!existsSync(dir)) return [];
+
+  let names: string[];
+  try {
+    names = readdirSync(dir).filter((f) => f.endsWith(".json"));
+  } catch {
+    return [];
+  }
+
+  const out: LiveAgent[] = [];
+  for (const file of names) {
+    let entry: RegistryEntry;
+    try {
+      entry = JSON.parse(readFileSync(join(dir, file), "utf8")) as RegistryEntry;
+    } catch {
+      continue;
+    }
+
+    const pid = entry.pid;
+    const sessionId = entry.sessionId?.trim();
+    if (typeof pid !== "number" || !sessionId) continue;
+
+    out.push({
+      // Keyed by pid, NOT by sessionId. Measured: pids 21952 and 95663 were
+      // both alive and both reported sessionId 1b31cf2b-…, one idle and one
+      // busy. Keying on the session collapses two real processes into one.
+      handle: `claude-pid:${pid}`,
+      source: "claude-registry",
+      agent: "claude",
+      status: normalizeStatus(entry.status),
+      cwd: entry.cwd ?? "",
+      session: keyOf("claude", sessionId),
+      // nameSource "derived" means Claude built it from the cwd, so it is a
+      // weaker title than an ai-title but better than a bare uuid.
+      title: entry.name?.trim() || undefined,
+      pid,
+      startedAt: parseTs(entry.startedAt),
+    });
+  }
+  return out;
+}
+
+/**
+ * Which of these pids are actually running.
+ *
+ * The registry file is written on start and is not always removed on exit, so a
+ * stale file renders as a phantom agent. Measured on the capture machine: 49
+ * files, 49 alive — the directory was clean at that moment, which is exactly
+ * why this must not be trusted to stay that way.
+ *
+ * One `ps` for all pids rather than one `kill(pid, 0)` each: process.kill would
+ * work, but it throws EPERM rather than ESRCH for a live process owned by
+ * another user, and distinguishing those is more code than a single spawn.
+ */
+export async function alivePids(pids: readonly number[], opts?: ReadOptions): Promise<Set<number>> {
+  const alive = new Set<number>();
+  if (pids.length === 0) return alive;
+
+  try {
+    const { stdout } = await run("/bin/ps", ["-o", "pid=", "-p", pids.join(",")], {
+      timeout: 5_000,
+      signal: opts?.signal,
+      encoding: "utf8",
+    });
+    for (const line of stdout.split("\n")) {
+      const n = Number(line.trim());
+      if (Number.isFinite(n) && n > 0) alive.add(n);
+    }
+  } catch {
+    // ps exits non-zero when NONE of the pids exist, which is a legitimate
+    // answer — every process has gone. Returning the empty set is correct;
+    // treating it as an error would resurrect all of them.
+    return alive;
+  }
+  return alive;
+}
+
+export function createClaudeRegistrySource(claudeHome: string): LiveAgentSource {
+  const dir = sessionsDir(claudeHome);
+  return {
+    capability: "live.claude",
+
+    async list(opts?: ReadOptions): Promise<LiveAgent[]> {
+      const entries = readRegistry(dir);
+      if (entries.length === 0) return [];
+      const alive = await alivePids(
+        entries.map((e) => e.pid).filter((p): p is number => typeof p === "number"),
+        opts,
+      );
+      return entries.filter((e) => e.pid !== undefined && alive.has(e.pid));
+    },
+
+    async probe(): Promise<{ reachable: boolean; detail?: string }> {
+      // Nothing to reach. A directory either exists or it does not, and that is
+      // already the capability question — so this never reports "broken",
+      // which keeps the absent-vs-broken split honest for this source too.
+      return existsSync(dir)
+        ? { reachable: true }
+        : { reachable: false, detail: `No session registry at ${dir}` };
+    },
+  };
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/claude/registry.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:17:00Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Typecheck the new provider modules
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && npx tsc --noEmit 2>&1 | head -20; echo "=== typecheck exit: ${PIPESTATUS[0]} ==="`
+
+```text
+=== typecheck exit:  ===
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:17:59Z)**_
+
+<think><details><summary>Thought Process</summary>
+Typecheck is passing, so now I'm moving on to add dev-check assertions for the herdr wire parsing and registry using real captured fixtures. I'll create a capture script that handles both the fixture collection and redaction, starting with a shell script to automate this process.
+
+For redaction, I need to replace the home directory with `/Users/dev`, map all UUIDs to deterministic fakes for consistency across fixtures, and keep directory basenames since they're mostly generic or public repos. I'm being cautious about potentially private repo names, so I'll need to review what actually appears in the fixtures before finalizing the redaction strategy.
+
+I think the cleanest approach is to write this in Python rather than bash — it'll handle the deterministic mapping of paths and UUIDs more elegantly.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:17:59Z)**_
+
+Typecheck clean. Now the fixture capture + redaction, since `ray publish` copies the directory rather than the git index.
+
+_**Agent (claude-opus-5 2026-07-26 21:18:00Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```python
+#!/usr/bin/env python3
+"""Capture dev-check fixtures from the live tools, and redact them in one step.
+
+Redaction is not optional and not a separate step someone can forget. `ray
+publish` copies the DIRECTORY, not the git index, so a .gitignore does not save
+you: anything left in src/lib/fixtures/ ends up in a public review PR on the
+raycast/extensions repository.
+
+What gets rewritten:
+
+  $HOME                -> /Users/dev
+  every UUID           -> a deterministic fake, STABLE ACROSS FILES so the
+                          herdr <-> SpecStory <-> registry joins still assert
+  every directory name -> project-N, except an allowlist of names that carry
+     under $HOME           no information about the capture machine
+  api tokens           -> removed outright
+
+What deliberately survives, because it is the shape under test:
+
+  the six-way FTS duplicate, the undated project_id='unknown' rows, the two
+  pids sharing one sessionId, the agents with no terminal_title, one CJK title
+  and one emoji title.
+
+Usage:  just fixtures
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+HOME = Path.home()
+OUT = Path(__file__).resolve().parent.parent / "src" / "lib" / "fixtures"
+
+# Directory names that say nothing about the capture machine. Everything else
+# under $HOME becomes project-N, because a private repository name is exactly
+# the kind of thing that should not ride along into a public review PR.
+SAFE_DIRS = {
+    "Users", "dev", "Documents", "Program", "Projects", "src", "tries",
+    ".claude", ".codex", ".specstory", ".config", ".local", "share",
+    "projects", "sessions", "history", "tmp", "var", "private",
+}
+
+UUID_RE = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)
+TOKEN_RE = re.compile(r"sk-ant-[A-Za-z0-9_-]{10,}")
+
+_uuids: dict[str, str] = {}
+_dirs: dict[str, str] = {}
+
+
+def fake_uuid(real: str) -> str:
+    """Deterministic, and stable across every file in one run.
+
+    Stability is the point: herdr's agent_session.value has to keep matching
+    the SpecStory session_id and the registry's sessionId, or the join
+    assertions in dev-check pass against data where nothing joins.
+    """
+    key = real.lower()
+    if key not in _uuids:
+        n = len(_uuids) + 1
+        _uuids[key] = f"{n:08x}-0000-4000-8000-{n:012x}"
+    return _uuids[key]
+
+
+def fake_dir(name: str) -> str:
+    if name in SAFE_DIRS or name.startswith("."):
+        return name
+    if name not in _dirs:
+        _dirs[name] = f"project-{len(_dirs) + 1}"
+    return _dirs[name]
+
+
+def redact_path(p: str) -> str:
+    parts = p.split("/")
+    return "/".join(fake_dir(part) if part else part for part in parts)
+
+
+def redact(text: str) -> str:
+    text = text.replace(str(HOME), "/Users/dev")
+    text = TOKEN_RE.sub("sk-ant-REDACTED", text)
+    text = UUID_RE.sub(lambda m: fake_uuid(m.group(0)), text)
+    # Rewrite the directory components of anything that still looks like a path
+    # under our replacement home.
+    text = re.sub(r"/Users/dev(/[\w.\-]+)+", lambda m: redact_path(m.group(0)), text)
+    return text
+
+
+def sh(args: list[str], **kw) -> str | None:
+    try:
+        return subprocess.run(
+            args, capture_output=True, text=True, timeout=30, check=False, **kw
+        ).stdout
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+
+
+def write(name: str, text: str | None, why: str) -> None:
+    if text is None or not text.strip():
+        print(f"  skip  {name:<28} ({why} not available)", file=sys.stderr)
+        return
+    OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / name).write_text(redact(text), encoding="utf-8")
+    print(f"  wrote {name:<28} {len(text):>8} bytes", file=sys.stderr)
+
+
+def which(name: str) -> str | None:
+    for d in ("/opt/homebrew/bin", "/usr/local/bin", f"{HOME}/.local/bin",
+              f"{HOME}/.opencode/bin", "/usr/bin", "/bin"):
+        p = Path(d) / name
+        if p.exists():
+            return str(p)
+    return None
+
+
+def main() -> int:
+    print("capturing fixtures", file=sys.stderr)
+
+    herdr = which("herdr")
+    if herdr:
+        write("herdr-agent-list.json", sh([herdr, "agent", "list"]), "herdr")
+        write("herdr-api-schema.json", sh([herdr, "api", "schema", "--json"]), "herdr")
+        # An error envelope, produced on purpose. Verified: a terminal_id is not
+        # an accepted target, so this reliably yields agent_not_found.
+        write("herdr-agent-not-found.json", sh([herdr, "agent", "get", "term_deadbeef"]), "herdr")
+
+    sqlite = which("sqlite3")
+    db = HOME / ".specstory" / "sessions.db"
+    if sqlite and db.exists():
+        uri = f"file:{db}?mode=ro"
+
+        # The six-way duplicate, chosen by actually asking which session has the
+        # most FTS rows rather than by hardcoding one.
+        dup = sh([sqlite, uri,
+                  "SELECT agent||'|'||session_id FROM sessions_fts "
+                  "GROUP BY agent, session_id ORDER BY count(*) DESC LIMIT 1;"])
+        rows = []
+        if dup and "|" in dup:
+            agent, sid = dup.strip().split("|", 1)
+            rows.append(sh([sqlite, "-json", uri,
+                            "SELECT rowid AS rid, agent, session_id AS sid, "
+                            f"'duplicate' AS why FROM sessions_fts "
+                            f"WHERE agent='{agent}' AND session_id='{sid}';"]))
+
+        # The undated rows: empty created_at, updated_at, origin_cwd and slug.
+        rows.append(sh([sqlite, "-json", uri,
+                        "SELECT s.agent, s.session_id AS sid, NULL AS r, NULL AS rid, "
+                        "s.project_name, NULLIF(s.origin_cwd,'') AS cwd, "
+                        "NULLIF(s.slug,'') AS slug, NULLIF(s.name,'') AS name, "
+                        "NULLIF(s.native_path,'') AS native_path, s.user_turns, s.total_turns, "
+                        "NULLIF(s.created_at,'') AS created_at, "
+                        "NULLIF(COALESCE(NULLIF(s.updated_at,''), s.created_at),'') AS ts "
+                        "FROM sessions s WHERE COALESCE(s.updated_at,'')='' LIMIT 3;"]))
+
+        # One row per agent the index actually contains, plus the empty-name case.
+        rows.append(sh([sqlite, "-json", uri,
+                        "SELECT s.agent, s.session_id AS sid, NULL AS r, NULL AS rid, "
+                        "s.project_name, NULLIF(s.origin_cwd,'') AS cwd, "
+                        "NULLIF(s.slug,'') AS slug, NULLIF(s.name,'') AS name, "
+                        "NULLIF(s.native_path,'') AS native_path, s.user_turns, s.total_turns, "
+                        "NULLIF(s.created_at,'') AS created_at, "
+                        "NULLIF(COALESCE(NULLIF(s.updated_at,''), s.created_at),'') AS ts "
+                        "FROM sessions s WHERE s.deleted=0 "
+                        "GROUP BY s.agent ORDER BY s.agent;"]))
+
+        merged = [json.loads(r) for r in rows if r and r.strip()]
+        write("specstory-rows.json", json.dumps(
+            {"duplicates": merged[0] if len(merged) > 2 else [],
+             "undated": merged[-2] if len(merged) > 1 else [],
+             "one_per_agent": merged[-1] if merged else []},
+            indent=2, ensure_ascii=False), "sqlite3")
+
+        # Counts, so dev-check can assert the traps are still real rather than
+        # only that the code handles them.
+        write("specstory-shape.json", sh([sqlite, "-json", uri,
+              "SELECT (SELECT count(*) FROM sessions WHERE deleted=0) AS sessions, "
+              "(SELECT count(*) FROM sessions WHERE COALESCE(updated_at,'')='') AS undated, "
+              "(SELECT count(*) FROM (SELECT 1 FROM sessions_fts GROUP BY agent, session_id "
+              "  HAVING count(*)>1)) AS duplicated_sessions, "
+              "(SELECT max(c) FROM (SELECT count(*) c FROM sessions_fts GROUP BY agent, session_id)) AS max_duplicates, "
+              "(SELECT count(*) FROM sessions WHERE COALESCE(name,'')='') AS unnamed, "
+              "(SELECT max(length(body)) FROM sessions_fts) AS max_body_bytes;"]), "sqlite3")
+
+    oc = HOME / ".local" / "share" / "opencode" / "opencode.db"
+    if sqlite and oc.exists():
+        write("opencode-sessions.json", sh([sqlite, "-json", f"file:{oc}?mode=ro",
+              "SELECT id, project_id, slug, directory, title, agent, model, cost, "
+              "tokens_input, tokens_output, tokens_cache_read, time_created, time_updated, "
+              "time_archived FROM session ORDER BY time_updated DESC LIMIT 5;"]), "opencode.db")
+
+    # The registry, including the two-pids-one-session case when it is present.
+    reg = HOME / ".claude" / "sessions"
+    if reg.is_dir():
+        entries = []
+        for f in sorted(reg.glob("*.json")):
+            try:
+                entries.append(json.loads(f.read_text()))
+            except (OSError, json.JSONDecodeError):
+                continue
+        by_session: dict[str, list[dict]] = {}
+        for e in entries:
+            by_session.setdefault(e.get("sessionId", ""), []).append(e)
+        keep = [e for group in by_session.values() if len(group) > 1 for e in group][:4]
+        keep += [g[0] for g in by_session.values() if len(g) == 1][:4]
+        write("claude-sessions.json", json.dumps(keep, indent=2), "claude registry")
+
+    hist = HOME / ".claude" / "history.jsonl"
+    if hist.exists():
+        lines = hist.read_text(errors="replace").splitlines()
+        # Head and tail: the oldest entries and the newest, so both the epoch-ms
+        # shape and any recent format change are covered.
+        write("claude-history.jsonl", "\n".join(lines[:12] + lines[-12:]), "claude history")
+
+    codex_hist = HOME / ".codex" / "history.jsonl"
+    if codex_hist.exists():
+        # Epoch SECONDS here, unlike Claude's milliseconds. That difference is
+        # the reason parseTs has a magnitude branch.
+        write("codex-history.jsonl", "\n".join(
+            codex_hist.read_text(errors="replace").splitlines()[:10]), "codex history")
+
+    peon = which("peon")
+    if peon:
+        write("peon-status.txt", sh([peon, "status"]), "peon")
+
+    print(f"\n  {len(_uuids)} uuids and {len(_dirs)} directory names rewritten", file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/scripts/capture-fixtures.py (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:18:07Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Capture and redact fixtures
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && chmod +x scripts/capture-fixtures.py && python3 scripts/capture-fixtures.py 2>&1`
+
+```text
+capturing fixtures
+  wrote herdr-agent-list.json           25698 bytes
+  wrote herdr-api-schema.json          248356 bytes
+  skip  herdr-agent-not-found.json   (herdr not available)
+  wrote specstory-rows.json              3448 bytes
+  wrote specstory-shape.json              115 bytes
+  wrote opencode-sessions.json           2324 bytes
+  wrote claude-sessions.json             2700 bytes
+  wrote claude-history.jsonl             8725 bytes
+  wrote codex-history.jsonl              1959 bytes
+  wrote peon-status.txt                   181 bytes
+
+  74 uuids and 27 directory names rewritten
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:18:18Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm seeing two problems to work through. First, the herdr-agent-not-found.json file got skipped because the command exits with a non-zero status, but the JSON error response should still be in stdout since I'm using `capture_output=True` and `check=False`. The fact that it reported "not available" suggests stdout was actually empty, which makes me wonder if herdr is writing the error to stderr instead in this case — I need to test that. Second, there's an issue with herdr-api that I'm about to investigate.
+
+The schema file is way too large at 248KB to use as a fixture, so I'll need to trim it down to just the AgentStatus definitions. Let me verify the redacted output looks correct and address both of these issues.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:18:19Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Verify redaction and diagnose skip
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension
+echo "=== redaction check: any real home / real uuid leaked? ==="
+grep -rl "$HOME" src/lib/fixtures/ 2>/dev/null | head; echo "(empty = clean)"
+grep -rlE "Pueue-Raycast|chezmoi|1b31cf2b" src/lib/fixtures/ 2>/dev/null | head; echo "(empty = clean)"
+echo "=== sample redacted herdr agent ==="
+jq -c '.result.agents[0]' src/lib/fixtures/herdr-agent-list.json
+echo "=== specstory-shape (the traps, as numbers) ==="
+cat src/lib/fixtures/specstory-shape.json
+echo "=== claude-sessions: did the two-pid case survive? ==="
+jq -r '[.[] | .sessionId] | group_by(.) | map({(.[0]): length}) | add' src/lib/fixtures/claude-sessions.json
+echo "=== why did agent-not-found skip? ==="
+herdr agent get term_deadbeef; echo "exit=$?"
+```
+
+```text
+=== redaction check: any real home / real uuid leaked? ===
+(empty = clean)
+src/lib/fixtures/claude-history.jsonl
+src/lib/fixtures/codex-history.jsonl
+src/lib/fixtures/opencode-sessions.json
+(empty = clean)
+=== sample redacted herdr agent ===
+{"agent":"claude","agent_session":{"agent":"claude","kind":"id","source":"herdr:claude","value":"00000001-0000-4000-8000-000000000001"},"agent_status":"idle","cwd":"/Users/dev","focused":false,"foreground_cwd":"/Users/dev","pane_id":"w3:p7","revision":1,"state_change_seq":54,"tab_id":"w3:t4","terminal_id":"term_65788df88be291","terminal_title":"✳ 檢查 Claude 日誌","terminal_title_stripped":"檢查 Claude 日誌","workspace_id":"w3"}
+=== specstory-shape (the traps, as numbers) ===
+[{"sessions":470,"undated":7,"duplicated_sessions":81,"max_duplicates":6,"unnamed":341,"max_body_bytes":10475184}]
+=== claude-sessions: did the two-pid case survive? ===
+{
+  "00000001-0000-4000-8000-000000000001": 1,
+  "00000003-0000-4000-8000-000000000003": 1,
+  "00000009-0000-4000-8000-000000000009": 2,
+  "00000012-0000-4000-8000-000000000012": 1,
+  "00000014-0000-4000-8000-000000000014": 1
+}
+=== why did agent-not-found skip? ===
+{"error":{"code":"agent_not_found","message":"agent target term_deadbeef not found"},"id":"cli:agent:get"}
+exit=1
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:18:34Z)**_
+
+<think><details><summary>Thought Process</summary>
+The redaction is working well—the home directory is clean and the two-PID case held up with both entries intact, plus the CJK title made it through. Now I'm looking at three issues to tackle. First, there's a pattern like `Pueue-Raycast|chezmoi|1b31cf2b` showing up across multiple history files that contains actual prompt text with project names and paths that my current regex isn't catching—things like bare "chezmoi" mentioned in prose or embedded paths that don't match the `/Users/dev/...` format.
+
+For the history fixtures, I'm going to keep the structural shape but swap out the free-form text fields like `display` and `text` with synthetic content, since what matters for testing is the structure (epoch milliseconds vs seconds, whether pastedContents exists) not the actual prose. I'll do the same for opencode-sessions.json where `title` and `directory` leak real project info.
+
+The second issue is that `herdr agent get` writes error JSON to stdout but exits with code 1—my script captures `.stdout` but the output went to my terminal, so I need to check if it's actually going to stderr and adjust the capture. Third, herdr-api-schema.json is bloated at 248KB, so I'll trim it down to just the AgentStatus definitions. Let me update the capture script to handle these fixes.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:18:43Z)**_
+
+Three real problems: free-form **prompt text** in the history fixtures leaks project names past the path regex, the schema fixture is 248 KB, and herdr's error goes to stderr. Fixing the capture script.
+
+_**Agent (claude-opus-5 2026-07-26 21:18:44Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/scripts/capture-fixtures.py has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:18:57Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/scripts/capture-fixtures.py has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:19:17Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/scripts/capture-fixtures.py has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:19:50Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Recapture and audit for leaks
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && rm -f src/lib/fixtures/* && python3 scripts/capture-fixtures.py 2>&1
+echo; echo "=== LEAK AUDIT ==="
+echo "-- real home:"; grep -rl "$HOME" src/lib/fixtures/ 2>/dev/null || echo "   clean"
+echo "-- real project names:"; grep -rloiE "pueue-raycast|chezmoi|avalon|tarlin|zyc_friend|wordbit|translate" src/lib/fixtures/ 2>/dev/null || echo "   clean"
+echo "-- real session uuids (non-fake):"; grep -rhoE "\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b" src/lib/fixtures/ 2>/dev/null | grep -v "^0000" | sort -u | head || echo "   clean"
+echo "-- tokens:"; grep -rlE "sk-ant-[A-Za-z0-9_-]{15,}" src/lib/fixtures/ 2>/dev/null || echo "   clean"
+echo; echo "=== sizes ==="; ls -la src/lib/fixtures/ | tail -12
+```
+
+```text
+capturing fixtures
+  wrote herdr-agent-list.json           25698 bytes
+  wrote herdr-agent-not-found.json        107 bytes
+  wrote herdr-schema-excerpt.json         277 bytes
+  wrote specstory-rows.json              3448 bytes
+  wrote specstory-shape.json              115 bytes
+  wrote opencode-sessions.json           2776 bytes
+  wrote claude-sessions.json             2604 bytes
+  wrote claude-history.jsonl             5344 bytes
+  wrote codex-history.jsonl              1185 bytes
+  wrote peon-status.txt                   181 bytes
+
+  74 uuids and 27 directory names rewritten
+
+=== LEAK AUDIT ===
+-- real home:
+   clean
+-- real project names:
+src/lib/fixtures/herdr-agent-list.json
+-- real session uuids (non-fake):
+-- tokens:
+   clean
+
+=== sizes ===
+.rw-r--r--@ 5.3k david 27 Jul 05:19 claude-history.jsonl
+.rw-r--r--@ 2.6k david 27 Jul 05:19 claude-sessions.json
+.rw-r--r--@ 1.2k david 27 Jul 05:19 codex-history.jsonl
+.rw-r--r--@  25k david 27 Jul 05:19 herdr-agent-list.json
+.rw-r--r--@  107 david 27 Jul 05:19 herdr-agent-not-found.json
+.rw-r--r--@  277 david 27 Jul 05:19 herdr-schema-excerpt.json
+.rw-r--r--@ 2.8k david 27 Jul 05:19 opencode-sessions.json
+.rw-r--r--@  181 david 27 Jul 05:19 peon-status.txt
+.rw-r--r--@ 3.3k david 27 Jul 05:19 specstory-rows.json
+.rw-r--r--@  115 david 27 Jul 05:19 specstory-shape.json
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:20:00Z)**_
+
+<think><details><summary>Thought Process</summary>
+There's still one data leak in the `herdr-agent-list.json` file where real project names are exposed through the `terminal_title` fields that Claude Code generates. I need to scrub those values too while preserving one CJK character example and one emoji example to show the variety of what was captured.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:20:00Z)**_
+
+One leak left — herdr's `terminal_title` carries the session slug, which is free text. Let me confirm and scrub it.
+
+_**Agent (claude-opus-5 2026-07-26 21:20:00Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Locate the remaining leak
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && grep -oiE "pueue-raycast|chezmoi|avalon|tarlin|zyc_friend|wordbit|translate" src/lib/fixtures/herdr-agent-list.json | sort | uniq -c
+echo "--- which field? ---"
+jq -r '[.result.agents[] | select(.terminal_title // "" | test("chezmoi|pueue|avalon";"i")) | {terminal_title, terminal_title_stripped}] | .[0:2]' src/lib/fixtures/herdr-agent-list.json
+```
+
+```text
+   2 pueue-raycast
+   6 translate
+   2 zyc_friend
+--- which field? ---
+[
+  {
+    "terminal_title": "✳ pueue-raycast-menubar",
+    "terminal_title_stripped": "pueue-raycast-menubar"
+  }
+]
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:20:13Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/scripts/capture-fixtures.py has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:20:46Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Recapture and full leak audit
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && rm -f src/lib/fixtures/* && python3 scripts/capture-fixtures.py 2>&1 | tail -4
+echo; echo "=== FULL LEAK AUDIT ==="
+for pat in "$HOME" "pueue-raycast" "chezmoi" "avalon" "tarlin" "zyc_friend" "wordbit" "translate" "Hanrus" "david"; do
+  hits=$(grep -rlicF -- "$pat" src/lib/fixtures/ 2>/dev/null | grep -v ':0$' | head -3)
+  [ -n "$hits" ] && echo "LEAK [$pat]: $hits" || echo "clean [$pat]"
+done
+echo "-- non-fake uuids:"; grep -rhoE "\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b" src/lib/fixtures/ | grep -v "^0000" | sort -u | head || true
+echo; echo "=== shape preserved? ==="
+jq -r '{agents: (.result.agents|length), no_title: [.result.agents[]|select(has("terminal_title")|not)]|length, blocked: [.result.agents[]|select(.agent_status=="blocked")]|length, cjk: [.result.agents[]|select(.terminal_title_stripped=="檢查 Claude 日誌")]|length}' src/lib/fixtures/herdr-agent-list.json
+```
+
+```text
+  wrote codex-history.jsonl              1185 bytes
+  wrote peon-status.txt                   181 bytes
+
+  74 uuids and 27 directory names rewritten
+
+=== FULL LEAK AUDIT ===
+clean [/Users/david]
+clean [pueue-raycast]
+clean [chezmoi]
+clean [avalon]
+clean [tarlin]
+clean [zyc_friend]
+clean [wordbit]
+clean [translate]
+clean [Hanrus]
+LEAK [david]: src/lib/fixtures/specstory-rows.json
+-- non-fake uuids:
+
+=== shape preserved? ===
+{
+  "agents": 52,
+  "no_title": 6,
+  "blocked": 2,
+  "cjk": 1
+}
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:20:51Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Find the david leak in specstory rows
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && grep -oE '.{50}david.{50}' src/lib/fixtures/specstory-rows.json | head -3`
+
+```text
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:20:56Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Locate david occurrence case-insensitively
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && grep -oiE '.{40}david.{40}' src/lib/fixtures/specstory-rows.json | head -3; echo "---"; grep -icF david src/lib/fixtures/specstory-rows.json`
+
+```text
+---
+1
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:21:01Z)**_
+
+<think><details><summary>Thought Process</summary>
+The grep with context isn't finding anything because "david" is right at a line boundary in this pretty-printed JSON. Let me just search for the line containing it directly.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:21:02Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Show the leaking line
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && grep -inF david src/lib/fixtures/specstory-rows.json`
+
+```text
+123:      "project_name": "david",
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:21:15Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm noticing that the `project_name` field in SpecStory rows is just a bare username string like "david", not a full path, so my current redaction strategy that maps `$HOME` paths isn't catching it. I need to extend my scrubbing logic to handle the username directly through the same `fake_dir` mapping, plus add a specific rule to map usernames consistently.
+
+The cleanest approach is to update the `redact()` function to replace the bare username as a whole word token with "dev", which will catch it everywhere it appears as a standalone identifier. I should also strengthen the dev-check guard to assert that fixtures don't contain either the real home path or the username itself, so this class of issue gets caught permanently going forward.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:21:15Z)**_
+
+`project_name` is the bare username for sessions run from `$HOME` — no path for the regex to catch. Fixing the redactor and making dev-check catch this class permanently.
+
+_**Agent (claude-opus-5 2026-07-26 21:21:16Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/scripts/capture-fixtures.py has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:21:29Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/dev-check.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:22:07Z)**_
+
+Now let me add the fixture-driven assertions for herdr and the registry, then re-run everything.
+
+_**Agent (claude-opus-5 2026-07-26 21:22:08Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/dev-check.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:22:26Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Wire up new imports and typecheck
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PY'
+import re, pathlib
+p = pathlib.Path("src/lib/dev-check.ts")
+t = p.read_text()
+
+t = t.replace(
+  'import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";\nimport { homedir } from "node:os";\nimport { join } from "node:path";',
+  'import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";\nimport { homedir, tmpdir } from "node:os";\nimport { join } from "node:path";'
+)
+t = t.replace(
+  'import { schemaOk, type ProbeRow, type SessionRow } from "./specstory/wire";',
+  'import { schemaOk, type ProbeRow, type SessionRow } from "./specstory/wire";\nimport { argvFor } from "./herdr/cli";\nimport { parseAgentList, parseStatus, type HerdrAgentList } from "./herdr/wire";\nimport { readRegistry } from "./claude/registry";'
+)
+t = t.replace(
+  'const NOW = new Date("2026-07-27T00:00:00.000Z");',
+  '''const NOW = new Date("2026-07-27T00:00:00.000Z");
+
+/** The normalized union, in one place so the schema check and the parser agree. */
+const STATUSES: AgentStatus[] = ["idle", "working", "blocked", "done", "unknown"];
+
+/** A minimal LiveAgent for the argv assertions, which only read paneId. */
+function liveAgentFor(paneId: string): LiveAgent {
+  return { handle: `herdr:${paneId}`, source: "herdr", agent: "claude", status: "idle", cwd: "/Users/dev", paneId };
+}'''
+)
+t = t.replace(
+  'import type { AgentSession, Capability, LiveAgent, SessionHit } from "./agents/types";',
+  'import type { AgentSession, AgentStatus, Capability, LiveAgent, SessionHit } from "./agents/types";'
+)
+p.write_text(t)
+print("patched")
+PY
+npx tsc --noEmit 2>&1 | head -20; echo "typecheck done"
+```
+
+```text
+patched
+typecheck done
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:22:48Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Run full verify with fixtures
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && just verify 2>&1 | grep -E "^(FAIL|—|  \(|[0-9]+/[0-9]+)" | tail -35`
+
+```text
+— normalize: agents and statuses
+— normalize: timestamps (the 1970 trap)
+— normalize: titles, cwd, projects
+— probe: binary resolution order
+— capabilities: no external tool is required
+— fts5 sanitizer
+— specstory: SQL builders
+— merge: the six-way FTS duplicate
+— merge: sessions from several indexes
+— merge: live agents (1:N, and the two-pid case)
+— merge: grouping (never by project_id)
+— rank: ordering invariants, not float equality
+— errors: absent is not broken
+— herdr wire (against the captured fixture)
+— herdr argv (flags read from --help, not guessed)
+— claude registry (against the captured fixture)
+— specstory shape (the traps are still real)
+— import discipline (the harness asserts itself)
+— live cross-checks (skipped when the tool is absent)
+— fixtures are redacted
+FAIL specstory-rows.json does not leak the capture machine's username
+312/313 checks passed
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:22:56Z)**_
+
+<think><details><summary>Thought Process</summary>
+The username assertion caught the leak in the redactor, so I need to re-capture the fixture. With 312 out of 313 tests passing and only the stale fixture failing, the harness is working as intended — it successfully identified the leak class. I'll re-capture the fixture, add assertions for the unused `parseStatus` import to satisfy the linter, and finalize everything.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:22:59Z)**_
+
+The new assertion caught the leak — I fixed the redactor but hadn't re-captured. Let me re-capture and add the missing `parseStatus` coverage.
+
+_**Agent (claude-opus-5 2026-07-26 21:23:00Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/dev-check.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:24:56Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Recapture fixtures and verify
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && rm -f src/lib/fixtures/* && python3 scripts/capture-fixtures.py 2>&1 | tail -3 && just verify 2>&1 | grep -E "^(FAIL|[0-9]+/[0-9]+|  expected|  actual|  [0-9])" | tail -10`
+
+```text
+  wrote peon-status.txt                   181 bytes
+
+  74 uuids and 27 directory names rewritten
+317/317 checks passed
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:25:16Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Add fixtures recipe and commit
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && cat >> Justfile <<'EOF'
+
+# capture dev-check fixtures from the live tools, redacting in the same step
+fixtures:
+    python3 scripts/capture-fixtures.py
+EOF
+git add -A && git -c user.name="Da-Wei Lee" commit -q -F - <<'MSG'
+Read the tools instead of the docs, and redact what they say
+
+herdr and the Claude session registry, plus the fixtures they are tested
+against. 317 checks.
+
+Four flags were wrong before I ran `--help` on them:
+
+  herdr agent wait takes --until, not --state. And its help says "Without
+  --timeout, waits indefinitely" — an indefinite wait inside a Raycast
+  subprocess is a hang the user cannot cancel, so the timeout is always
+  emitted and clamped, even though herdr treats it as optional.
+
+  herdr agent read takes --format text; the default carries SGR escapes,
+  which render in a Raycast Detail as a literal [38;5;242m.
+
+  herdr agent focus|get|read accept a pane_id and nothing else. A
+  terminal_id and the session UUID both return agent_not_found, so
+  wire.ts drops pane-less agents outright: a row you cannot act on is
+  worse than no row.
+
+  herdr writes its error envelope to stderr for an unknown target but to
+  stdout elsewhere, so the fixture capture reads both.
+
+The registry is the reason herdr is optional. ~/.claude/sessions/<pid>.json
+needs no binary and no third-party database, and covered 46 of herdr's 52
+agents plus 3 it could not see. It is keyed by pid, never by session —
+the fixture still contains the two processes that share one sessionId.
+
+On redaction. `ray publish` copies the directory, not the git index, so a
+.gitignore does not help. The path rewriting missed two things and the
+harness is what found them: herdr's terminal_title is Claude's session
+slug, which leaks repository names as prose rather than as paths; and
+SpecStory records project_name = "<username>" for anything started in
+$HOME, which is not a path at all. dev-check now asserts the username
+directly, so this class fails the build rather than reaching a public
+review PR.
+
+Shapes are preserved where they are the thing under test: 52 agents, the
+2 blocked ones, the 6 with no terminal_title, one CJK title, one emoji
+title, and the two-pids-one-session pair. Free text is replaced wholesale,
+because none of it is under test.
+
+specstory-shape.json asserts the traps still exist in the real index — 7
+undated rows, 81 duplicated sessions, a 6-row worst case, 341 of 470
+unnamed, a 10.5 MB largest body. If those ever stop being true the guards
+should be removed deliberately, not left in as folklore.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+MSG
+git log --oneline | head -3
+```
+
+```text
+a86df3f Read the tools instead of the docs, and redact what they say
+c7f1552 Make every external tool optional, and prove it
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:25:20Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #2 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:25:21Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #5 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:25:30Z)**_
+
+<think><details><summary>Thought Process</summary>
+I should wrap up and report the progress to the user since we've covered a lot of ground. First, I want to save the user's preference about external tools being optional to memory so it carries forward to future sessions. Let me check if the memory directory exists for this project, though I realize the new work is in a different project location than the Pueue extension.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:25:30Z)**_
+
+Let me record the durable preference you stated, then report status.
+
+_**Agent (claude-opus-5 2026-07-26 21:25:31Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check existing memory
+
+`ls -la /Users/david/.claude/projects/-Users-david-Documents-Program-Pueue-Raycast-Extension/memory/ 2>&1 | head; echo "--- MEMORY.md ---"; cat /Users/david/.claude/projects/-Users-david-Documents-Program-Pueue-Raycast-Extension/memory/MEMORY.md 2>&1 | head -20`
+
+```text
+.rw-r--r--@ 1.7k david 27 Jul 05:02 interactive-pass-is-the-gap.md
+.rw-r--r--@  254 david 27 Jul 05:02 MEMORY.md
+.rw-r--r--@ 1.1k david 27 Jul 05:02 tag-only-when-verified.md
+--- MEMORY.md ---
+- [Tag only when verified](tag-only-when-verified.md) — a version tag is a claim the version was used, not that it compiles
+- [The interactive pass is the gap](interactive-pass-is-the-gap.md) — every reported bug so far was invisible to `just check`
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:25:45Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```md
+---
+name: external-tools-are-always-optional
+description: Every external CLI/DB dependency must degrade gracefully with an install hint, never be required
+metadata:
+  type: feedback
+---
+
+When an extension or tool of mine depends on external CLIs or databases
+(herdr, specstory, sqlite3, codexbar, peon, pueue, …), every one of them must be
+**optional**. Missing tool → fall back to another source if one exists,
+otherwise show the feature disabled with an install hint. Never force
+installation, never crash, never show an error toast merely because software is
+absent.
+
+Stated by the user on 2026-07-27 while scoping Agent-Deck-Raycast-Extension:
+"我們會有許多類似的external tools依賴 這些最好都是optional的 如果沒有就fallback
+或是功能暫時顯示disable之類的 提示安裝這樣 不強迫安裝".
+
+**Why:** they run a machine with many overlapping agent tools, and which ones
+are installed varies by host (their chezmoi/ansible fleet). A hard dependency
+turns a machine-specific setup into a broken app. It is also what makes an
+extension publishable at all — a store user has none of these.
+
+**How to apply:** concentrate the rule in one pure module (a capability map)
+rather than scattering try/catch, so it can be asserted rather than remembered.
+Keep two states distinct: **absent** (install hint, disabled affordance) versus
+**present but broken** (structural error with a fix). "Install herdr" shown to
+someone who has herdr is the failure this split prevents. Assert the strongest
+version directly — with every optional tool absent, the app still works — which
+usually means at least one capability must be a plain filesystem read needing no
+binary at all. See [[prefer-measured-claims-in-comments]].
+
+```
+
+```text
+File created successfully at: /Users/david/.claude/projects/-Users-david-Documents-Program-Pueue-Raycast-Extension/memory/external-tools-are-always-optional.md
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:25:52Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/.claude/projects/-Users-david-Documents-Program-Pueue-Raycast-Extension/memory/MEMORY.md has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:26:18Z)**_
+
+評估結果：**可行**，而且已經開始建了。`../Agent-Deck-Raycast-Extension` 兩個 commit，317 checks 全綠。
+
+## 已完成
+
+**純 domain layer + 測試 harness**（`just verify` = 317 checks，含對真實 herdr schema 和真實 SpecStory DB 的 live cross-check）
+
+**你的兩個要求都是架構層級，不是註記：**
+
+`lib/agents/capabilities.ts` 把「全部 external tool optional」集中成一個 pure module，可以被 assert 而不是靠人記得。最強的那條斷言直接寫進測試：**把 herdr / specstory / sqlite3 / codexbar / peon / pueue 全部拿掉，app 仍然能列出 live agent 並搜尋 transcript** — 因為 `~/.claude/sessions`、`~/.claude/projects`、`~/.codex/sessions` 三個 capability 是純檔案讀取，不需要任何 binary。
+
+而且「沒裝」和「裝了但壞掉」是**不同的型別**：herdr 沒裝 → install hint；herdr 裝了但 server 沒開 → structural error + 修復方法，**不顯示 install hint**。對一個已經裝了 herdr 的人說「請安裝 herdr」是最糟的訊息。
+
+Multi-agent 方面，`SessionIndex` 是有 4 個實作的 provider interface — 因為 SpecStory 完全不索引 OpenCode，而 `opencode.db` 沒有 FTS table，兩者是互補不是重複。
+
+## 跑 `--help` 才發現的 4 個錯誤
+
+| 我原本以為 | 實際 |
+|---|---|
+| `herdr agent wait --state` | **`--until`**。而且 help 寫著「Without --timeout, waits indefinitely」— 在 Raycast subprocess 裡就是使用者無法取消的 hang，所以 timeout 一律強制帶上 |
+| `agent read` 預設可用 | 預設帶 SGR escape，在 Raycast Detail 裡會顯示成字面的 `[38;5;242m`，要 `--format text` |
+| `sqlite3 -json` 空結果回 `[]` | **回空字串**。`JSON.parse("")` 會 throw — 搜尋沒結果會變成「資料庫壞了」 |
+| `bm25()` 在 CTE 會失敗（Plan agent 的說法） | 我實測**不會**。仍用 `rank`（FTS5 文件保證的寫法），但不會寫成 pitfall |
+
+## Redaction 被 harness 抓到兩次
+
+`ray publish` 複製的是**目錄**不是 git index，`.gitignore` 救不了。路徑替換漏掉兩類：herdr 的 `terminal_title` 是 Claude 的 session slug —— repo 名稱以**散文**而非路徑形式外洩；SpecStory 對 `$HOME` 起的 session 記 `project_name = "david"`，根本不是路徑。dev-check 現在直接斷言 username，這一類會 fail build 而不是進到公開 PR。
+
+形狀保留（52 agents、2 blocked、6 個無 title、一個 CJK、一個 emoji、共用 sessionId 的兩個 pid），free text 整段換掉。
+
+## 待辦
+
+剩 3 件：session index providers（specstory/opencode/claude-fs/codex-fs 的 cli 層）、4 個 command 的 UI、docs/pitfalls/backlog。
+
+一個提醒：v0.2 的 mutation 我留成 stub，**因為 herdr 的 reconcile 延遲還沒量**。不能直接抄 Pueue extension 的 400/1500ms —— 那是 pueued 的 update loop，herdr 是靠 scrape 終端機畫面判斷狀態（`rule: live_prompt_box, evidence: "❯\n"`），機制不同，大概率更慢也更吵。

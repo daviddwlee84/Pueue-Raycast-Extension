@@ -38,6 +38,11 @@ shape isn't decided yet and there's a note in [`backlog/`](backlog/).
   [`docs/remote.md`](docs/remote.md).
 - `[S]` **`pueue send`** — a form to send input to a running task. Inherently
   best-effort: there is no way to know whether the process is reading stdin.
+- `[S]` **Evals for the AI tools** — Raycast supports `ai.yaml` for asserting
+  tool *selection*. The failure worth catching is the model reaching for
+  `clean-tasks` when asked to "clear out" a group that still has running work;
+  the confirmation stops the damage, but a wrong tool choice is still a bad
+  turn. See [`backlog/ai-tools.md`](backlog/ai-tools.md).
 
 ## Docs site
 
@@ -74,7 +79,6 @@ Live at <https://daviddwlee84.github.io/Pueue-Raycast-Extension/>, bilingual
 
 - `P?` `[L]` **Direct CBOR unix-socket transport** —
   [`backlog/socket-transport.md`](backlog/socket-transport.md)
-- `P?` `[M]` **AI tools (`tools[]`)** — [`backlog/ai-tools.md`](backlog/ai-tools.md)
 - `P?` `[S]` **Callback-driven notifications** —
   [`backlog/callback-notifications.md`](backlog/callback-notifications.md)
 - `P?` **Publishing to the public store** —

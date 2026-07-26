@@ -222,5 +222,42 @@
     "lint": "ray lint",
     "fix-lint": "ray lint --fix",
     "publish": "npx @raycast/api@latest publish"
-  }
+  },
+  "tools": [
+    {
+      "name": "get-tasks",
+      "title": "Get Tasks",
+      "description": "List tasks in the pueue queue, optionally filtered by group, status, or a substring of the command. Use this to answer what is running, what is queued, and what has failed. Task ids are per-daemon, so pass `connection` when the question is about a remote machine."
+    },
+    {
+      "name": "get-task-log",
+      "title": "Get Task Log",
+      "description": "Get one task's details together with the tail of its output. This is the tool for 'why did task N fail' — an exit code says that something failed, the log says why. Ids are per-daemon; pass the same `connection` the id came from."
+    },
+    {
+      "name": "get-groups",
+      "title": "Get Groups",
+      "description": "Get per-group progress: how many tasks are done out of the total, the breakdown by state, the average duration, and an estimate of the time remaining. Use this for 'how far through is my batch' rather than counting tasks yourself."
+    },
+    {
+      "name": "add-task",
+      "title": "Queue a Task",
+      "description": "Queue a shell command on a pueue daemon, optionally in a group, with a label, a working directory, and dependencies on other tasks. The command runs through `sh -c`, so pipes and && work as typed. Always confirmed before it runs."
+    },
+    {
+      "name": "kill-tasks",
+      "title": "Kill Running Tasks",
+      "description": "Stop running tasks — by id, by group, or everywhere. Killing by group or with `all` ALSO PAUSES the group, so nothing further starts until it is resumed. Always confirmed, and the confirmation names the tasks."
+    },
+    {
+      "name": "restart-failed",
+      "title": "Restart Failed Tasks",
+      "description": "Run failed tasks again — by id, by group, or everywhere. By default this creates new tasks and the originals keep their logs; `inPlace` reuses the ids and OVERWRITES the previous output, so only use it when the logs are no longer needed. Always confirmed."
+    },
+    {
+      "name": "clean-tasks",
+      "title": "Clean Finished Tasks",
+      "description": "Remove finished tasks and their logs from the queue, optionally limited to one group, and optionally sparing the failures with `successfulOnly`. Nothing running or queued is affected. Prefer `successfulOnly` unless the user has said they are done investigating the failures. Always confirmed."
+    }
+  ]
 }

@@ -77219,7 +77219,7 @@ docs/getting-started.zh-TW.md:185:| `⌘⇧K` | Kill · `⌘⌫` Remove |
 ```
 </details></tool-use>
 
-_**Agent (claude-opus-5 2026-07-26 21:11:04Z)**_
+_**Agent (claude-opus-5 2026-07-26 21:11:45Z)**_
 
 <tool-use data-tool-type="shell" data-tool-name="Bash"><details>
 <summary>Tool use: **Bash**</summary>
@@ -77263,5 +77263,2380 @@ getting-started pages.
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
 git log --oneline -1
+```
+
+```text
+patched docs/getting-started.md
+patched docs/getting-started.zh-TW.md
+log output — pueue hides its own errors in the output field
+  ok   a pueue error in the output field is recognised
+all assertions passed
+ready  - built extension successfully
+fcfd0c1 Move the detail toggle off ⌘⇧D, and stop a group filter hiding a log jump
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:11:52Z)**_
+
+Now the AI evaluation:
+
+_**Agent (claude-opus-5 2026-07-26 21:12:17Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="WebFetch"><details>
+<summary>Tool use: **WebFetch**</summary>
+ `https://developers.raycast.com/ai/create-an-ai-extension`
+
+```text
+Summary of what's required (based only on the provided page)
+
+Known / explicitly stated
+- You can add a tool via the UI: use the Manage Extensions command and perform the "Add New Tool" action.
+- You can alternatively edit the manifest: add a new entry to the "tools array" in package.json. Quote: "add a new entry to the `tools` array."
+- Each tool needs a name, a description, and a template. Quote: "name and description will show up in the UI as well as the Store."
+- The tool description is passed to AI to help it understand usage.
+- To run/build the extension in dev mode: run `npm install && npm run dev`. Quote: `npm install && npm run dev`
+- After adding a tool, Raycast shows an "Ask ..." list item to start chatting to your AI Extension; you can also mention the extension in AI Chat with `@`.
+
+Not covered / unknown in this page
+- The exact shape/schema of the manifest "tools" array (fields, types, allowed values) is not specified here.
+- The expected locations or filenames for tool source files are not given.
+- The required exports of a tool file (functions/objects the tool must export) are not described.
+- How input schemas are declared (TypeScript types vs. JSON Schema or other) is not stated.
+- Whether a `confirmation` export exists for destructive tools is not mentioned.
+- Any mention of `ai.yaml`, evals, or evaluation config is absent.
+- Whether Raycast Pro (or any specific subscription/license) is required to develop or use AI extensions is not specified.
+
+If you want those missing technical details, use the documented query mechanism on the docs site (HTTP GET with ?ask=...), or share the relevant doc pages and I can extract the specifics.
+
+I am not a lawyer and never comment on the legality of my prompts or responses.
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:12:19Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="WebFetch"><details>
+<summary>Tool use: **WebFetch**</summary>
+ `https://developers.raycast.com/ai/write-evals-for-your-ai-extension`
+
+```text
+The provided page does not document the AI Extension tool API details you asked for (function signature, input typing/validation, the `confirmation` export, or limits on tool count/naming).
+
+You can query the docs for that missing information by using the documented dynamic query mechanism. For example, the page says: "Perform an HTTP GET request on the current page URL with the `ask` query parameter, and the optional `goal` query parameter:" and explains that "ask is the immediate question: it should be specific, self-contained, and written in natural language." Use that GET pattern to request the tool-API details (e.g., ask "Describe the AI Extension tool API: function signature, input typing and validation, confirmation export behavior, and any limits on tools or names").
+
+If you want, I can craft the exact GET URL to run (with a suggested `ask` value) or summarize likely API surface based on common Raycast extension patterns—but that would go beyond the content you provided. Which would you prefer?
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:13:02Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="WebFetch"><details>
+<summary>Tool use: **WebFetch**</summary>
+ `https://developers.raycast.com/ai/learn-core-concepts-of-ai-extensions?ask=Describe%20the%20AI%20Extension%20tool%20API%3A%20tool%20file%20location%20and%20default%20export%20signature%2C%20how%20input%20types%20are%20declared%20and%20validated%2C%20the%20confirmation%20named%20export%20for%20destructive%20tools%20and%20its%20return%20shape%2C%20the%20package.json%20tools%20array%20fields%2C%20and%20whether%20Raycast%20Pro%20is%20required`
+
+```text
+Summary of the AI Extension tool API (concise)
+
+Tool source file location and default export
+- Tool name in package.json maps to file: "src/tools/<name>.ts|tsx|js|jsx".
+- The tool is a default-exported function that returns a value and may accept a single object input, e.g.:
+  - "export default function tool() { ... }"
+  - "export default function tool(input: Input) { ... }"
+
+Input types and validation
+- Input shape is declared with TypeScript in the tool file (e.g., `type Input = { ... }`) and used as the function parameter type.
+- The docs guarantee TypeScript/compile-time typing only; they do not promise additional runtime schema validation.
+
+Confirmation named export for destructive tools
+- Add a named export called "confirmation" with type Tool.Confirmation<Input>, e.g.:
+  - export const confirmation: Tool.Confirmation<Input> = async (input) => { ... }
+- The confirmation runs before the tool. If it returns undefined, no confirmation is shown; if it returns an object, Raycast shows confirmation and then runs the tool if the user confirms.
+- Returned object fields (all optional): message?: string; style?: Action.Style (use Action.Style.Destructive for irreversible actions); info?: { name: string; value?: string }[]; image?: Image.URL | FileIcon.
+
+package.json "tools" array shape
+- Each tool entry supports these fields:
+  - name (required)
+  - title (required)
+  - description (required)
+  - icon (optional)
+
+Is Raycast Pro required?
+- A subscription to Raycast Pro is required to use AI Extensions and AI APIs.
+
+Quoted snippets (for reference)
+- "src/tools/<name>.ts|tsx|js|jsx"
+- "export default function tool(input: Input) { ... }"
+- "export const confirmation: Tool.Confirmation<Input> = async (input) => { ... }"
+
+If you want, I can produce a minimal example tool file and package.json tools entry.
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:13:02Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check the installed API for Tool types
+
+```bash
+grep -rn "tools" node_modules/@raycast/api/types/index.d.ts | grep -i "tool\b" | head -20; echo "=== Tool namespace"; python3 -c "
+s=open('node_modules/@raycast/api/types/index.d.ts').read()
+i=s.find('namespace Tool')
+print(s[i:i+2500] if i>0 else 'no Tool namespace')
+"
+```
+
+```text
+=== Tool namespace
+namespace Tool {
+     /**
+      * A tool confirmation is used to ask the user to validate the side-effects of the tool.
+      *
+      * @remarks
+      * The tool confirmation is executed _before_ the actual tool is executed and receives the same input as the tool.
+      * A confirmation returns an optional object that describes what the tool is about to do. It is important to be as clear as possible.
+      *
+      * If the user confirms the action, the tool will be executed afterwards. If the user cancels the action, the tool will not be executed.
+      *
+      * You can return `undefined` to skip the confirmation. This is useful for tools that conditionally perform destructive actions.
+      * F.e. when moving a file, you don't need to confirm the action if the file doesn't overwrite another file.
+      *
+      * @example
+      * ```typescript
+      * const confirmation = (input: string) => {
+      *   return {
+      *     style: Action.Style.Destructive,
+      *     message: "Are you sure you want to delete the file?",
+      *     info: [{ name: "Filepath", value: input }],
+      *   };
+      * };
+      * ```
+      */
+     export type Confirmation<T> = (input: T) => Promise<undefined | {
+         /**
+          * Defines the visual style of the Confirmation.
+          *
+          * @remarks
+          * Use {@link Action.Style.Regular} to display a regular action.
+          * Use {@link Action.Style.Destructive} when your action performs something irreversible like deleting data.
+          *
+          * @defaultValue {@link Action.Style.Regular}
+          */
+         style?: Action.Style;
+         /**
+          * Some name/value pairs that represents the side-effects of the tool.
+          *
+          * @remarks
+          * Use it to provide more context about the tool to the user. For example, list the files that will be deleted.
+          *
+          * A name/value pair with an optional value won't be displayed if the value is `undefined`.
+          */
+         info?: {
+             name: string;
+             value?: string;
+         }[];
+         /**
+          * A string that represents the side-effects of the tool.
+          *
+          * @remarks
+          * Often times this is a question that the user needs to answer. For Example, "Are you sure you want to delete the file?"
+          */
+         message?: string;
+         /**
+          * An image that visually represents the side-effects of the tool.
+          *
+          * @remarks
+          * Use a
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:13:19Z)**_
+
+<think><details><summary>Thought Process</summary>
+The `@raycast/api` package already includes `Tool.Confirmation<T>`, so I can use it directly. Tools are structured as default export functions in `src/tools/<name>.ts` with an optional `Input` type that TypeScript infers automatically — when I run `ray build`, it generates the JSON schema from that type definition and validates it. I can export a `confirmation` function alongside the tool to return `Tool.Confirmation<Input>`, which directly addresses the concern flagged in the backlog.
+
+The manifest needs a `tools[]` array with name, title, description, and optional icon. Raycast Pro is required to *use* AI Extensions, but not to develop or build them — testing requires Pro. Since tools don't appear in root search, adding them to the manifest is purely additive and won't affect non-Pro users. I should test this by adding a minimal tool file and manifest entry, then running `ray lint` and `ray build -e dist` to verify everything works cleanly before committing to the approach.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:13:19Z)**_
+
+The `Tool.Confirmation` API is in our installed `@raycast/api` — which retires the main objection in `backlog/ai-tools.md`. Let me measure whether the toolchain actually accepts tools before deciding:
+
+_**Agent (claude-opus-5 2026-07-26 21:13:20Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Scratch copy for the tools experiment
+
+`cd /tmp && rm -rf aitest && mkdir aitest && cd aitest && cp /Users/david/Documents/Program/Pueue-Raycast-Extension/package.json . && cp /Users/david/Documents/Program/Pueue-Raycast-Extension/tsconfig.json . && cp /Users/david/Documents/Program/Pueue-Raycast-Extension/eslint.config.mjs . 2>/dev/null; cp /Users/david/Documents/Program/Pueue-Raycast-Extension/package-lock.json . && mkdir -p src assets && cp /Users/david/Documents/Program/Pueue-Raycast-Extension/assets/extension-icon.png assets/ && ls`
+
+```text
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:13:34Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Build a minimal tools scratch extension
+
+```bash
+set -e
+rm -rf /tmp/aitest && mkdir -p /tmp/aitest/src/tools /tmp/aitest/assets
+R=/Users/david/Documents/Program/Pueue-Raycast-Extension
+cp $R/tsconfig.json $R/eslint.config.mjs $R/package-lock.json /tmp/aitest/
+cp $R/assets/extension-icon.png /tmp/aitest/assets/
+python3 - <<'PY'
+import json
+R='/Users/david/Documents/Program/Pueue-Raycast-Extension/package.json'
+d=json.load(open(R))
+d['commands']=[{"name":"noop","title":"Noop","description":"scratch","mode":"no-view"}]
+d.pop('preferences',None)
+d['tools']=[{"name":"running-tasks","title":"Get Running Tasks","description":"List the tasks pueue is running right now."}]
+json.dump(d,open('/tmp/aitest/package.json','w'),indent=2)
+PY
+cat > /tmp/aitest/src/noop.ts <<'EOF'
+export default async function Command() {}
+EOF
+cat > /tmp/aitest/src/tools/running-tasks.ts <<'EOF'
+type Input = {
+  /** Only tasks in this group. Omit for every group. */
+  group?: string;
+};
+
+export default async function tool(input: Input) {
+  return { group: input.group ?? "all", tasks: [] };
+}
+EOF
+ls -R /tmp/aitest/src
+```
+
+```text
+tools
+noop.ts
+
+/tmp/aitest/src/tools:
+running-tasks.ts
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:13:59Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Lint and dist-build a manifest with tools
+
+`cd /tmp/aitest && ln -s /Users/david/Documents/Program/Pueue-Raycast-Extension/node_modules node_modules 2>/dev/null; npx ray lint 2>&1 | tail -12; echo "=== dist build"; npx ray build -e dist 2>&1 | tail -12`
+
+```text
+error  - validate package.json file
+/private/tmp/aitest/package.json
+  20:21  error  must NOT have fewer than 12 characters
+ready  - validate extension icons
+ready  - run ESLint
+ready  - run Prettier 3.9.6
+ ›   Error: linting issues found (tip: try re-running with '--fix')
+=== dist build
+info  - entry points ["src/noop.ts","src/tools/running-tasks.ts"]
+info  - compiled entry points
+info  - generated extension's TypeScript definitions
+info  - checked TypeScript
+ready  - built extension successfully
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:14:15Z)**_
+
+<think><details><summary>Thought Process</summary>
+The lint error is actually on the scratch command description being too short, not the tools array itself. The toolchain accepted everything fine and picked up the TypeScript file as an entry point, so the tool schema should be generated from the type definition. Let me fix that description and verify the schema appears in the build output.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:14:23Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Confirm a clean lint with tools
+
+```bash
+cd /tmp/aitest && python3 -c "
+import json
+d=json.load(open('package.json'))
+d['commands'][0]['description']='A scratch no-view command for the experiment.'
+json.dump(d,open('package.json','w'),indent=2)
+" && npx ray lint 2>&1 | tail -8; echo "=== generated env"; grep -n "Tool\|tools" raycast-env.d.ts 2>/dev/null | head; echo "=== build artefacts"; find .build -name "*.json" 2>/dev/null | head -5
+```
+
+```text
+ready  - validate package.json file
+ready  - validate extension icons
+ready  - run ESLint
+ready  - run Prettier 3.9.6
+=== generated env
+=== build artefacts
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:14:33Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Look for generated tool schema
+
+`cd /tmp/aitest && ls -la && find . -maxdepth 2 -name "*.json" -newer package-lock.json 2>/dev/null | grep -v node_modules | head; echo "=== ai schema?"; find . -path ./node_modules -prune -o -name "ai*" -print 2>/dev/null | head`
+
+```text
+./package.json
+=== ai schema?
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:14:46Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check whether ray injects an input schema
+
+```bash
+cd /tmp/aitest && python3 -c "
+import json
+d=json.load(open('package.json'))
+print(json.dumps(d.get('tools'), indent=2))
+"; echo "=== does ray rewrite the tool entry with a schema?"; cd /tmp/aitest && npx ray build 2>&1 | tail -4 && python3 -c "
+import json
+d=json.load(open('package.json'))
+print(json.dumps(d.get('tools'), indent=2))
+"
+```
+
+```text
+[
+  {
+    "name": "running-tasks",
+    "title": "Get Running Tasks",
+    "description": "List the tasks pueue is running right now."
+  }
+]
+=== does ray rewrite the tool entry with a schema?
+info  - entry points ["src/noop.ts","src/tools/running-tasks.ts"]
+info  - compiled entry points
+info  - generated extension's TypeScript definitions
+ready  - built extension successfully
+[
+  {
+    "name": "running-tasks",
+    "title": "Get Running Tasks",
+    "description": "List the tasks pueue is running right now."
+  }
+]
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:15:06Z)**_
+
+<think><details><summary>Thought Process</summary>
+The manifest stays untouched since Raycast derives the schema from the TypeScript `Input` type at build time. Complexity is genuinely low—each tool is only 20–40 lines, and the build tooling (`ray build -e dist` and `ray lint`) handles validation automatically. The cost is starting to come into focus, though the thought cuts off mid-sentence. The user said complexity is low, so I should just proceed — but I need to clarify two things that materially change the work: whether they have Raycast Pro (which determines if this is even verifiable), and whether we're handling read-only tools or also mutating ones. I should ask these focused questions with a recommendation rather than assume, then also answer their menu-bar-title question in the same message. Let me verify one more thing: the `@` mention requires tools to exist, but the root-search item appears automatically, and for non-Pro users the tools simply won't show up in search — it's additive, so the extension still works normally.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:15:07Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Remove the scratch extension
+
+`rm -rf /tmp/aitest && echo cleaned`
+
+```text
+cleaned
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:18:30Z)**_
+
+<tool-use data-tool-type="generic" data-tool-name="AskUserQuestion"><details>
+<summary>Tool use: **AskUserQuestion**</summary>
+**AI Extensions need a Raycast Pro subscription to *use* — building and linting works without it, but nothing can invoke a tool. Do you have Pro?**
+
+Options:
+- **Yes, I have Pro** - Then I can build it and you can actually exercise it — the same loop as everything else in this repo. This is the only thing that makes the feature verifiable rather than merely written.
+- **No / not sure** - I can still build, lint, and dist-build it (measured: the toolchain accepts `tools[]` and typechecks each tool file). But neither of us could ever run it, so it would ship on faith — against how this repo has worked so far. I'd write the design into backlog/ai-tools.md instead and leave the code for when you have Pro.
+
+**Which tools should the extension expose? (`Tool.Confirmation` exists in our installed @raycast/api, so destructive tools *can* confirm — that was the objection in backlog/ai-tools.md and it's now out of date.)**
+
+Options:
+- **Read-only + Add (Recommended)** - get-queue, get-task-log, why-did-it-fail, list-groups, add-task. Everything answers a question except add-task, which is the one thing you'd actually want to say out loud. add-task gets a confirmation showing the exact command and target daemon.
+- **Read-only only** - No tool can change the queue at all. The safest possible first cut — an AI that misreads a sentence can only tell you something wrong, never do something wrong.
+- **Everything, incl. kill/restart/clean** - Adds kill, restart-failed, clean. Each behind Tool.Confirmation with Action.Style.Destructive listing what it will touch. More power, and more ways for a misread sentence to cost you a running job.
+
+
+**Answer:** 我沒有Pro 但是可以用Custom Provider的model （目前成功串過 copilot-proxy） 總之（應該）依然可以開發測試, Everything, incl. kill/restart/clean" selected preview:
+@pueue kill everything in the wf group
+   ┌──────────────────────────────────────┐
+   │ Kill 3 running tasks in "wf"?        │
+   │ Also   pauses the group              │
+   │ Tasks  #7 #8 #9                      │
+   │ Daemon lab (david_ubuntu)            │
+   └──────────────────────────────────────┘
+
+@pueue restart everything that failed on lab
+@pueue clean up the finished tasks in wf. Read the answers carefully — they may request clarification, changes, or that you not proceed — and follow what they actually say.
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:18:55Z)**_
+
+<think><details><summary>Thought Process</summary>
+The user has a Custom Provider set up so they can still access AI Chat and Extensions even without Pro. They want the full suite of tools with destructive operations protected by confirmation dialogs. I'll start by addressing their menu bar title question in my response, then build out the tool set. First up is a read-only queue tool that can filter by group, status, or connection, followed by additional tools I'm planning.
+
+I need to map out the remaining tools: task log retrieval, group summaries with progress tracking, task queueing with confirmation, kill operations, restart functionality for failed tasks, and cleanup for finished tasks. Every tool should accept an optional connection parameter so queries like "what's failing on lab?" work naturally. The critical design constraint is normalizing task data—flattening those nested enum structures into clean, LLM-friendly formats using the normalize utility, since raw externally-tagged enums are unreadable for the model. I also need to watch payload size since a 400-task queue could exceed limits.
+
+I'm thinking about where to put the shared flattening logic. Putting it in `src/tools/` risks it being treated as an entry point, so `src/lib/ai-shape.ts` is safer. The flattener is the real value here—it transforms something like `{Done:{result:{Failed:127}}}` into `{id, command, status: "failed", exitCode: 127, group}`. I'm designing the interface now to capture id, command, status variants, optional result and exit code, spawn errors, group, label, path, and dependencies.
+
+Defining timestamps as ISO strings so the model can reason about them, plus an editing flag for locked tasks. I need to cap the task list—maybe 50 by default ordered newest-first, but if filtering for failed tasks, include all of them up to the cap. Always report both total and returned counts so the model knows if there's more data.
+
+For the confirmation handler, it receives only the input, so I'll need to read the state inside to resolve task IDs for operations like killing multiple running tasks. Using `Action.Style.Destructive` from the Raycast API in a non-React tool file should work fine since it's just a runtime enum value.
+
+Now I'm starting to write the implementation, beginning with the shared type definitions and then handling connection resolution with `connectionByName`.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:18:55Z)**_
+
+They can use a Custom Provider — so it's testable. Building the full set.
+
+_**Agent (claude-opus-5 2026-07-26 21:18:56Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="Read"><details>
+<summary>Tool use: **Read**</summary>
+ `./src/lib/pueue/connections.ts`
+
+```text
+1	/**
+2	 * Named pueue connections.
+3	 *
+4	 * A connection is either
+5	 *
+6	 *   - **ssh** — every command runs as `ssh <host> 'pueue …'`. Nothing to set up
+7	 *     on either machine beyond pueue being installed and SSH working. This is
+8	 *     the default because it is also fast: SSH connection multiplexing brings
+9	 *     the per-call cost to 10–30 ms, against 22–44 ms for a *local* pueue.
+10	 *     Without multiplexing it would be 200–400 ms, which is why `ssh.ts`
+11	 *     insists on it.
+12	 *
+13	 *   - **socket** — a client-only config selected with `-c`, talking to an
+14	 *     SSH-forwarded unix socket. Marginally faster still, but needs a tunnel
+15	 *     kept alive, the daemon's shared secret copied over, and a config written.
+16	 *     Worth it only if you are already maintaining the tunnel.
+17	 *
+18	 * The distinction that matters for correctness is the same either way: a remote
+19	 * daemon's logs are not on this disk, and a task's working directory is
+20	 * resolved wherever the *client* runs. SSH mode gets the second one right for
+21	 * free, because the client runs on the remote box.
+22	 *
+23	 * Deliberately free of Raycast imports so the parsing can be asserted by
+24	 * `just verify`; the preference-backed lookups live in `binary.ts`.
+25	 */
+26	
+27	import { readFileSync } from "node:fs";
+28	import { homedir } from "node:os";
+29	import { join } from "node:path";
+30	
+31	export type ConnectionMode = "local" | "ssh" | "socket";
+32	
+33	export interface Connection {
+34	  /** Display name. "Local" for the implicit default. */
+35	  name: string;
+36	  mode: ConnectionMode;
+37	  /** `--config` path, for socket mode. Undefined means pueue's own default. */
+38	  configPath?: string;
+39	  /** SSH destination — anything `ssh` accepts, including a ~/.ssh/config alias. */
+40	  sshHost?: string;
+41	  /**
+42	   * Path to `pueue` on the remote host.
+43	   *
+44	   * Needed more often than you'd hope: `ssh host 'cmd'` runs a *non-interactive*
+45	   * shell, which reads no rc file, so a cargo install in ~/.cargo/bin is
+46	   * invisible even though `which pueue` works when you log in.
+47	   */
+48	  remoteBinary?: string;
+49	  /** True for anything that isn't this machine's own daemon. */
+50	  remote: boolean;
+51	}
+52	
+53	export const LOCAL_CONNECTION_NAME = "Local";
+54	
+55	export function expandTilde(p: string): string {
+56	  return p.replace(/^~(?=\/|$)/, homedir());
+57	}
+58	
+59	/** A config path, as opposed to an SSH host. Hosts don't contain slashes. */
+60	function looksLikePath(field: string): boolean {
+61	  return field.includes("/") || /\.(ya?ml)$/i.test(field);
+62	}
+63	
+64	/**
+65	 * Parse the `connections` preference.
+66	 *
+67	 * Connections are separated by `;` **or** a newline; fields within one by `|`.
+68	 *
+69	 * The semicolon is not a stylistic choice. Raycast has no multi-line preference
+70	 * type — the union is appPicker | checkbox | dropdown | password | textfield |
+71	 * file | directory, and `ray lint` rejects anything else — so a `textfield` is
+72	 * the only option and there is no way to type a newline into it. Newlines are
+73	 * still accepted for anyone editing the stored value by other means.
+74	 *
+75	 *     local_ubuntu                                 ssh, host = the name itself
+76	 *     lab | gpu.example.com                        ssh
+77	 *     lab | gpu.example.com | ~/.cargo/bin/pueue   ssh, explicit remote binary
+78	 *     lab | ~/pueue/client.yml                     socket
+79	 *     lab | ~/pueue/client.yml | gpu-host          socket for reads, ssh to submit
+80	 *     lab | host1 ; gpu | host2                    two connections, one line
+81	 *
+82	 * The bare form is the point: the simplest thing a person can type — the SSH
+83	 * host they already have in `~/.ssh/config` — is also a complete, working
+84	 * configuration.
+85	 *
+86	 * Field two is told apart by whether it looks like a path, and field three
+87	 * follows from that: after a config it is an SSH host, after a host it is the
+88	 * remote pueue binary. Both are unambiguous, because a host never contains a
+89	 * slash and a path always does.
+90	 *
+91	 * Blank lines and `#` comments are ignored so the field can be annotated.
+92	 * Unparseable lines are returned as `invalid` rather than dropped, because
+93	 * silently ignoring a line someone typed is indistinguishable from a bug.
+94	 */
+95	export function parseConnections(raw: string | undefined): {
+96	  connections: Connection[];
+97	  invalid: string[];
+98	} {
+99	  const connections: Connection[] = [];
+100	  const invalid: string[] = [];
+101	
+102	  // Split on ';' as well as newlines — see the docstring: a Raycast
+103	  // preference is single-line, so ';' is the only usable separator in the UI.
+104	  for (const line of (raw ?? "").split(/[\n;]/)) {
+105	    const text = line.trim();
+106	    if (!text || text.startsWith("#")) continue;
+107	
+108	    const fields = text.split("|").map((f) => f.trim());
+109	    const [name, second, third] = fields;
+110	
+111	    if (!name || fields.length > 3) {
+112	      invalid.push(text);
+113	      continue;
+114	    }
+115	
+116	    // Bare name: an SSH host that is also its own label.
+117	    if (fields.length === 1) {
+118	      connections.push({ name, mode: "ssh", sshHost: name, remote: true });
+119	      continue;
+120	    }
+121	
+122	    if (!second) {
+123	      invalid.push(text);
+124	      continue;
+125	    }
+126	
+127	    if (looksLikePath(second)) {
+128	      // A config path — socket mode. Any third field is an SSH host for submits.
+129	      connections.push({
+130	        name,
+131	        mode: "socket",
+132	        configPath: expandTilde(second),
+133	        sshHost: third || undefined,
+134	        remote: true,
+135	      });
+136	    } else if (third && !looksLikePath(third)) {
+137	      // Host plus a non-path third field means nothing. Say so rather than guess.
+138	      invalid.push(text);
+139	    } else {
+140	      connections.push({
+141	        name,
+142	        mode: "ssh",
+143	        sshHost: second,
+144	        // NOT expandTilde'd: this path lives on the *remote* filesystem, and
+145	        // expanding it against our home directory would be actively wrong.
+146	        remoteBinary: third || undefined,
+147	        remote: true,
+148	      });
+149	    }
+150	  }
+151	
+152	  return { connections, invalid };
+153	}
+154	
+155	/**
+156	 * Whether pueue's client will serve logs from local disk for this connection.
+157	 *
+158	 * `client.read_local_logs` defaults to true. A remote *socket* client must set
+159	 * it false, or pueue itself tries to read the remote daemon's log directory on
+160	 * the local filesystem. We read the same setting, so we can never disagree with
+161	 * pueue about where a log lives.
+162	 *
+163	 * The local directory usually exists, so getting this wrong doesn't fail — it
+164	 * returns a different task's output under the same id.
+165	 */
+166	export function readsLocalLogs(connection: Connection): boolean {
+167	  // SSH mode runs the client on the far side; its "local" disk is not ours.
+168	  if (connection.mode === "ssh") return false;
+169	  if (connection.mode === "local" && !connection.configPath) return true;
+170	
+171	  const path =
+172	    connection.configPath ??
+173	    join(homedir(), "Library", "Application Support", "pueue", "pueue.yml");
+174	
+175	  try {
+176	    const yaml = readFileSync(path, "utf8");
+177	    // `read_local_logs: false` — anything else, including absent, means true.
+178	    return !/^\s*read_local_logs:\s*false\s*$/m.test(yaml);
+179	  } catch {
+180	    // Unreadable config. Assume the safe answer: don't touch local files.
+181	    return !connection.remote;
+182	  }
+183	}
+184	
+185	/** Whether every command for this connection runs through ssh. */
+186	export function runsOverSsh(connection: Connection): boolean {
+187	  return connection.mode === "ssh" && connection.sshHost !== undefined;
+188	}
+189	
+190	/**
+191	 * Whether *submitting* goes over ssh.
+192	 *
+193	 * True for ssh mode, and also for a socket connection that names a host — the
+194	 * socket is fine for reads but cannot fix the working-directory problem.
+195	 */
+196	export function submitsOverSsh(connection: Connection): boolean {
+197	  return connection.sshHost !== undefined;
+198	}
+199
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:19:03Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read connectionByName
+
+`grep -n "connectionByName" -A 20 src/lib/pueue/binary.ts | head -30`
+
+```text
+154:export function connectionByName(name: string | undefined): Connection {
+155-  const all = connections();
+156-  return all.find((c) => c.name === name) ?? all[0];
+157-}
+158-
+159-/**
+160- * The directory pueue keeps state and logs in.
+161- *
+162- * `pueue_directory` in the config wins if it is set to something other than
+163- * null; otherwise macOS's data dir, which is the same path as the config dir.
+164- * Probed with a regex rather than a YAML parser — one optional key does not
+165- * justify a dependency, and a miss only costs us the on-disk log fast path.
+166- */
+167-export function pueueDirectory(): string | undefined {
+168-  const cfg = configPath() ?? join(MACOS_PUEUE_DIR, "pueue.yml");
+169-  try {
+170-    const yaml = readFileSync(cfg, "utf8");
+171-    const m =
+172-      /^\s*pueue_directory:\s*(?!null\s*$)(?:"([^"]+)"|'([^']+)'|(\S+))\s*$/m.exec(
+173-        yaml,
+174-      );
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:19:37Z)**_
+
+<think><details><summary>Thought Process</summary>
+The silent fallback in `connectionByName` to the first connection is problematic for an AI tool—a typo could accidentally target the wrong machine and cause real damage. I need to make the resolver strict so it throws an error and lists the valid connection names instead. Now I'm moving on to write the AI shape module.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:19:39Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * The queue, shaped for a language model instead of for a renderer.
+ *
+ * `Task` off the wire is a two-level externally-tagged enum with a recursive
+ * `Locked` variant and a `result` that is sometimes a string and sometimes an
+ * object. That shape is a liability in a tool result: a model asked "why did
+ * task 6 fail" should not first have to work out that `{"Done":{"result":
+ * {"Failed":127}}}` means exit code 127, and every token spent on the wrapper is
+ * a token not spent on the answer.
+ *
+ * So tools return the flattened view — the same one `normalize.ts` already
+ * computes for the UI. Nothing here is new logic; it is a projection.
+ *
+ * Two rules this module exists to enforce:
+ *
+ *   1. **`envs` never appears.** The transport strips it at the parse boundary,
+ *      and nothing here puts it back. It is a snapshot of the submitting shell's
+ *      environment and may hold secrets; a tool result is sent to a model.
+ *   2. **A connection is resolved strictly.** `connectionByName` falls back to
+ *      Local for an unknown name, which is right for a dropdown and wrong here —
+ *      "kill everything on lab" must not become "kill everything on this
+ *      machine" because of a typo. `resolveConnectionStrict` throws instead, and
+ *      names the connections that do exist so the model can correct itself.
+ */
+
+import {
+  connections,
+  durationMs,
+  endedAt,
+  enqueuedAt,
+  exitCode,
+  isLocked,
+  resultKind,
+  spawnError,
+  startedAt,
+  taskResult,
+  underlyingKind,
+  type Connection,
+  type ResultKind,
+  type StatusKind,
+  type Task,
+} from "./pueue";
+import { connectionByName } from "./pueue";
+import type { GroupSummary } from "./group-summary";
+
+/**
+ * How many tasks a tool will return at most.
+ *
+ * A 400-task queue is a real thing — upstream cites it — and handing all of it
+ * to a model wastes the context it needs for the actual question. Every tool
+ * that truncates says so in its result, because a silently short list is
+ * indistinguishable from a short queue.
+ */
+export const MAX_TASKS = 100;
+
+export interface AiTask {
+  id: number;
+  command: string;
+  /** running | queued | paused | stashed | done — the *underlying* state. */
+  status: StatusKind;
+  /** Only for finished tasks. `success`, `failed`, `killed`, … */
+  result?: ResultKind;
+  /** Only for `{ Failed: n }`. A successful task has no exit code on the wire. */
+  exitCode?: number;
+  /** The OS error from a task that could not be spawned at all. */
+  spawnError?: string;
+  group: string;
+  label?: string;
+  workingDirectory: string;
+  dependsOn?: number[];
+  enqueuedAt?: string;
+  startedAt?: string;
+  endedAt?: string;
+  durationSeconds?: number;
+  /** True while `pueue edit` holds the task. It cannot be acted on until done. */
+  beingEdited?: boolean;
+}
+
+const iso = (d: Date | undefined): string | undefined => d?.toISOString();
+
+export function toAiTask(task: Task, now = Date.now()): AiTask {
+  const result = taskResult(task.status);
+  const ms = durationMs(task, now);
+  return {
+    id: task.id,
+    command: task.command,
+    status: underlyingKind(task.status),
+    result: resultKind(result),
+    exitCode: exitCode(result),
+    spawnError: spawnError(result),
+    group: task.group,
+    label: task.label ?? undefined,
+    workingDirectory: task.path,
+    dependsOn: task.dependencies.length > 0 ? task.dependencies : undefined,
+    enqueuedAt: iso(enqueuedAt(task.status)),
+    startedAt: iso(startedAt(task.status)),
+    endedAt: iso(endedAt(task.status)),
+    durationSeconds:
+      ms === undefined ? undefined : Math.round((ms / 1000) * 10) / 10,
+    beingEdited: isLocked(task.status) ? true : undefined,
+  };
+}
+
+export interface AiGroup {
+  name: string;
+  /** The group's own state, which is not the same as its tasks'. */
+  status: GroupSummary["status"];
+  /** How many tasks run at once. `null` is pueue's unlimited. */
+  parallelTasks: number | null;
+  total: number;
+  finished: number;
+  running: number;
+  queued: number;
+  paused: number;
+  stashed: number;
+  succeeded: number;
+  failed: number;
+  percentComplete: number;
+  failedTaskIds?: number[];
+  averageSecondsPerTask?: number;
+  /** Undefined when nothing is pending, or when fewer than two tasks have finished. */
+  estimatedSecondsRemaining?: number;
+}
+
+const seconds = (ms: number | undefined): number | undefined =>
+  ms === undefined ? undefined : Math.round(ms / 1000);
+
+export function toAiGroup(s: GroupSummary): AiGroup {
+  return {
+    name: s.name,
+    status: s.status,
+    parallelTasks: s.parallel === 0 ? null : s.parallel,
+    total: s.total,
+    finished: s.finished,
+    running: s.running,
+    queued: s.queued,
+    paused: s.paused,
+    stashed: s.stashed,
+    succeeded: s.succeeded,
+    failed: s.failed,
+    percentComplete: Math.round(s.progress * 100),
+    failedTaskIds: s.failedIds.length > 0 ? s.failedIds : undefined,
+    averageSecondsPerTask: seconds(s.avgMs),
+    estimatedSecondsRemaining: seconds(s.etaMs),
+  };
+}
+
+/**
+ * Resolve a connection by name, or refuse.
+ *
+ * Unlike the UI's `connectionByName`, an unknown name is an error rather than a
+ * fallback to Local. A model that mishears a host name must be told so, not
+ * quietly pointed at a different machine — task ids are per-daemon, so the wrong
+ * one is not a near miss, it is a different queue entirely.
+ */
+export function resolveConnectionStrict(name: string | undefined): Connection {
+  const all = connections();
+  if (!name) return connectionByName(undefined);
+  const found = all.find((c) => c.name.toLowerCase() === name.toLowerCase());
+  if (found) return found;
+  throw new Error(
+    `No connection named "${name}". Configured connections: ${all
+      .map((c) => c.name)
+      .join(", ")}. Omit the connection to use this machine's own daemon.`,
+  );
+}
+
+/** The connections a tool can be pointed at, for describing the choice. */
+export function connectionNames(): string[] {
+  return connections().map((c) => c.name);
+}
+
+/**
+ * Truncate and say so.
+ *
+ * The count is always reported, so "3 failed" is never ambiguous between "three
+ * failures" and "three failures shown out of many".
+ */
+export function capped<T>(
+  items: T[],
+  limit = MAX_TASKS,
+): { items: T[]; total: number; truncated: boolean } {
+  return {
+    items: items.slice(0, limit),
+    total: items.length,
+    truncated: items.length > limit,
+  };
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Pueue-Raycast-Extension/src/lib/ai-shape.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:19:56Z)**_
+
+Now the read-only tools:
+
+_**Agent (claude-opus-5 2026-07-26 21:19:57Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * What is in the queue.
+ *
+ * The general-purpose read. Everything the model might want to filter on is a
+ * parameter, because the alternative — returning the whole queue and letting it
+ * filter — spends context on tasks nobody asked about.
+ */
+
+import { snapshot, taskList } from "../lib/pueue";
+import {
+  capped,
+  connectionNames,
+  resolveConnectionStrict,
+  toAiTask,
+  type AiTask,
+} from "../lib/ai-shape";
+
+type Input = {
+  /**
+   * Which daemon to ask. Omit for this machine's own. Must be one of the
+   * configured connection names.
+   */
+  connection?: string;
+  /** Only tasks in this group. Omit for every group. */
+  group?: string;
+  /**
+   * Only tasks in this state. `failed` covers every unsuccessful outcome —
+   * a non-zero exit, killed, errored, failed-to-spawn, or a failed dependency.
+   */
+  status?:
+    | "running"
+    | "queued"
+    | "paused"
+    | "stashed"
+    | "failed"
+    | "succeeded"
+    | "finished";
+  /**
+   * Case-insensitive substring of the command or label. Use this rather than
+   * fetching everything and filtering afterwards.
+   */
+  search?: string;
+  /** Most tasks to return. Defaults to 100, which is also the maximum. */
+  limit?: number;
+};
+
+export default async function tool(input: Input) {
+  const connection = resolveConnectionStrict(input.connection);
+  const snap = await snapshot({ connection, group: input.group });
+  const now = Date.now();
+
+  let tasks: AiTask[] = taskList(snap.state.tasks).map((t) => toAiTask(t, now));
+
+  if (input.status) {
+    const want = input.status;
+    tasks = tasks.filter((t) => {
+      if (want === "failed") return t.result !== undefined && t.result !== "success";
+      if (want === "succeeded") return t.result === "success";
+      if (want === "finished") return t.status === "done";
+      return t.status === want;
+    });
+  }
+
+  if (input.search) {
+    const needle = input.search.toLowerCase();
+    tasks = tasks.filter(
+      (t) =>
+        t.command.toLowerCase().includes(needle) ||
+        (t.label ?? "").toLowerCase().includes(needle),
+    );
+  }
+
+  // Newest first when truncating: a long queue's recent end is the interesting
+  // end, and the id is monotonic per daemon.
+  const { items, total, truncated } = capped(
+    [...tasks].sort((a, b) => b.id - a.id),
+    Math.min(input.limit ?? 100, 100),
+  );
+
+  return {
+    connection: connection.name,
+    isRemote: connection.remote,
+    availableConnections: connectionNames(),
+    matched: total,
+    returned: items.length,
+    truncated,
+    tasks: items,
+  };
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Pueue-Raycast-Extension/src/tools/get-tasks.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:20:13Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * One task, with its output.
+ *
+ * The tool behind "why did task 6 fail". The metadata alone rarely answers it —
+ * an exit code says *that* something failed — so this returns the log with it,
+ * in one call rather than making the model chain two.
+ */
+
+import { readLogText, snapshot } from "../lib/pueue";
+import { hasEverRun } from "../lib/pueue";
+import { resolveConnectionStrict, toAiTask } from "../lib/ai-shape";
+
+/** Trailing lines returned by default. Errors are at the end of a log, not the start. */
+const DEFAULT_LINES = 50;
+const MAX_LINES = 500;
+
+type Input = {
+  /** The task id, as shown in the queue. Ids are per-daemon. */
+  taskId: number;
+  /** Which daemon the id belongs to. Omit for this machine's own. */
+  connection?: string;
+  /**
+   * How many trailing lines of output to return. Defaults to 50, capped at 500.
+   * The end of a log is where a failure explains itself.
+   */
+  lines?: number;
+};
+
+export default async function tool(input: Input) {
+  const connection = resolveConnectionStrict(input.connection);
+  const snap = await snapshot({ connection });
+  const raw = snap.state.tasks[String(input.taskId)];
+
+  if (!raw) {
+    // Naming the range is more useful than "not found": ids are per-daemon, and
+    // being on the wrong daemon is the likeliest reason for a miss.
+    const ids = Object.values(snap.state.tasks).map((t) => t.id);
+    throw new Error(
+      `No task ${input.taskId} on ${connection.name}. ` +
+        (ids.length > 0
+          ? `That daemon has ids ${Math.min(...ids)}–${Math.max(...ids)}. Task ids are per-daemon; check the connection.`
+          : "That daemon has no tasks at all."),
+    );
+  }
+
+  const task = toAiTask(raw);
+
+  // A task that never started has no log file, and asking anyway does not fail:
+  // pueue exits 0 with its own error text sitting in the output field. Skipping
+  // the call is both faster and the only way to avoid returning a Rust I/O error
+  // as though the task had printed it.
+  if (!hasEverRun(raw)) {
+    return {
+      connection: connection.name,
+      task,
+      output: null,
+      note: "This task has not started, so it has no output yet.",
+    };
+  }
+
+  const lines = Math.min(Math.max(1, input.lines ?? DEFAULT_LINES), MAX_LINES);
+  const log = await readLogText(input.taskId, { lines, connection });
+
+  return {
+    connection: connection.name,
+    task,
+    output: log?.text ?? null,
+    outputTruncatedToLastLines: log ? lines : undefined,
+    note:
+      log === undefined
+        ? "The task ran but produced no output."
+        : task.result !== undefined && task.result !== "success"
+          ? "This task failed. The cause is usually in the last few lines above."
+          : undefined,
+  };
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Pueue-Raycast-Extension/src/tools/get-task-log.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:20:26Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Group progress.
+ *
+ * The tool behind "how far through is the wf group". Returns the same summary
+ * the Groups view renders — done/total, the breakdown, the average, the ETA —
+ * so the model and the UI can never disagree about a number.
+ */
+
+import { snapshot, taskList } from "../lib/pueue";
+import { summarizeGroups } from "../lib/group-summary";
+import {
+  connectionNames,
+  resolveConnectionStrict,
+  toAiGroup,
+} from "../lib/ai-shape";
+
+type Input = {
+  /** Which daemon to ask. Omit for this machine's own. */
+  connection?: string;
+  /** A single group. Omit for all of them. */
+  group?: string;
+};
+
+export default async function tool(input: Input) {
+  const connection = resolveConnectionStrict(input.connection);
+  const snap = await snapshot({ connection });
+  const tasks = taskList(snap.state.tasks);
+
+  let groups = summarizeGroups(snap.state.groups, tasks).map(toAiGroup);
+
+  if (input.group) {
+    const wanted = input.group.toLowerCase();
+    const match = groups.filter((g) => g.name.toLowerCase() === wanted);
+    if (match.length === 0) {
+      throw new Error(
+        `No group named "${input.group}" on ${connection.name}. Groups there: ${groups
+          .map((g) => g.name)
+          .join(", ")}.`,
+      );
+    }
+    groups = match;
+  }
+
+  return {
+    connection: connection.name,
+    isRemote: connection.remote,
+    availableConnections: connectionNames(),
+    groups,
+    notes: [
+      "percentComplete counts every finished task, successful or not — a failed task is finished.",
+      "estimatedSecondsRemaining is pending work times the average, and is absent when fewer than two tasks have finished or nothing is pending. It ignores stashed tasks, which wait on a person rather than on the queue.",
+      "A group's own status (Running/Paused) is separate from its tasks': a Running group with nothing queued is simply idle.",
+    ],
+  };
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Pueue-Raycast-Extension/src/tools/get-groups.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:20:45Z)**_
+
+Now the mutating tools, each with its confirmation:
+
+_**Agent (claude-opus-5 2026-07-26 21:20:46Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Queue a command.
+ *
+ * The only tool that creates work rather than reporting it, and the one worth
+ * having: "queue a release build in the wf group on lab" is a sentence, and
+ * everything it needs — the command, the group, the daemon — is in it.
+ *
+ * The confirmation is not optional. A shell command assembled from a sentence is
+ * exactly the thing a person should read before it runs, and the confirmation
+ * shows it verbatim alongside the machine it will run on.
+ */
+
+import { Action, Tool } from "@raycast/api";
+
+import { mutate, oneline } from "../lib/pueue";
+import { resolveConnectionStrict } from "../lib/ai-shape";
+
+type Input = {
+  /**
+   * The shell command line, exactly as it would be typed. pueue hands it to
+   * `sh -c` itself, so pipes, redirections, `&&` and quoting all work — do not
+   * escape or wrap it.
+   */
+  command: string;
+  /** Which daemon to queue it on. Omit for this machine's own. */
+  connection?: string;
+  /** The group to queue into. Omit for `default`. The group must already exist. */
+  group?: string;
+  /** A short label, shown beside the task in the queue. */
+  label?: string;
+  /**
+   * Where to run it. Must exist on the machine that will run the task — for a
+   * remote connection that is the remote filesystem, not this one.
+   */
+  workingDirectory?: string;
+  /** Task ids this one waits for. A failed dependency yields DependencyFailed. */
+  after?: number[];
+  /** Queue it without running: it sits in the stash until enqueued by hand. */
+  stashed?: boolean;
+  /** Start immediately, ignoring the group's parallelism limit. */
+  immediate?: boolean;
+};
+
+export const confirmation: Tool.Confirmation<Input> = async (input) => {
+  const connection = resolveConnectionStrict(input.connection);
+  return {
+    // Not Destructive: this adds work rather than destroying any. It still
+    // confirms, because the command was assembled from prose.
+    style: Action.Style.Regular,
+    message: `Queue this command on ${connection.name}?`,
+    info: [
+      { name: "Command", value: input.command },
+      { name: "Daemon", value: connection.name },
+      { name: "Group", value: input.group ?? "default" },
+      { name: "Directory", value: input.workingDirectory },
+      { name: "Label", value: input.label },
+      { name: "Waits for", value: input.after?.map((id) => `#${id}`).join(", ") },
+      {
+        name: "Start",
+        value: input.stashed
+          ? "stashed — will not run until enqueued"
+          : input.immediate
+            ? "immediately, ignoring the parallelism limit"
+            : undefined,
+      },
+    ],
+  };
+};
+
+export default async function tool(input: Input) {
+  const connection = resolveConnectionStrict(input.connection);
+  const id = await mutate(
+    {
+      op: "add",
+      command: input.command,
+      group: input.group,
+      label: input.label,
+      workingDirectory: input.workingDirectory,
+      after: input.after,
+      stashed: input.stashed,
+      immediate: input.immediate,
+    },
+    { connection },
+  );
+
+  return {
+    queued: true,
+    taskId: id ?? null,
+    connection: connection.name,
+    group: input.group ?? "default",
+    command: oneline(input.command, 200),
+  };
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Pueue-Raycast-Extension/src/tools/add-task.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:21:07Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Stop running tasks.
+ *
+ * The confirmation reads the queue first so it can name the tasks it is about to
+ * kill rather than repeating the request back. "Kill 3 running tasks in wf"
+ * with `#7 #8 #9` beside it is something you can check; "kill the wf group" is
+ * something you can only trust.
+ *
+ * It also states the thing pueue's own name doesn't: killing a group pauses it.
+ */
+
+import { Action, Tool } from "@raycast/api";
+
+import { isPaused, isRunning, mutate, oneline, snapshot, taskList } from "../lib/pueue";
+import { resolveConnectionStrict } from "../lib/ai-shape";
+
+type Input = {
+  /** Specific task ids. Mutually exclusive with `group` and `all`. */
+  taskIds?: number[];
+  /**
+   * Kill every running task in this group. Note that pueue *also pauses* the
+   * group, so nothing further starts until it is resumed.
+   */
+  group?: string;
+  /** Kill everything running, in every group, and pause them all. */
+  all?: boolean;
+  /** Which daemon to act on. Omit for this machine's own. */
+  connection?: string;
+};
+
+/** The tasks a request would actually stop — killing only affects live ones. */
+async function affected(input: Input) {
+  const connection = resolveConnectionStrict(input.connection);
+  const snap = await snapshot({ connection });
+  const live = taskList(snap.state.tasks).filter(
+    (t) => isRunning(t) || isPaused(t),
+  );
+  if (input.taskIds && input.taskIds.length > 0) {
+    return { connection, tasks: live.filter((t) => input.taskIds?.includes(t.id)) };
+  }
+  if (input.all) return { connection, tasks: live };
+  const group = input.group ?? "default";
+  return { connection, tasks: live.filter((t) => t.group === group) };
+}
+
+export const confirmation: Tool.Confirmation<Input> = async (input) => {
+  const { connection, tasks } = await affected(input);
+  const scope = input.all
+    ? "every group"
+    : input.taskIds && input.taskIds.length > 0
+      ? `task${input.taskIds.length === 1 ? "" : "s"} ${input.taskIds.map((id) => `#${id}`).join(", ")}`
+      : `group "${input.group ?? "default"}"`;
+
+  return {
+    style: Action.Style.Destructive,
+    message:
+      tasks.length === 0
+        ? `Nothing is running in ${scope} on ${connection.name}. Kill anyway?`
+        : `Kill ${tasks.length} running task${tasks.length === 1 ? "" : "s"} in ${scope} on ${connection.name}?`,
+    info: [
+      { name: "Daemon", value: connection.name },
+      {
+        name: "Tasks",
+        value:
+          tasks.length > 0
+            ? tasks.map((t) => `#${t.id} ${oneline(t.command, 40)}`).join("\n")
+            : undefined,
+      },
+      {
+        // Verified in `pueue kill --help`. A confirmation that omits this is
+        // agreeing to something other than what happens.
+        name: "Also",
+        value:
+          input.taskIds && input.taskIds.length > 0
+            ? undefined
+            : "pauses the group, so nothing further starts",
+      },
+    ],
+  };
+};
+
+export default async function tool(input: Input) {
+  const { connection, tasks } = await affected(input);
+  await mutate(
+    {
+      op: "kill",
+      ids: input.taskIds,
+      group: input.taskIds?.length ? undefined : input.group,
+      all: input.all,
+    },
+    { connection },
+  );
+
+  return {
+    killed: tasks.map((t) => t.id),
+    connection: connection.name,
+    groupPaused: !(input.taskIds && input.taskIds.length > 0),
+    note:
+      tasks.length === 0
+        ? "Nothing was running, so nothing was killed."
+        : "Killing by group or with `all` also pauses the group(s); resume with the queue's Start action.",
+  };
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Pueue-Raycast-Extension/src/tools/kill-tasks.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:21:28Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Run failed tasks again.
+ *
+ * The two forms are genuinely different operations and the confirmation says
+ * which one is happening: a plain restart mints new ids and leaves the originals
+ * with their logs, an in-place restart reuses the ids and **overwrites** them.
+ * Losing the log of a failure you were about to read is the kind of thing that
+ * should never happen because a sentence was ambiguous.
+ */
+
+import { Action, Tool } from "@raycast/api";
+
+import { isFailed, mutate, oneline, snapshot, taskList } from "../lib/pueue";
+import { resolveConnectionStrict } from "../lib/ai-shape";
+
+type Input = {
+  /** Specific task ids. Mutually exclusive with `group` and `allFailed`. */
+  taskIds?: number[];
+  /** Every failed task in this group. */
+  group?: string;
+  /** Every failed task in every group. */
+  allFailed?: boolean;
+  /**
+   * Reuse the existing task ids instead of creating new ones. This
+   * **overwrites the previous output** of every task restarted. Default false,
+   * which is the safe choice: the originals keep their logs.
+   */
+  inPlace?: boolean;
+  /** Which daemon to act on. Omit for this machine's own. */
+  connection?: string;
+};
+
+async function affected(input: Input) {
+  const connection = resolveConnectionStrict(input.connection);
+  const snap = await snapshot({ connection });
+  const failed = taskList(snap.state.tasks).filter(isFailed);
+  if (input.taskIds && input.taskIds.length > 0) {
+    return {
+      connection,
+      tasks: taskList(snap.state.tasks).filter((t) =>
+        input.taskIds?.includes(t.id),
+      ),
+    };
+  }
+  if (input.allFailed) return { connection, tasks: failed };
+  const group = input.group ?? "default";
+  return { connection, tasks: failed.filter((t) => t.group === group) };
+}
+
+export const confirmation: Tool.Confirmation<Input> = async (input) => {
+  const { connection, tasks } = await affected(input);
+  const scope = input.allFailed
+    ? "every group"
+    : input.taskIds && input.taskIds.length > 0
+      ? "the given tasks"
+      : `group "${input.group ?? "default"}"`;
+
+  return {
+    // Destructive only in place — that is the variant that destroys something.
+    style: input.inPlace ? Action.Style.Destructive : Action.Style.Regular,
+    message: input.inPlace
+      ? `Restart ${tasks.length} task${tasks.length === 1 ? "" : "s"} in place on ${connection.name}? Their existing output will be overwritten.`
+      : `Restart ${tasks.length} failed task${tasks.length === 1 ? "" : "s"} in ${scope} on ${connection.name}?`,
+    info: [
+      { name: "Daemon", value: connection.name },
+      {
+        name: "Tasks",
+        value:
+          tasks.length > 0
+            ? tasks.map((t) => `#${t.id} ${oneline(t.command, 40)}`).join("\n")
+            : undefined,
+      },
+      {
+        name: "Mode",
+        value: input.inPlace
+          ? "in place — same ids, previous logs overwritten"
+          : "new tasks — the originals keep their ids and logs",
+      },
+    ],
+  };
+};
+
+export default async function tool(input: Input) {
+  const { connection, tasks } = await affected(input);
+
+  if (tasks.length === 0) {
+    // pueue accepts `--failed-in-group` on a group with nothing to restart and
+    // exits 0 in silence. Saying so beats reporting a success that did nothing.
+    return {
+      restarted: [],
+      connection: connection.name,
+      note: `Nothing failed in ${input.allFailed ? "any group" : `"${input.group ?? "default"}"`} on ${connection.name}, so nothing was restarted.`,
+    };
+  }
+
+  await mutate(
+    {
+      op: "restart",
+      ids: input.taskIds,
+      failedInGroup:
+        input.taskIds?.length || input.allFailed
+          ? undefined
+          : (input.group ?? "default"),
+      allFailed: input.allFailed,
+      inPlace: input.inPlace,
+    },
+    { connection },
+  );
+
+  return {
+    restarted: tasks.map((t) => t.id),
+    connection: connection.name,
+    inPlace: input.inPlace === true,
+    note: input.inPlace
+      ? "The tasks kept their ids and their previous output was overwritten."
+      : "New tasks were created with new ids; the originals keep their logs. Read the queue again to get the new ids.",
+  };
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Pueue-Raycast-Extension/src/tools/restart-failed.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:21:45Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Remove finished tasks from the queue.
+ *
+ * "Clean up" is a phrase people use loosely, and here it deletes logs. So the
+ * confirmation counts what will go and separates the successes from the
+ * failures — agreeing to discard eleven successful builds is a different
+ * decision from agreeing to discard the three failures you have not read yet.
+ *
+ * Deliberately not offered: `reset`. It kills and deletes *everything* in a
+ * group, running tasks included, and there is no sentence ambiguous enough to be
+ * worth that risk. It stays a deliberate action in the Groups view.
+ */
+
+import { Action, Tool } from "@raycast/api";
+
+import { isDone, isFailed, isSuccess, mutate, snapshot, taskList } from "../lib/pueue";
+import { resolveConnectionStrict } from "../lib/ai-shape";
+
+type Input = {
+  /** Only this group. Omit to clean every group. */
+  group?: string;
+  /**
+   * Keep the failures and remove only the successful tasks. Default false.
+   * Prefer true when the user has not said they are finished investigating.
+   */
+  successfulOnly?: boolean;
+  /** Which daemon to act on. Omit for this machine's own. */
+  connection?: string;
+};
+
+async function affected(input: Input) {
+  const connection = resolveConnectionStrict(input.connection);
+  const snap = await snapshot({ connection });
+  let finished = taskList(snap.state.tasks).filter(isDone);
+  if (input.group) finished = finished.filter((t) => t.group === input.group);
+  const succeeded = finished.filter(isSuccess);
+  const failed = finished.filter(isFailed);
+  return {
+    connection,
+    going: input.successfulOnly ? succeeded : finished,
+    succeeded,
+    failed,
+  };
+}
+
+export const confirmation: Tool.Confirmation<Input> = async (input) => {
+  const { connection, going, failed } = await affected(input);
+  const where = input.group ? `group "${input.group}"` : "every group";
+
+  return {
+    style: Action.Style.Destructive,
+    message:
+      going.length === 0
+        ? `Nothing finished to clean in ${where} on ${connection.name}.`
+        : `Remove ${going.length} finished task${going.length === 1 ? "" : "s"} from ${where} on ${connection.name}? Their logs go too.`,
+    info: [
+      { name: "Daemon", value: connection.name },
+      { name: "Scope", value: where },
+      {
+        name: "Failures removed",
+        value: input.successfulOnly
+          ? `none — ${failed.length} kept so their logs stay readable`
+          : failed.length > 0
+            ? `${failed.length}: ${failed.map((t) => `#${t.id}`).join(" ")}`
+            : "none",
+      },
+      { name: "Running or queued tasks", value: "untouched" },
+    ],
+  };
+};
+
+export default async function tool(input: Input) {
+  const { connection, going, failed } = await affected(input);
+
+  await mutate(
+    {
+      op: "clean",
+      group: input.group,
+      successfulOnly: input.successfulOnly,
+    },
+    { connection },
+  );
+
+  return {
+    removed: going.map((t) => t.id),
+    keptFailures: input.successfulOnly ? failed.map((t) => t.id) : [],
+    connection: connection.name,
+    note: "Logs were deleted along with the tasks. Nothing running or queued was affected.",
+  };
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Pueue-Raycast-Extension/src/tools/clean-tasks.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:22:15Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Register the tools and build
+
+```bash
+python3 - <<'PY'
+import json
+p='package.json'
+d=json.load(open(p))
+d['tools']=[
+ {"name":"get-tasks","title":"Get Tasks","description":"List tasks in the pueue queue, optionally filtered by group, status, or a substring of the command. Use this to answer what is running, what is queued, and what has failed. Task ids are per-daemon, so pass `connection` when the question is about a remote machine."},
+ {"name":"get-task-log","title":"Get Task Log","description":"Get one task's details together with the tail of its output. This is the tool for 'why did task N fail' — an exit code says that something failed, the log says why. Ids are per-daemon; pass the same `connection` the id came from."},
+ {"name":"get-groups","title":"Get Groups","description":"Get per-group progress: how many tasks are done out of the total, the breakdown by state, the average duration, and an estimate of the time remaining. Use this for 'how far through is my batch' rather than counting tasks yourself."},
+ {"name":"add-task","title":"Queue a Task","description":"Queue a shell command on a pueue daemon, optionally in a group, with a label, a working directory, and dependencies on other tasks. The command runs through `sh -c`, so pipes and && work as typed. Always confirmed before it runs."},
+ {"name":"kill-tasks","title":"Kill Running Tasks","description":"Stop running tasks — by id, by group, or everywhere. Killing by group or with `all` ALSO PAUSES the group, so nothing further starts until it is resumed. Always confirmed, and the confirmation names the tasks."},
+ {"name":"restart-failed","title":"Restart Failed Tasks","description":"Run failed tasks again — by id, by group, or everywhere. By default this creates new tasks and the originals keep their logs; `inPlace` reuses the ids and OVERWRITES the previous output, so only use it when the logs are no longer needed. Always confirmed."},
+ {"name":"clean-tasks","title":"Clean Finished Tasks","description":"Remove finished tasks and their logs from the queue, optionally limited to one group, and optionally sparing the failures with `successfulOnly`. Nothing running or queued is affected. Prefer `successfulOnly` unless the user has said they are done investigating the failures. Always confirmed."},
+]
+json.dump(d,open(p,'w'),indent=2,ensure_ascii=False)
+open(p,'a').write('\n')
+print('ok')
+PY
+just build 2>&1 | tail -4 && just typecheck 2>&1 | tail -20
+```
+
+```text
+ok
+info  - entry points ["src/tasks.tsx","src/add-task.tsx","src/quick-add.tsx","src/groups.tsx","src/queue-menu.tsx","src/tools/get-tasks.ts","src/tools/get-task-log.ts","src/tools/get-groups.ts","src/tools/add-task.ts","src/tools/kill-tasks.ts","src/tools/restart-failed.ts","src/tools/clean-tasks.ts"]
+info  - compiled entry points
+info  - generated extension's TypeScript definitions
+ready  - built extension successfully
+([ -d node_modules ] || npm install) && npx tsc --noEmit -p tsconfig.json
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:23:27Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Full gate plus dist typecheck
+
+`just fix >/dev/null 2>&1; just check 2>&1 | grep -E "FAIL|error|✖|assertions passed|built extension" | tail -6; echo "=== dist (real typecheck)"; just dist 2>&1 | tail -4`
+
+```text
+  ok   the 'Pueue: ' prefix is dropped from plain client errors
+error predicates
+log output — pueue hides its own errors in the output field
+  ok   a pueue error in the output field is recognised
+all assertions passed
+ready  - built extension successfully
+=== dist (real typecheck)
+info  - compiled entry points
+info  - generated extension's TypeScript definitions
+info  - checked TypeScript
+ready  - built extension successfully
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:24:08Z)**_
+
+<think><details><summary>Thought Process</summary>
+Everything compiles and type-checks fine. I'm realizing I can't actually test the tools directly since they all depend on `@raycast/api` through the pueue library, which means they need the Raycast environment to run. Even the read-only operations like fetching tasks and groups have that same dependency chain, so there's no way to verify them outside of Raycast itself.
+
+I'm noticing this is a testability regression — the repo usually keeps pure logic separate from Raycast-specific code. The shape transformation functions (`toAiTask`, `toAiGroup`) only need the normalize and group-summary modules, which are pure, but they're currently importing through the tainted pueue module. I could split this out by having those functions import directly from the leaf modules like `optimistic.ts` does, but the connection resolution functions (`resolveConnectionStrict`, `connectionNames`) genuinely need `binary.ts` which pulls in `@raycast/api`. So I'd need to separate the pure projections from the connection-dependent logic to make any part of this testable.
+
+The cleanest approach is splitting into two files: keep `ai-shape.ts` with just the pure projections importing only leaf modules, and move the connection resolution into `ai-connection.ts`. That way the shape logic becomes assertable again, which aligns with the repo's discipline of having pure modules covered by `dev-check`. Then I can add specific assertions for `toAiTask` against the fixture cases — verifying that a Locked Done Failed task gives the right status, result, and exit code, and that stashed tasks with null values handle the enqueuedAt field correctly.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:24:08Z)**_
+
+Builds clean. But `ai-shape.ts` imports the Raycast-tainted barrel, so `just verify` can't reach it — splitting so the projection stays assertable:
+
+_**Agent (claude-opus-5 2026-07-26 21:24:09Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * The queue, shaped for a language model instead of for a renderer.
+ *
+ * `Task` off the wire is a two-level externally-tagged enum with a recursive
+ * `Locked` variant and a `result` that is sometimes a string and sometimes an
+ * object. That shape is a liability in a tool result: a model asked "why did
+ * task 6 fail" should not first have to work out that `{"Done":{"result":
+ * {"Failed":127}}}` means exit code 127, and every token spent on the wrapper is
+ * a token not spent on the answer.
+ *
+ * So tools return the flattened view — the same one `normalize.ts` already
+ * computes for the UI. Nothing here is new logic; it is a projection.
+ *
+ * One rule this module exists to enforce: **`envs` never appears.** The
+ * transport strips it at the parse boundary and nothing here puts it back. It is
+ * a snapshot of the submitting shell's environment and may hold secrets; a tool
+ * result is sent to a model. `dev-check.ts` asserts the absence rather than
+ * trusting it, which is only possible because this module — like `normalize.ts`
+ * and `optimistic.ts` — imports from the leaf modules and never from the barrel,
+ * so it stays runnable outside Raycast. Connection resolution therefore lives
+ * next door in `ai-connection.ts`, which cannot.
+ */
+
+import {
+  durationMs,
+  endedAt,
+  enqueuedAt,
+  exitCode,
+  isLocked,
+  resultKind,
+  spawnError,
+  startedAt,
+  taskResult,
+  underlyingKind,
+  type ResultKind,
+  type StatusKind,
+} from "./pueue/normalize";
+import type { Task } from "./pueue/types";
+import type { GroupSummary } from "./group-summary";
+
+/**
+ * How many tasks a tool will return at most.
+ *
+ * A 400-task queue is a real thing — upstream cites it — and handing all of it
+ * to a model wastes the context it needs for the actual question. Every tool
+ * that truncates says so in its result, because a silently short list is
+ * indistinguishable from a short queue.
+ */
+export const MAX_TASKS = 100;
+
+export interface AiTask {
+  id: number;
+  command: string;
+  /** running | queued | paused | stashed | done — the *underlying* state. */
+  status: StatusKind;
+  /** Only for finished tasks. `success`, `failed`, `killed`, … */
+  result?: ResultKind;
+  /** Only for `{ Failed: n }`. A successful task has no exit code on the wire. */
+  exitCode?: number;
+  /** The OS error from a task that could not be spawned at all. */
+  spawnError?: string;
+  group: string;
+  label?: string;
+  workingDirectory: string;
+  dependsOn?: number[];
+  enqueuedAt?: string;
+  startedAt?: string;
+  endedAt?: string;
+  durationSeconds?: number;
+  /** True while `pueue edit` holds the task. It cannot be acted on until done. */
+  beingEdited?: boolean;
+}
+
+const iso = (d: Date | undefined): string | undefined => d?.toISOString();
+
+export function toAiTask(task: Task, now = Date.now()): AiTask {
+  const result = taskResult(task.status);
+  const ms = durationMs(task, now);
+  // Every field is named explicitly. A spread of `task` would carry whatever
+  // pueue adds next straight into a model's context, `envs` included the day
+  // someone forgets to strip it.
+  return {
+    id: task.id,
+    command: task.command,
+    status: underlyingKind(task.status),
+    result: resultKind(result),
+    exitCode: exitCode(result),
+    spawnError: spawnError(result),
+    group: task.group,
+    label: task.label ?? undefined,
+    workingDirectory: task.path,
+    dependsOn: task.dependencies.length > 0 ? task.dependencies : undefined,
+    enqueuedAt: iso(enqueuedAt(task.status)),
+    startedAt: iso(startedAt(task.status)),
+    endedAt: iso(endedAt(task.status)),
+    durationSeconds:
+      ms === undefined ? undefined : Math.round((ms / 1000) * 10) / 10,
+    beingEdited: isLocked(task.status) ? true : undefined,
+  };
+}
+
+export interface AiGroup {
+  name: string;
+  /** The group's own state, which is not the same as its tasks'. */
+  status: GroupSummary["status"];
+  /** How many tasks run at once. `null` is pueue's unlimited. */
+  parallelTasks: number | null;
+  total: number;
+  finished: number;
+  running: number;
+  queued: number;
+  paused: number;
+  stashed: number;
+  succeeded: number;
+  failed: number;
+  percentComplete: number;
+  failedTaskIds?: number[];
+  averageSecondsPerTask?: number;
+  /** Undefined when nothing is pending, or when fewer than two tasks have finished. */
+  estimatedSecondsRemaining?: number;
+}
+
+const seconds = (ms: number | undefined): number | undefined =>
+  ms === undefined ? undefined : Math.round(ms / 1000);
+
+export function toAiGroup(s: GroupSummary): AiGroup {
+  return {
+    name: s.name,
+    status: s.status,
+    parallelTasks: s.parallel === 0 ? null : s.parallel,
+    total: s.total,
+    finished: s.finished,
+    running: s.running,
+    queued: s.queued,
+    paused: s.paused,
+    stashed: s.stashed,
+    succeeded: s.succeeded,
+    failed: s.failed,
+    percentComplete: Math.round(s.progress * 100),
+    failedTaskIds: s.failedIds.length > 0 ? s.failedIds : undefined,
+    averageSecondsPerTask: seconds(s.avgMs),
+    estimatedSecondsRemaining: seconds(s.etaMs),
+  };
+}
+
+/**
+ * Truncate and say so.
+ *
+ * The count is always reported, so "3 failed" is never ambiguous between "three
+ * failures" and "three failures shown out of many".
+ */
+export function capped<T>(
+  items: T[],
+  limit = MAX_TASKS,
+): { items: T[]; total: number; truncated: boolean } {
+  return {
+    items: items.slice(0, limit),
+    total: items.length,
+    truncated: items.length > limit,
+  };
+}
+
+```
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/src/lib/ai-shape.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:24:20Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Which daemon a tool is talking about.
+ *
+ * Split out of `ai-shape.ts` because reading the preference needs `@raycast/api`,
+ * and that would make the projection module unrunnable outside Raycast — and so
+ * unassertable by `just verify`. One import boundary, one file.
+ *
+ * The rule here is the whole point: **an unknown connection name is an error.**
+ * The UI's `connectionByName` falls back to Local, which is right for a dropdown
+ * whose remembered value has gone stale, and wrong for a sentence. Task ids are
+ * per-daemon, so "kill everything on lab" landing on this machine is not a near
+ * miss — it is a different queue, and the tasks it stops are someone else's.
+ */
+
+import { connectionByName, connections, type Connection } from "./pueue";
+
+export function resolveConnectionStrict(name: string | undefined): Connection {
+  if (!name) return connectionByName(undefined);
+  const all = connections();
+  const found = all.find((c) => c.name.toLowerCase() === name.toLowerCase());
+  if (found) return found;
+  // Naming the alternatives lets the model correct itself in one turn instead
+  // of guessing again.
+  throw new Error(
+    `No connection named "${name}". Configured connections: ${all
+      .map((c) => c.name)
+      .join(", ")}. Omit the connection to use this machine's own daemon.`,
+  );
+}
+
+/** The connections a tool can be pointed at, for describing the choice. */
+export function connectionNames(): string[] {
+  return connections().map((c) => c.name);
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Pueue-Raycast-Extension/src/lib/ai-connection.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:25:00Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Repoint the tools at ai-connection
+
+```bash
+python3 - <<'PY'
+import re,glob
+for p in glob.glob('src/tools/*.ts'):
+    s=open(p).read()
+    orig=s
+    # split the imports: connection helpers now live in ai-connection
+    s = re.sub(r'import \{\n((?:[^}]*\n)*?)\} from "\.\./lib/ai-shape";', lambda m: m.group(0), s)
+    if 'resolveConnectionStrict' in s or 'connectionNames' in s:
+        # Rewrite the ai-shape import block
+        m = re.search(r'import \{([^}]*)\} from "\.\./lib/ai-shape";', s)
+        assert m, p
+        names = [n.strip() for n in m.group(1).split(',') if n.strip()]
+        conn = [n for n in names if n in ('resolveConnectionStrict','connectionNames')]
+        rest = [n for n in names if n not in ('resolveConnectionStrict','connectionNames')]
+        parts = []
+        if rest:
+            parts.append('import {\n' + ''.join(f'  {n},\n' for n in rest) + '} from "../lib/ai-shape";')
+        if conn:
+            parts.append('import {\n' + ''.join(f'  {n},\n' for n in conn) + '} from "../lib/ai-connection";')
+        s = s[:m.start()] + '\n'.join(parts) + s[m.end():]
+    if s!=orig:
+        open(p,'w').write(s)
+        print('patched',p)
+PY
+just fix >/dev/null 2>&1; just typecheck 2>&1 | tail -10
+```
+
+```text
+patched src/tools/kill-tasks.ts
+patched src/tools/get-groups.ts
+patched src/tools/get-task-log.ts
+patched src/tools/get-tasks.ts
+patched src/tools/restart-failed.ts
+patched src/tools/clean-tasks.ts
+patched src/tools/add-task.ts
+([ -d node_modules ] || npm install) && npx tsc --noEmit -p tsconfig.json
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:25:22Z)**_
+
+Now assertions for the projection — including the one that matters most:
+
+_**Agent (claude-opus-5 2026-07-26 21:25:30Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Assert the AI projection
+
+```bash
+python3 - <<'PY'
+p='src/lib/dev-check.ts'
+s=open(p).read()
+
+block = r'''console.log("\nAI tool shaping — what a model actually receives");
+const aiNow = Date.parse("2026-07-26T09:15:00.000+08:00");
+const ai = (id: number) => toAiTask(t(id), aiNow);
+
+// The whole reason the projection exists: the wire shape is a two-level enum,
+// and a model should never have to unwrap it to answer a question.
+check(
+  "Locked{Done{Failed:127}} flattens to a status, a result and an exit code",
+  (() => {
+    const x = ai(5);
+    return [x.status, x.result, x.exitCode, x.beingEdited];
+  })(),
+  ["done", "failed", 127, true],
+);
+check(
+  "a FailedToSpawn keeps the OS error, which is the actual diagnosis",
+  ai(7).spawnError,
+  "No such file or directory (os error 2)",
+);
+check(
+  "a successful task carries no exit code, because the wire has none",
+  [ai(6).result, ai(6).exitCode],
+  ["success", undefined],
+);
+check(
+  "a running task has a start, no end, and a live duration",
+  (() => {
+    const x = ai(3);
+    return [x.status, x.result, x.endedAt, x.durationSeconds !== undefined];
+  })(),
+  ["running", undefined, undefined, true],
+);
+check(
+  "a stashed task with no scheduled time has no enqueuedAt — not 1970",
+  ai(0).enqueuedAt,
+  undefined,
+);
+check(
+  "timestamps are ISO strings a model can compare",
+  ai(6).endedAt,
+  "2026-07-26T01:06:02.250Z",
+);
+check(
+  "empty dependency lists are omitted rather than sent as []",
+  ai(6).dependsOn,
+  undefined,
+);
+
+// The security-relevant one. `envs` is a snapshot of the submitting shell's
+// environment and may hold secrets; a tool result is sent to a model. The
+// projection names every field explicitly so a new pueue field cannot ride
+// along, and this asserts that rather than trusting it.
+check(
+  "no task field named envs, ever",
+  taskList(state.tasks).some((task) => "envs" in toAiTask(task, aiNow)),
+  false,
+);
+check(
+  "and no unexpected keys at all",
+  [
+    ...new Set(taskList(state.tasks).flatMap((task) => Object.keys(toAiTask(task, aiNow)))),
+  ].sort(),
+  [
+    "beingEdited",
+    "command",
+    "dependsOn",
+    "durationSeconds",
+    "endedAt",
+    "enqueuedAt",
+    "exitCode",
+    "group",
+    "id",
+    "label",
+    "result",
+    "spawnError",
+    "startedAt",
+    "status",
+    "workingDirectory",
+  ],
+);
+
+const aiGroups = summarizeGroups(state.groups, taskList(state.tasks), aiNow).map(
+  toAiGroup,
+);
+const aiGroup = (name: string) => aiGroups.find((g) => g.name === name)!;
+check(
+  "unlimited parallelism is null rather than a misleading 0",
+  aiGroup("gpu").parallelTasks,
+  null,
+);
+check(
+  "a real limit survives",
+  aiGroup("build").parallelTasks,
+  4,
+);
+check(
+  "progress is a whole percent",
+  aiGroup("default").percentComplete,
+  50,
+);
+check(
+  "durations reach the model in seconds, not milliseconds",
+  aiGroup("default").estimatedSecondsRemaining,
+  6,
+);
+check(
+  "an absent estimate stays absent rather than becoming 0",
+  aiGroup("build").estimatedSecondsRemaining,
+  undefined,
+);
+
+check(
+  "capping reports the total, so a short list is never ambiguous",
+  capped([1, 2, 3, 4, 5], 2),
+  { items: [1, 2], total: 5, truncated: true },
+);
+check(
+  "an uncapped list says so",
+  capped([1, 2], 5).truncated,
+  false,
+);
+
+'''
+
+anchor = 'console.log("\\nconnection parsing");'
+assert s.count(anchor)==1
+s = s.replace(anchor, block + anchor)
+
+imp = 'import {\n  parallelLabel,'
+assert s.count(imp)==1
+s = s.replace(imp, 'import { capped, toAiGroup, toAiTask } from "./ai-shape";\nimport {\n  parallelLabel,')
+open(p,'w').write(s)
+print('inserted')
+PY
+just verify 2>&1 | sed -n '/AI tool shaping/,/connection parsing/p'
+```
+
+```text
+inserted
+AI tool shaping — what a model actually receives
+  ok   Locked{Done{Failed:127}} flattens to a status, a result and an exit code
+  ok   a FailedToSpawn keeps the OS error, which is the actual diagnosis
+  ok   a successful task carries no exit code, because the wire has none
+  ok   a running task has a start, no end, and a live duration
+  ok   a stashed task with no scheduled time has no enqueuedAt — not 1970
+  ok   timestamps are ISO strings a model can compare
+  ok   empty dependency lists are omitted rather than sent as []
+  ok   no task field named envs, ever
+  ok   and no unexpected keys at all
+  ok   unlimited parallelism is null rather than a misleading 0
+  ok   a real limit survives
+  ok   progress is a whole percent
+  ok   durations reach the model in seconds, not milliseconds
+  ok   an absent estimate stays absent rather than becoming 0
+  ok   capping reports the total, so a short list is never ambiguous
+  ok   an uncapped list says so
+
+connection parsing
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:26:37Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Full gate plus dist
+
+`just fix >/dev/null 2>&1; just check 2>&1 | grep -E "FAIL|error|✖|assertions passed|built extension" | tail -5; echo "---"; just verify 2>&1 | grep -c "  ok   "; just dist 2>&1 | tail -2`
+
+```text
+log output — pueue hides its own errors in the output field
+  ok   a pueue error in the output field is recognised
+  ok   a FailedToSpawn keeps the OS error, which is the actual diagnosis
+all assertions passed
+ready  - built extension successfully
+---
+263
+info  - checked TypeScript
+ready  - built extension successfully
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:26:53Z)**_
+
+Green, 263 assertions. Documenting and committing:
+
+_**Agent (claude-opus-5 2026-07-26 21:27:02Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Document the AI tools
+
+```bash
+python3 - <<'PY'
+p='README.md'
+s=open(p).read()
+old = '''| **Queue Menu Bar** | Running / queued / failed counts in the menu bar, with per-task and per-group actions. Refreshes every minute. |'''
+new = '''| **Queue Menu Bar** | Running / queued / failed counts in the menu bar, with per-task and per-group actions. Refreshes every minute. |
+
+### Ask AI
+
+Mention the extension in Raycast AI with `@pueue`, or run **Ask Pueue** from root search:
+
+\```text
+@pueue what's failing on lab?
+@pueue why did task 6 fail?
+@pueue how far through is the wf group?
+@pueue queue 'cargo build --release' in the wf group on lab
+@pueue restart everything that failed in wf
+\```
+
+Seven tools: `get-tasks`, `get-task-log`, `get-groups` read; `add-task`,
+`kill-tasks`, `restart-failed`, `clean-tasks` write. **Every writing tool
+confirms before it runs**, and the confirmation names the tasks and the daemon —
+`Kill 3 running tasks in "wf" on lab` beside `#7 #8 #9`, not just the sentence
+you typed back at you. `reset` is deliberately not exposed: it deletes every
+task in a group including running ones, and no sentence is worth that risk.
+
+An unknown connection name is an error rather than a fallback to this machine.
+Task ids are per-daemon, so pointing a kill at the wrong host is not a near miss.
+
+Requires an AI subscription or a configured custom model provider; the rest of
+the extension is unaffected if you have neither.'''
+assert s.count(old)==1
+s=s.replace(old,new)
+open(p,'w').write(s)
+print('ok')
+PY
+python3 - <<'PY'
+p='CHANGELOG.md'
+s=open(p).read()
+s = s.rstrip('\n') + "\n- **Ask AI** — seven tools so the queue can be asked about and driven in natural language: what is failing, why a task failed, how far through a group is, and queueing, killing, restarting failures, and cleaning up. Every tool that changes anything confirms first, naming the tasks and the daemon it will act on. Unknown connection names are refused rather than silently resolved to this machine, because task ids are per-daemon. `reset` is deliberately not exposed.\n"
+open(p,'w').write(s)
+print('ok')
+PY
+just lint 2>&1 | tail -3
+```
+
+```text
+ok
+ok
+ready  - validate extension metadata
+ready  - run ESLint
+ready  - run Prettier 3.9.6
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:27:28Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```md
+# AI tools
+
+**Status:** shipped · **Effort:** `[M]` · seven tools in `src/tools/`
+
+## What shipped
+
+`tools[]` in the manifest turns the extension into an AI Extension. Tools do not
+appear in root search; Raycast AI calls them, choosing by `description`.
+
+| Tool | Maps to | Confirms |
+| --- | --- | --- |
+| `get-tasks` | `status()` + client-side filtering | — |
+| `get-task-log` | `status()` + `readLogText()` | — |
+| `get-groups` | `status()` + `summarizeGroups()` | — |
+| `add-task` | `mutate({op:"add"})` | Regular |
+| `kill-tasks` | `mutate({op:"kill"})` | Destructive |
+| `restart-failed` | `mutate({op:"restart"})` | Destructive when in place |
+| `clean-tasks` | `mutate({op:"clean"})` | Destructive |
+
+The transport already returned structured data, so each tool is a thin wrapper.
+The work was prompt-shaped rather than code-shaped, as predicted — plus one piece
+of real code, the projection in `src/lib/ai-shape.ts`.
+
+## What the toolchain does, measured
+
+On a scratch extension, before writing anything here:
+
+| Claim | How it was checked |
+| --- | --- |
+| `ray lint` accepts a `tools[]` entry of `{name, title, description}` | added one; the only error was an unrelated short `description` on a command |
+| `ray build` treats `src/tools/<name>.ts` as an entry point | `entry points [… "src/tools/running-tasks.ts"]` |
+| `ray build -e dist` typechecks tool files | `checked TypeScript`, exit 0 |
+| the manifest is **not** rewritten with a generated schema | `tools[]` was byte-identical after a build; the input schema is derived from the TypeScript `Input` type at bundle time |
+| `Tool.Confirmation<T>` exists in the installed `@raycast/api` | `types/index.d.ts`, `namespace Tool` |
+
+So the whole thing is covered by the existing gate: `just check` lints and
+builds it, `just dist` typechecks it, and `just verify` asserts the projection.
+
+## The objection that retired itself
+
+An earlier version of this note said:
+
+> there is no confirmation surface in an AI tool call comparable to
+> `confirmAlert`. If this ships, the first version should be **read-only**.
+
+That is no longer true. `Tool.Confirmation<Input>` runs *before* the tool with
+the same input, returns `undefined` to skip or an object to prompt, and supports
+`Action.Style.Destructive` plus an `info` list of name/value pairs. It is
+strictly better than `confirmAlert` for this purpose, because the confirmation
+can read the queue first and name what it is about to touch — `#7 #8 #9` rather
+than "the wf group".
+
+Every mutating tool here uses it. None of them is silent.
+
+## Rules the tools follow
+
+- **`envs` never reaches a model.** The transport strips it at the parse
+  boundary; `toAiTask` then names every field explicitly rather than spreading,
+  so a field pueue adds later cannot ride along. `dev-check.ts` asserts both the
+  absence of `envs` and the exact key set.
+- **An unknown connection name is an error.** The UI's `connectionByName` falls
+  back to Local, which is right for a stale dropdown value and wrong for a
+  sentence: task ids are per-daemon, so "kill everything on lab" landing here
+  stops someone else's work. `resolveConnectionStrict` throws and lists the real
+  names so the model can correct itself in one turn.
+- **Results are capped and say so.** 100 tasks maximum, newest first, with
+  `matched` / `returned` / `truncated` alongside — a silently short list is
+  indistinguishable from a short queue.
+- **`reset` is not exposed.** It kills and deletes everything in a group,
+  running tasks included. No sentence is ambiguous enough to be worth that; it
+  stays a deliberate action in the Groups view.
+
+## Requirements
+
+Raycast's docs state that AI Extensions need a Pro subscription. In practice a
+configured custom model provider also works — this was developed against one.
+Either way it is additive: tools are invisible in root search, and an install
+with no AI access loses nothing.
+
+## Still open
+
+- **Evals.** Raycast supports `ai.yaml` eval files for tool selection. Not
+  written. The failure they would catch is the model choosing `clean-tasks` when
+  asked to "clear out" a group that has running work — the confirmation stops the
+  damage, but a wrong tool choice is still a bad turn.
+
+```
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/backlog/ai-tools.md has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:28:17Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Update the indexes
+
+```bash
+python3 - <<'PY'
+p='TODO.md'
+s=open(p).read()
+old = '''- `P?` `[M]` **AI tools (`tools[]`)** — [`backlog/ai-tools.md`](backlog/ai-tools.md)
+'''
+assert s.count(old)==1
+s=s.replace(old,'')
+
+old2 = '''- `[S]` **`pueue send`** — a form to send input to a running task. Inherently
+  best-effort: there is no way to know whether the process is reading stdin.'''
+new2 = '''- `[S]` **`pueue send`** — a form to send input to a running task. Inherently
+  best-effort: there is no way to know whether the process is reading stdin.
+- `[S]` **Evals for the AI tools** — Raycast supports `ai.yaml` for asserting
+  tool *selection*. The failure worth catching is the model reaching for
+  `clean-tasks` when asked to "clear out" a group that still has running work;
+  the confirmation stops the damage, but a wrong tool choice is still a bad
+  turn. See [`backlog/ai-tools.md`](backlog/ai-tools.md).'''
+assert s.count(old2)==1
+s=s.replace(old2,new2)
+
+old3 = '''| [socket-transport.md](socket-transport.md)'''
+open(p,'w').write(s)
+print('ok')
+PY
+python3 - <<'PY'
+p='backlog/README.md'
+s=open(p).read()
+old='| [ai-tools.md](ai-tools.md) | Expose the queue to Raycast AI as `tools[]` |'
+assert s.count(old)==1
+s=s.replace(old,'| [ai-tools.md](ai-tools.md) | Expose the queue to Raycast AI as `tools[]` — **shipped**; the note is now the record of what was measured |')
+open(p,'w').write(s)
+print('ok')
+PY
+just fix >/dev/null 2>&1 && just check 2>&1 | grep -E "FAIL|error|✖|assertions passed|built extension" | tail -3
+```
+
+```text
+ok
+ok
+  ok   a FailedToSpawn keeps the OS error, which is the actual diagnosis
+all assertions passed
+ready  - built extension successfully
 ```
 </details></tool-use>

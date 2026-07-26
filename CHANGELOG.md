@@ -21,3 +21,4 @@
   error underneath it.
 - Actionable onboarding when the `pueue` binary can't be found or `pueued` isn't running, including a one-click daemon start when Homebrew manages it.
 - Cached data can never be attributed to the wrong daemon: every read is stamped with the connection it came from, so selecting an unreachable host shows an error and a way back rather than the previous host's queue. A structural failure on top of good data greys the menu bar icon and says when the numbers froze.
+- **Ask AI** — seven tools so the queue can be asked about and driven in natural language: what is failing, why a task failed, how far through a group is, and queueing, killing, restarting failures, and cleaning up. Every tool that changes anything confirms first, naming the tasks and the daemon it will act on. Unknown connection names are refused rather than silently resolved to this machine, because task ids are per-daemon. `reset` is deliberately not exposed.
