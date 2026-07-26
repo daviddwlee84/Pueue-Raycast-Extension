@@ -17,3 +17,4 @@ verbatim error text, so `grep -r` over this directory finds it.
 | [cached-list-renders-a-dead-queue-as-live.md](cached-list-renders-a-dead-queue-as-live.md) | Tasks shown as Running after the daemon stopped |
 | [remote-task-working-directory-fails-to-spawn.md](remote-task-working-directory-fails-to-spawn.md) | A remote task ends `FailedToSpawn` immediately, or won't submit |
 | [raycast-preferences-cannot-be-multiline.md](raycast-preferences-cannot-be-multiline.md) | A "one per line" preference only ever holds one entry |
+| [usecachedpromise-serves-other-cache-keys.md](usecachedpromise-serves-other-cache-keys.md) | Switching connection shows the previous one's data, with no error |

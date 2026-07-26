@@ -74974,3 +74974,1197 @@ all assertions passed
 ready  - built extension successfully
 ```
 </details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:55:27Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit step 10
+
+```bash
+git add -A && git commit -q -F - <<'EOF'
+Say what a task's dependencies are actually doing
+
+"Depends on #3, #7" tells you nothing about whether this task is about to run,
+is waiting on something slow, or is already doomed — a failed dependency yields
+DependencyFailed, so the answer is usually right there in the other row.
+
+Now each id is a status-coloured tag: `#3 Running`, `#7 Failed 127`. The whole
+state is already in hand, so this is a lookup rather than a fetch.
+
+A dependency that has been removed or cleaned away renders `#7 (gone)` in grey
+rather than disappearing. pueue still holds the id, and dropping it from the
+list would hide exactly why a task is stuck — the same treatment GroupDropdown
+gives a group that vanished under it.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+EOF
+git log --oneline -1
+```
+
+```text
+9176a54 Say what a task's dependencies are actually doing
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:55:36Z)**_
+
+<think><details><summary>Thought Process</summary>
+I should verify the extension actually works by running it in dev mode with some realistic test data seeded in, though I won't be able to visually confirm everything myself. Let me start with the documentation and checklist first, then kick off the dev server to at least ensure it compiles and runs without errors.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 20:55:36Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #31 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:55:36Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #32 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:56:05Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```md
+# `useCachedPromise` serves data from a different cache key
+
+## Symptoms (grep this section)
+
+No error message. That is the problem.
+
+You select a second connection — a remote host, another profile, any argument
+that keys the cache — and the view renders **the previous connection's data**
+under the new one's name. In this extension it looked like this: a menu bar
+showing `nas` selected, with
+
+\```text
+Groups
+  default — running (0/1)
+\```
+
+underneath, on a host that could not be reached at all. The `default` group
+belonged to the local daemon. No toast, no red icon, no indication that the read
+had failed, because the code's "did the read fail" branch was
+`if (!data)` — and `data` was truthy.
+
+## Cause
+
+`useCachedPromise(fn, args, …)` keys its cache on `hash(args)` with a namespace
+of `hash(fn)`. That much works: each connection gets its own entry.
+
+`keepPreviousData: true` then defeats it. From
+`node_modules/@raycast/utils/dist/main.js` (v2.2.7, around line 759):
+
+\```js
+if (lastUpdateFrom.current === "promise") returnedData = laggyDataRef.current;
+else if (keepPreviousData && cachedData !== emptyCache) returnedData = cachedData;
+else if (keepPreviousData && cachedData === emptyCache)
+  // if the cache is empty, we will return the previous data
+  returnedData = laggyDataRef.current;
+\```
+
+`laggyDataRef` is **key-independent** — it holds the last value any successful
+run of this hook produced, regardless of arguments. And `lastUpdateFrom.current`
+is set to `"promise"` on the first success and never reset. So after one good
+read:
+
+- args change to a connection with no cache entry
+- the new promise rejects
+- `returnedData` is still `laggyDataRef.current`, i.e. the *old* connection's data
+
+The hook is behaving as documented — "keep the previous data while the new
+request is in flight" is the whole feature. The trap is that "previous" means
+previous *in time*, not previous *for this key*, and that it persists through a
+failure rather than only through a pending state.
+
+## Why keying the cache is not enough
+
+The natural fix — "make the connection part of the arguments so the cache keys
+differ" — was already in place when this bug shipped:
+
+\```ts
+useCachedPromise(
+  (connectionName: string) => readStatus({ connection: connectionByName(connectionName) }),
+  [conn.connection.name],      // already keyed correctly
+  { keepPreviousData: true },
+)
+\```
+
+Correct keying prevents the *cache* from mixing connections. It does not touch
+`laggyDataRef`, which is a separate mechanism sitting in front of the cache.
+
+## Fix
+
+Stamp the payload with what it is, and check on the way out. The guard cannot
+live in the hook's arguments, so it has to live in the data:
+
+\```ts
+export interface Snapshot {
+  state: State;
+  fetchedAt: number;
+  connection: string;   // the Connection.name this was read from
+}
+
+export function forConnection(snap: Snapshot | undefined, name: string) {
+  return snap && snap.connection === name ? snap : undefined;
+}
+\```
+
+\```ts
+const snap = forConnection(state.data, conn.connection.name);
+if (error && !snap) return <ErrorEmptyView error={error} … />;
+\```
+
+`undefined` routes the caller into its existing no-data-plus-error branch, which
+is exactly right: there genuinely is no data for this connection.
+
+This gives up `keepPreviousData`'s no-blank-frame benefit *across* connections —
+one read's worth of empty list with a spinner. That is the point. The frame it
+used to fill was the one showing another machine's queue.
+
+## Generalisation
+
+Any hook that caches by key and also has a "keep showing something" fallback can
+serve you a value from the wrong key. If the identity of the thing you fetched
+matters — a host, a document, an account, a tenant — put it *in the value*, not
+only in the key. A payload that can say who it belongs to makes the mistake
+unrepresentable; an argument list can only make it unlikely.
+
+## Related
+
+The same failure mode as [the menu bar rendering a dead queue as a live
+one](menubar-stale-after-daemon-stops.md): cached data outliving the thing it
+described. That one was solved by *labelling* the staleness, because the data
+was still the right daemon's, only old. This one cannot be labelled — data from
+the wrong machine is not stale, it is wrong — so it is rejected instead.
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Pueue-Raycast-Extension/pitfalls/usecachedpromise-serves-other-cache-keys.md (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:56:10Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check pitfalls index
+
+`ls pitfalls/ && echo "---" && sed -n 1,40p pitfalls/README.md 2>/dev/null`
+
+```text
+cached-list-renders-a-dead-queue-as-live.md
+daemon-state-lags-one-poll-after-a-mutation.md
+pueue-color-flag-must-precede-subcommand.md
+pueue-log-json-hides-errors-in-output.md
+pueue-status-enum-is-externally-tagged.md
+ray-build-does-not-typecheck.md
+raycast-launchd-path-pueue-not-found.md
+raycast-preferences-cannot-be-multiline.md
+README.md
+remote-task-working-directory-fails-to-spawn.md
+usecachedpromise-serves-other-cache-keys.md
+---
+# Pitfalls
+
+One file per trap, titled by the **symptom** you'd search for — not the root
+cause, which you don't know yet when you're looking.
+
+Each file opens with a "Symptoms (grep this section)" block containing the
+verbatim error text, so `grep -r` over this directory finds it.
+
+| File | Symptom |
+| --- | --- |
+| [raycast-launchd-path-pueue-not-found.md](raycast-launchd-path-pueue-not-found.md) | Works in the terminal, `spawn pueue ENOENT` from Raycast |
+| [pueue-color-flag-must-precede-subcommand.md](pueue-color-flag-must-precede-subcommand.md) | `error: unexpected argument '--color' found`, exit 2 |
+| [pueue-status-enum-is-externally-tagged.md](pueue-status-enum-is-externally-tagged.md) | `task.status` is an object, `status.Done.result` is sometimes a string |
+| [pueue-log-json-hides-errors-in-output.md](pueue-log-json-hides-errors-in-output.md) | A Rust I/O error rendered as if the task printed it |
+| [daemon-state-lags-one-poll-after-a-mutation.md](daemon-state-lags-one-poll-after-a-mutation.md) | A killed task flips back to Running, then to Done a moment later |
+| [ray-build-does-not-typecheck.md](ray-build-does-not-typecheck.md) | `ray build` succeeds on code `tsc` rejects |
+| [cached-list-renders-a-dead-queue-as-live.md](cached-list-renders-a-dead-queue-as-live.md) | Tasks shown as Running after the daemon stopped |
+| [remote-task-working-directory-fails-to-spawn.md](remote-task-working-directory-fails-to-spawn.md) | A remote task ends `FailedToSpawn` immediately, or won't submit |
+| [raycast-preferences-cannot-be-multiline.md](raycast-preferences-cannot-be-multiline.md) | A "one per line" preference only ever holds one entry |
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:56:19Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Fix the cross-link and index the pitfall
+
+```bash
+python3 - <<'PY'
+p='pitfalls/usecachedpromise-serves-other-cache-keys.md'
+s=open(p).read()
+s=s.replace('[the menu bar rendering a dead queue as a live\none](menubar-stale-after-daemon-stops.md)',
+            '[a cached list rendering a dead queue as a live\none](cached-list-renders-a-dead-queue-as-live.md)')
+open(p,'w').write(s)
+PY
+python3 - <<'PY'
+p='pitfalls/README.md'
+s=open(p).read()
+row='| [raycast-preferences-cannot-be-multiline.md](raycast-preferences-cannot-be-multiline.md) | A "one per line" preference only ever holds one entry |'
+assert s.count(row)==1
+s=s.replace(row, row+'\n| [usecachedpromise-serves-other-cache-keys.md](usecachedpromise-serves-other-cache-keys.md) | Switching connection shows the previous one\'s data, with no error |')
+open(p,'w').write(s)
+print('ok')
+PY
+```
+
+```text
+ok
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:56:24Z)**_
+
+Now the docs pages:
+
+_**Agent (claude-opus-5 2026-07-26 20:56:24Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check docs layout and nav
+
+```bash
+ls docs/ && echo "--- nav" && python3 -c "
+import re
+s=open('mkdocs.yml').read()
+i=s.index('nav:')
+print(s[i:i+1200])
+"
+```
+
+```text
+assets
+getting-started.md
+getting-started.zh-TW.md
+index.md
+index.zh-TW.md
+prior-art.md
+prior-art.zh-TW.md
+pueue-json-contract.md
+pueue-json-contract.zh-TW.md
+raycast-surfaces.md
+raycast-surfaces.zh-TW.md
+remote.md
+remote.zh-TW.md
+--- nav
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Remote daemons: remote.md
+  - Reference:
+      - The pueue JSON contract: pueue-json-contract.md
+      - Raycast surfaces: raycast-surfaces.md
+      - Prior art: prior-art.md
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/daviddwlee84/Pueue-Raycast-Extension
+# `_snippets/` are meant to be included via pymdownx.snippets, never
+# rendered as their own page. `not_in_nav` suppresses the INFO warning.
+not_in_nav: |
+  /_snippets/
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:56:58Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```md
+# Groups and batch progress
+
+A group is pueue's unit of concurrency: every group has its own parallelism
+limit and its own running/paused state, and a task belongs to exactly one. That
+makes it the natural place to put a **batch** — queue twenty jobs into `wf`,
+then watch them land.
+
+This page is about the numbers the extension shows for that, what they mean, and
+where each one deliberately stops short of guessing.
+
+## What a group row shows
+
+\```text
+◕  wf          6/20 done · 2 running · 3 failed        ~4m left    Running
+\```
+
+| Part | Meaning |
+| --- | --- |
+| the ring | `done / total` as a filled circle |
+| its colour | red if anything failed, orange if the group is paused, blue while running, green when finished and clean |
+| `6/20 done` | finished tasks over every task in the group |
+| `2 running` etc. | only the states that have tasks; zero terms are omitted |
+| `~4m left` | an estimate — see [below](#the-eta) |
+| the tag | the group's own state, which is not the same as its tasks' |
+
+Press <kbd>⌘</kbd><kbd>⇧</kbd><kbd>D</kbd> for the detail pane, which adds the
+average duration, the elapsed wall clock, and the ids that failed. The section
+heading carries the same roll-up for the whole queue.
+
+The menu bar shows a shorter form of the same thing — `wf · 6/20 · 3 failed`,
+with a bar and the ETA inside the submenu.
+
+## Why `total` counts everything in the group
+
+pueue has no concept of a batch. There is no submission id, no run number,
+nothing that marks "these twenty belong together". The only boundary that
+actually exists is `pueue clean`.
+
+So `total` is every task currently in the group, and a batch reads correctly if
+you clean between runs:
+
+\```sh
+pueue clean --group wf     # or the "Clean Finished Tasks in Group" action
+pueue add -g wf -- ./job-1
+pueue add -g wf -- ./job-2
+# …
+\```
+
+The alternative — inferring a batch from, say, "everything since the group last
+went idle" — would be a guess presented as a fact, and it would be wrong for
+exactly the long-running group where the number matters most.
+
+## Finished means finished, not succeeded
+
+`6/20 done` counts every task pueue reports as `Done`, whatever the outcome. A
+task that exited 127 is finished; it is not going to run again on its own. The
+failures are counted separately in the same line, and they are what turns the
+ring red.
+
+This matches `pqsum`, and it is the only reading under which the ring reaches
+100 % when the queue has actually stopped working.
+
+## The ETA
+
+`~4m left` is `pending × average duration ÷ parallelism`. Three deliberate
+choices sit behind it:
+
+- **Pending means running, queued, and paused.** Stashed tasks are excluded. A
+  stashed task is waiting on a person, not on the queue, so counting it would
+  inflate the estimate without bound. It stays in `total`, because it is still
+  work you asked for.
+- **It needs at least two finished tasks.** With one sample the "average" is
+  that one task, which is a guess wearing a number's clothes. Below two, the ETA
+  renders as `—`.
+- **Unlimited parallelism counts as one slot.** `parallel_tasks: 0` is pueue's
+  unlimited; dividing by it would be a divide by zero, and one is the
+  conservative answer.
+
+It is an average, not a model. A group of twenty identical jobs gives a good
+estimate; a group holding one 3-second linter and one 40-minute build gives a
+bad one, and the `~` is there to say so.
+
+## Elapsed
+
+First start to last end — or to now, while something is still running or paused.
+With nothing running it freezes, because a group with tasks queued behind a
+paused slot has not been "running for three hours".
+
+## Batch actions
+
+Four actions operate on the whole group rather than on one task.
+
+| Action | pueue equivalent | Notes |
+| --- | --- | --- |
+| Restart *n* Failed (New Tasks) | `restart --not-in-place --failed-in-group NAME` | Mints new ids. The originals keep their logs. |
+| Restart *n* Failed in Place | `restart --in-place --failed-in-group NAME` | Reuses the ids and **overwrites the logs**. Read them first if you still need them. |
+| Clean Finished Tasks in Group | `clean --group NAME` | Removes finished tasks and their logs. Nothing running or queued is touched. |
+| Clean Only the Successes | `clean --group NAME --successful-only` | Leaves the failures in place so you can still read them. |
+
+The restart actions are **hidden when the group has no failures**, not disabled.
+pueue accepts `--failed-in-group` on a group with no failures — and on a group
+that does not exist — and exits 0 without a word. An always-visible action that
+silently did nothing would be worse than one that isn't there.
+
+## Two operations that do more than their name says
+
+Both were read out of `pueue --help`, and both confirmations spell it out:
+
+- **Kill Running Tasks in Group** also **pauses** the group. Nothing further
+  starts until you resume it.
+- **Remove Group** **moves** its tasks to `default` rather than deleting them.
+
+## Reset
+
+Reset kills every task in the group, deletes them, and deletes their logs. It is
+the only action in the extension that asks every single time, with no "don't
+show this again".
+
+In the menu bar it sits behind the <kbd>⌥</kbd> key **regardless of the
+Confirmations preference** — the one exception, because a menu bar has no dialog
+available (a Raycast alert cannot render while the menu is open) and this is the
+one action where a mis-click cannot be undone. If you would rather have the real
+alert, `Open Groups…` is directly below it.
+
+## Parallelism
+
+The submenu offers 1–32 and Unlimited, plus a `Custom…` field for anything else
+— pueue takes any non-negative integer, and a machine with 64 cores has every
+right to ask for 48.
+
+The presets are a static list on purpose. Seeding them from this machine's core
+count would be wrong the moment you point the extension at a remote daemon, and
+a plausible wrong number is worse than a list that makes no claim.
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/groups.md (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:57:04Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check the zh-TW convention
+
+`head -30 docs/remote.zh-TW.md`
+
+```text
+# 操控遠端的 pueued
+
+!!! note "Terminology rule (zh-TW pages)"
+    技術名詞首次出現以「中文 (English original)」格式呈現，例：依賴注入
+    (dependency injection)。**不自創翻譯**——若無公認譯名直接保留英文
+    （如 `embedding`、`tokenizer`）。代碼、API 名、CLI flag、套件名、檔名一律不翻。
+
+pueue 無法*跨主機*排程，但本機的 client 可以完整操控另一台機器上的 `pueued`——
+`status`、`log`、`follow`、`kill`、`add` 都能用。
+
+這件事不需要本擴充功能寫任何協定 (protocol) 程式碼：一個連線就只是一份 client 設定，
+其餘交給 pueue 自己的 client 處理。真正要做的，是把四個原本默默假設「在本機」的地方
+改掉。
+
+> 以下設定流程，來自一次實測：macOS client（pueue 4.0.4）透過 SSH socket 轉發
+> 操控 Linux 上的 `pueued`（4.0.2）。
+
+## 最短版本
+
+Preferences → **Remote Connections**，填入：
+
+```text
+local_ubuntu
+```
+
+一台你本來就連得上的 SSH 主機 (SSH host)。沒別的了——不用隧道 (tunnel)、不用密鑰、
+不用設定檔。每個指令都以 `ssh local_ubuntu 'pueue …'` 執行。
+
+多個連線寫在同一行，用分號 `;` 隔開；一個連線內部的欄位仍然用 `|` 隔開。分號不是隨便選
+的——Raycast 的 preference 只有單行的 `textfield` 可用，設定欄位裡根本打不出換行：
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:57:50Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```md
+# Group 與批次進度
+
+!!! note "Terminology rule (zh-TW pages)"
+    技術名詞首次出現以「中文 (English original)」格式呈現，例：依賴注入
+    (dependency injection)。**不自創翻譯**——若無公認譯名直接保留英文
+    （如 `embedding`、`tokenizer`）。代碼、API 名、CLI flag、套件名、檔名一律不翻。
+
+group 是 pueue 的並行 (concurrency) 單位：每個 group 有自己的並行上限與
+running/paused 狀態，而每個 task 只屬於一個 group。所以它天然就是放一個**批次
+(batch)** 的地方——把二十個 job 丟進 `wf`，然後看它們一個個落地。
+
+這頁講的是本擴充功能為此顯示的那些數字：它們是什麼意思，以及每一個數字在哪裡
+刻意停下來、不去猜。
+
+## 一列 group 顯示什麼
+
+\```text
+◕  wf          6/20 done · 2 running · 3 failed        ~4m left    Running
+\```
+
+| 部位 | 意義 |
+| --- | --- |
+| 圓環 | `done / total`，以填滿的圓表示 |
+| 圓環顏色 | 有任何失敗為紅、group 被暫停為橙、執行中為藍、全部完成且無失敗為綠 |
+| `6/20 done` | 已結束的 task 除以這個 group 裡的所有 task |
+| `2 running` 等 | 只列出真的有 task 的狀態，數量為 0 的一律不寫 |
+| `~4m left` | 一個估計值——見[下方](#eta) |
+| 標籤 (tag) | group 自己的狀態，跟它底下 task 的狀態不是同一回事 |
+
+按 <kbd>⌘</kbd><kbd>⇧</kbd><kbd>D</kbd> 打開 detail pane，多出平均耗時、已經跑了
+多久、以及失敗的 task id。section 標題則直接顯示整個 queue 的彙總。
+
+menu bar 顯示同一份東西的精簡版——`wf · 6/20 · 3 failed`，進度條與 ETA 放在
+submenu 裡。
+
+## 為什麼 `total` 算進 group 裡的所有 task
+
+pueue 沒有「批次」這個概念。沒有 submission id、沒有 run number，沒有任何欄位標記
+「這二十個是一起的」。真正存在的邊界只有 `pueue clean`。
+
+所以 `total` 就是這個 group 目前的所有 task；只要你在兩批之間清一次，批次的數字就是
+對的：
+
+\```sh
+pueue clean --group wf     # 或用「Clean Finished Tasks in Group」這個 action
+pueue add -g wf -- ./job-1
+pueue add -g wf -- ./job-2
+# …
+\```
+
+另一種做法——例如推論「從這個 group 上次閒置到現在的都算一批」——會是把猜測當成事實
+呈現，而且恰恰會在「這個數字最重要」的長時間 group 上出錯。
+
+## finished 是「結束」，不是「成功」
+
+`6/20 done` 計入所有 pueue 回報為 `Done` 的 task，不管結果如何。一個 exit 127 的
+task 是結束了；它不會自己再跑一次。失敗數在同一行另外列出，也就是把圓環染紅的東西。
+
+這跟 `pqsum` 的定義一致，而且只有這樣讀，圓環才會在 queue 真的停下來時走到 100 %。
+
+## ETA
+
+`~4m left` 是 `pending × 平均耗時 ÷ 並行數`。背後有三個刻意的選擇：
+
+- **pending 指 running、queued、paused。** stashed 被排除在外。stashed 的 task 在等
+  一個人，不是在等 queue，把它算進來會讓估計值毫無上限地膨脹。它仍然留在 `total`
+  裡，因為那終究是你交代的工作。
+- **至少要有兩個已完成的 task。** 只有一個樣本時，「平均」就是那一個 task 本身——那是
+  一個穿著數字外衣的猜測。不到兩個，ETA 顯示為 `—`。
+- **unlimited 當作一個 slot 算。** `parallel_tasks: 0` 是 pueue 的 unlimited；直接
+  拿來當除數會除以零，取 1 是保守的答案。
+
+它是平均值，不是模型 (model)。二十個一模一樣的 job 會給出好的估計；一個 3 秒的 linter
+配一個 40 分鐘的 build 則不會——`~` 就是在說這件事。
+
+## Elapsed
+
+從最早的 start 到最晚的 end——若還有東西在跑或被暫停，則算到現在為止。沒有東西在跑時
+它會凍結，因為一個「task 卡在被暫停的 slot 後面」的 group，並不是「已經跑了三小時」。
+
+## 批次 action
+
+有四個 action 作用於整個 group，而不是單一 task。
+
+| Action | 對應的 pueue 指令 | 說明 |
+| --- | --- | --- |
+| Restart *n* Failed (New Tasks) | `restart --not-in-place --failed-in-group NAME` | 產生新的 id，原本的 task 保留自己的 log。 |
+| Restart *n* Failed in Place | `restart --in-place --failed-in-group NAME` | 沿用原本的 id，並**覆寫 log**。還需要那些 log 的話請先讀。 |
+| Clean Finished Tasks in Group | `clean --group NAME` | 移除已結束的 task 及其 log，不動 running 或 queued 的。 |
+| Clean Only the Successes | `clean --group NAME --successful-only` | 失敗的留著，讓你還能讀 log。 |
+
+restart 這兩個 action 在 group 沒有失敗時是**隱藏**，不是變灰。pueue 對一個沒有失敗
+的 group——甚至對一個根本不存在的 group——執行 `--failed-in-group` 都會安靜地 exit 0。
+一個永遠看得到卻什麼都不做的 action，比一個不存在的 action 更糟。
+
+## 兩個「名字沒說完」的操作
+
+兩者都是從 `pueue --help` 讀出來的，而且兩個確認對話框都會明講：
+
+- **Kill Running Tasks in Group** 同時會**暫停**這個 group。在你恢復它之前不會再有
+  新的 task 開始。
+- **Remove Group** 是把它的 task **搬到** `default`，而不是刪掉。
+
+## Reset
+
+reset 會殺掉這個 group 的每一個 task、刪掉它們、也刪掉它們的 log。這是本擴充功能中
+唯一每一次都會問、而且不提供「不要再顯示」的 action。
+
+在 menu bar 中它躲在 <kbd>⌥</kbd> 後面，**且不受 Confirmations 這個 preference 影響**
+——這是唯一的例外，因為 menu bar 沒有對話框可用（menu 打開時 Raycast 的 alert 無法
+顯示），而這又是唯一一個點錯就救不回來的 action。想要真正的確認對話框的話，
+`Open Groups…` 就在它下面一格。
+
+## 並行數 (parallelism)
+
+submenu 提供 1–32 與 Unlimited，另外有一個 `Custom…` 欄位可以填任何數字——pueue 接受
+任何非負整數，一台 64 核的機器完全有資格要求 48。
+
+這些預設值是刻意寫死的清單。拿本機的核心數來當預設，在你把擴充功能指向遠端 daemon 的
+那一刻就是錯的，而一個看起來合理的錯誤數字，比一個什麼都不主張的清單更糟。
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/groups.zh-TW.md (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:57:56Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Add groups.md to the nav
+
+```bash
+python3 - <<'PY'
+p='mkdocs.yml'
+s=open(p).read()
+old='''  - Remote daemons: remote.md
+  - Reference:'''
+new='''  - Remote daemons: remote.md
+  - Groups and batch progress: groups.md
+  - Reference:'''
+assert s.count(old)==1
+s=s.replace(old,new)
+open(p,'w').write(s)
+print('ok')
+PY
+grep -n "nav_translations" -A 12 mkdocs.yml | head -20
+```
+
+```text
+ok
+46:          nav_translations:
+47-            Home: 首頁
+48-            Getting Started: 開始使用
+49-            Remote daemons: 遠端 daemon
+50-            Reference: 參考資料
+51-            The pueue JSON contract: pueue JSON 契約
+52-            Raycast surfaces: Raycast 介面型態
+53-            Prior art: 相關擴充
+54-  - search
+55-  - llmstxt:
+56-      full_output: llms-full.txt
+57-      markdown_description: >
+58-        Documentation for Pueue for Raycast
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:58:09Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Build the docs site
+
+```bash
+python3 - <<'PY'
+p='mkdocs.yml'
+s=open(p).read()
+old='''            Remote daemons: 遠端 daemon
+            Reference: 參考資料'''
+new='''            Remote daemons: 遠端 daemon
+            Groups and batch progress: Group 與批次進度
+            Reference: 參考資料'''
+assert s.count(old)==1
+s=s.replace(old,new)
+open(p,'w').write(s)
+print('ok')
+PY
+uv run mkdocs build 2>&1 | tail -15
+```
+
+```text
+ok
+ │  https://squidfunk.github.io/mkdocs-material/blog/2026/02/18/mkdocs-2.0/
+
+INFO    -  mkdocs_static_i18n: Building 'en' documentation to directory: /Users/david/Documents/Program/Pueue-Raycast-Extension/site
+INFO    -  Cleaning site directory
+INFO    -  Building documentation to directory: /Users/david/Documents/Program/Pueue-Raycast-Extension/site
+INFO    -  mkdocs_static_i18n: Building 'zh-TW' documentation to directory: /Users/david/Documents/Program/Pueue-Raycast-Extension/site/zh-TW
+INFO    -  mkdocs_static_i18n: Language 'zh-TW' is not supported by lunr.js, not setting it in the 'plugins.search.lang' option
+INFO    -  mkdocs_static_i18n: Translated 8 navigation elements to 'zh-TW'
+WARNING -  mkdocs_llmstxt: Page URI 'index.md' not found in the generated pages. Skipping.
+WARNING -  mkdocs_llmstxt: Page URI 'getting-started.md' not found in the generated pages. Skipping.
+WARNING -  mkdocs_llmstxt: Page URI 'remote.md' not found in the generated pages. Skipping.
+WARNING -  mkdocs_llmstxt: Page URI 'pueue-json-contract.md' not found in the generated pages. Skipping.
+WARNING -  mkdocs_llmstxt: Page URI 'raycast-surfaces.md' not found in the generated pages. Skipping.
+WARNING -  mkdocs_llmstxt: Page URI 'prior-art.md' not found in the generated pages. Skipping.
+INFO    -  Documentation built in 3.98 seconds
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:58:16Z)**_
+
+<think><details><summary>Thought Process</summary>
+The docs build is working fine aside from some pre-existing llmstxt warnings. I need to go through TODO.md, update the preferences table in README.md, and review CHANGELOG.md.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 20:58:16Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read the README preferences section
+
+`grep -n "Preferences" -A 30 README.md | head -45`
+
+```text
+66:## Preferences
+67-
+68-| Preference | Default | Notes |
+69-| --- | --- | --- |
+70-| **Pueue Binary Path** | auto-probe | Empty probes `/opt/homebrew/bin`, `/usr/local/bin`, `~/.cargo/bin`, `~/.local/bin`. |
+71-| **Pueue Config Path** | pueue's default | Passed as `--config`, and used to locate `task_logs/`. |
+72-| **Remote Connections** | none | Connections separated by `;`, because Raycast preference fields are single-line: `name \| client config path \| ssh host`. See [Remote daemons](#remote-daemons). |
+73-| **Confirm destructive actions** | on | Kill, remove, clean, and reset ask first. The menu bar has no dialog available, so there the same setting puts those items behind `⌥` instead — turning this off removes both. |
+74-
+75-### "It works in my terminal but the extension can't find pueue"
+76-
+77-Raycast runs extensions under launchd, which never sources your shell rc — so Homebrew and `~/.cargo/bin` are **not** on its `PATH` even though they are in your terminal. The extension always invokes an absolute path and probes the directories above. If yours lives somewhere else, set **Pueue Binary Path**.
+78-
+79-## Remote daemons
+80-
+81-Watch and control a `pueued` on another machine. **Setup is one line** —
+82:Preferences → *Remote Connections*, an SSH host you can already reach:
+83-
+84-```text
+85-local_ubuntu
+86-```
+87-
+88-That's it. No tunnel to keep alive, no shared secret to copy, no config file.
+89-Every command runs as `ssh local_ubuntu 'pueue …'`, and SSH connection
+90-multiplexing keeps it fast — measured at **10–30 ms per call**, against 22–44 ms
+91-for a *local* pueue. (Without multiplexing it would be 200–400 ms, which is why
+92-the extension always passes `ControlMaster`.)
+93-
+94-The only requirement is that `pueue` is on that host's **non-interactive** PATH.
+95-`ssh host 'cmd'` doesn't read your shell rc, so a `~/.cargo/bin` install won't be
+96-found; the extension says so explicitly if that happens.
+97-
+98-For more than one remote, separate connections with `;` — Raycast preference
+99-fields are single-line, so a newline isn't something you can type into settings:
+100-
+101-```text
+102-lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com
+103-```
+104-
+105-Within a connection, `|` separates the fields: a lone field is an SSH host that
+106-doubles as its label, two are `name | ssh host`, and a third after a host is the
+107-**remote** pueue binary path.
+108-
+109-A **Connection** submenu then appears in Tasks and Groups (`⌘⇧N`), and as a
+110-**Daemon** dropdown on Add Task. Submitting works properly too, because the
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:58:21Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read the commands section
+
+`sed -n 30,66p README.md`
+
+```text
+> A `pueued` started as a child of a GUI process inherits that process's
+> environment — no `~/.zshrc`, a bare `PATH` — and hands it to **every task it
+> ever runs**. The extension's one-click *Start Daemon* action only appears when
+> `pueued` is managed by `brew services`, so launchd owns it.
+
+## Background refresh is off by default
+
+**A freshly installed menu bar command shows nothing until you run it once.**
+
+Raycast disables background refresh for store installs until the command is first opened. Run **Queue Menu Bar** from Raycast's root search once, or enable background refresh in that command's settings, and the menu bar item appears and starts updating on its own.
+
+This is the single most likely "it's broken" report, and it isn't a bug in the extension.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| **Tasks** | Browse the queue grouped by status, with a detail pane and log preview. Restart, kill, pause, stash, enqueue, remove, and clean. Takes an optional pueue query as an argument, e.g. `status=failed order_by id desc`. |
+| **Add Task** | Queue a command with a working directory, group, label, priority, dependencies, and delay. |
+| **Quick Add Task** | Queue a command straight from root search, reusing the group and directory you last used. |
+| **Groups** | Pause and resume groups, change parallelism, add and remove groups. |
+| **Queue Menu Bar** | Running / queued / failed counts in the menu bar, with per-task actions. Refreshes every minute. |
+
+### Keyboard shortcuts (Tasks)
+
+| Shortcut | Action |
+| --- | --- |
+| `⏎` | Show log |
+| `⌘L` | Follow output (running tasks) |
+| `⌘⇧R` | Restart as a new task |
+| `⌘⌥R` | Restart in place — same id, **overwrites the log** |
+| `⌘⇧P` | Pause · `⌘⇧S` Resume / Start now |
+| `⌘⇧T` | Stash · `⌘⇧E` Enqueue |
+| `⌘⇧K` | Kill · `⌘⌫` Remove |
+| `⌘⇧D` | Toggle the detail pane · `⌘R` Reload |
+
+## Preferences
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:58:37Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Update the README
+
+```bash
+python3 - <<'PY'
+p='README.md'
+s=open(p).read()
+
+pairs=[
+('| **Groups** | Pause and resume groups, change parallelism, add and remove groups. |',
+ '| **Groups** | Batch progress per group — `6/20 done · 3 failed`, a progress ring, an ETA, and a detail pane with the full breakdown. Restart a group\'s failures in one action, clean it, pause it, set its parallelism, add and remove groups. See [Groups and batch progress](https://daviddwlee84.github.io/Pueue-Raycast-Extension/groups/). |'),
+('| **Queue Menu Bar** | Running / queued / failed counts in the menu bar, with per-task actions. Refreshes every minute. |',
+ '| **Queue Menu Bar** | Running / queued / failed counts in the menu bar, with per-task and per-group actions. Refreshes every minute. |'),
+('| **Confirm destructive actions** | on | Kill, remove, clean, and reset ask first. The menu bar has no dialog available, so there the same setting puts those items behind `⌥` instead — turning this off removes both. |',
+ '''| **Confirm destructive actions** | on | Kill, remove, clean, and reset ask first. The menu bar has no dialog available, so there the same setting puts those items behind `⌥` instead — turning this off removes both. One exception: **Reset Group** in the menu bar is always behind `⌥`, because it deletes every task in the group along with its logs. |
+| **Detail Pane** (Groups) | on | The per-group breakdown, average duration, ETA, elapsed, and failed ids beside the list. `⌘⇧D` toggles it. |
+| **Connection Counts** (Queue Menu Bar) | off | Show each connection's counts on its row in the menu. Costs one read per connection per refresh; an unreachable host degrades only its own row. |'''),
+]
+for a,b in pairs:
+    assert s.count(a)==1,(a,s.count(a))
+    s=s.replace(a,b)
+
+old_short = '''| `⌘⇧D` | Toggle the detail pane · `⌘R` Reload |'''
+new_short = '''| `⌘⇧D` | Toggle the detail pane · `⌘R` Reload |
+
+### Keyboard shortcuts (Groups)
+
+| Shortcut | Action |
+| --- | --- |
+| `⏎` | Show the group's tasks |
+| `⌘⇧R` | Restart every failed task in the group as new tasks |
+| `⌘⌥R` | Restart them in place — same ids, **overwrites their logs** |
+| `⌘⇧P` | Pause the group · `⌘⇧S` Resume it |
+| `⌘⇧L` | Set parallelism (presets, or `Custom…` for any number) |
+| `⌘⇧K` | Kill running tasks — **this also pauses the group** |
+| `⌘⌫` | Remove the group — its tasks **move to `default`**, they aren't deleted |
+| `⌘⇧D` | Toggle the detail pane · `⌘R` Reload |'''
+assert s.count(old_short)==1
+s=s.replace(old_short,new_short)
+open(p,'w').write(s)
+print('ok')
+PY
+```
+
+```text
+ok
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:58:52Z)**_
+
+Now `TODO.md` — including dropping the fleet view:
+
+_**Agent (claude-opus-5 2026-07-26 20:58:52Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Update TODO.md
+
+```bash
+python3 - <<'PY'
+p='TODO.md'
+s=open(p).read()
+
+old = '''## v0.3.0 candidates
+
+Connection UX is done; these are the next layer.
+
+- `[M]` **Group progress bars** — `pqsum` already shows `done/total`, a bar, and
+  an ETA per group, and the same numbers would read well as a `List.Item`
+  accessory or in the Groups detail. Everything needed is already in `State`:
+  done vs total per group, and `durationMs` over finished tasks gives the
+  average for an ETA. See `~/.local/share/chezmoi/docs/tools/pueue.md`.
+- `[L]` **A fleet view — all connections at once** — the equivalent of
+  `fleet pueue`: one row per (connection, group), read concurrently. Now cheap,
+  because SSH mode multiplexes at 10–30 ms per call, so N hosts is N parallel
+  reads rather than N handshakes. Needs a decision on failure isolation: one
+  unreachable host must degrade its own row, never the view.
+- `[S]` **Per-connection menu bar counts** — the menu bar follows one connection
+  today. Showing `2 local · 5 lab` would need a read per connection on every
+  interval, which is affordable now but should be opt-in.
+
+## Later'''
+
+new = '''## Later'''
+assert s.count(old)==1
+s=s.replace(old,new)
+
+# Group-scoped clean shipped.
+old2 = '''- `[S]` **Group-scoped clean** in the Groups view (`clean --group`).
+'''
+assert s.count(old2)==1
+s=s.replace(old2,'')
+
+# Dependency graph shipped.
+old3 = '''- `[S]` **Dependency graph in the task detail** — render `dependencies[]` as
+  rows with their live status instead of a comma-separated list of ids.
+'''
+assert s.count(old3)==1
+s=s.replace(old3,'')
+
+old4 = '''## Won't do
+'''
+new4 = '''## Won't do
+
+- **A fleet view — every connection in one list.** The `fleet pueue` equivalent:
+  one row per (connection, group), read concurrently. Technically cheap now that
+  SSH multiplexing puts a remote read at 10–30 ms, and dropped anyway — it would
+  make the extension meaningfully more complicated than the problem it solves.
+  Switching connection is already a keystroke, and the opt-in per-connection
+  counts on the menu bar's Connection rows answer "how are my machines" at a
+  fraction of the cost. Revisit only if someone is actually running enough hosts
+  to need it.
+'''
+assert s.count(old4)==1
+s=s.replace(old4,new4)
+open(p,'w').write(s)
+print('ok')
+PY
+sed -n 1,40p TODO.md
+```
+
+```text
+ok
+# TODO
+
+The single index of future work. `[S]`/`[M]`/`[L]` is effort; `P?` means the
+shape isn't decided yet and there's a note in [`backlog/`](backlog/).
+
+## Next
+
+- `[S]` **Screenshots for the store** — the last unchecked store requirement, and
+  the only one that cannot be automated: Window Capture needs a GUI hotkey and a
+  ticked "Save to Metadata". Run `just shots`, which seeds the queue and walks
+  the four view commands by deeplink so all that is left is the keypress; the
+  menu bar shot is manual because a `menu-bar` command cannot be deeplinked.
+  Then `just preflight` to confirm 3–6 files at exactly 2000×1250. See
+  [`metadata/README.md`](metadata/README.md).
+- `[S]` **De-stale the "not on the store yet" copy** after publishing — it is in
+  both [`docs/getting-started.md`](docs/getting-started.md) and its zh-TW sibling,
+  and `fallback_to_default: true` will not surface the drift.
+- `[S]` **Remaining interactive pass** — paths needing a real keypress rather
+  than a deeplink, not yet exercised: submitting the **Add Task** form, the
+  **Groups** action panel and its two confirmations, **Quick Add** from root
+  search, and firing an action from the **menu bar**.
+
+  Verified interactively already: `⌘⇧K` kill and `⌘⇧R` restart in the Tasks view
+  (the optimistic update holds through the reconcile — no flicker), `⏎` log view,
+  and `⌘L` live follow. The menu bar's rendering, title-at-zero, failure tint,
+  and self-refresh on its interval are verified too.
+- `[S]` **Verify remote against a real second machine** — the plumbing is
+  asserted and was exercised against a second client config, but never against
+  an actual remote `pueued` over a forwarded socket. See
+  [`docs/remote.md`](docs/remote.md).
+- `[S]` **`pueue send`** — a form to send input to a running task. Inherently
+  best-effort: there is no way to know whether the process is reading stdin.
+
+## Docs site
+
+Live at <https://daviddwlee84.github.io/Pueue-Raycast-Extension/>, bilingual
+(en + zh-TW), deployed by `.github/workflows/docs.yml` on every push touching
+`docs/`, `mkdocs.yml`, or `pyproject.toml`.
+
+- `[S]` **Keep the zh-TW pages in step with the English ones.** They are
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:59:04Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Note the v0.3.0 verification state
+
+```bash
+python3 - <<'PY'
+p='TODO.md'
+s=open(p).read()
+old='''- `[S]` **Remaining interactive pass** — paths needing a real keypress rather
+  than a deeplink, not yet exercised: submitting the **Add Task** form, the
+  **Groups** action panel and its two confirmations, **Quick Add** from root
+  search, and firing an action from the **menu bar**.
+
+  Verified interactively already: `⌘⇧K` kill and `⌘⇧R` restart in the Tasks view
+  (the optimistic update holds through the reconcile — no flicker), `⏎` log view,
+  and `⌘L` live follow. The menu bar's rendering, title-at-zero, failure tint,
+  and self-refresh on its interval are verified too.'''
+new='''- `[S]` **Remaining interactive pass** — paths needing a real keypress rather
+  than a deeplink, not yet exercised: submitting the **Add Task** form, the
+  **Groups** action panel and its confirmations (now including the four batch
+  actions and the `Custom…` parallelism form), **Quick Add** from root search,
+  and firing an action from the **menu bar**. Everything from v0.3.0 is in this
+  bucket, including the connection-switch fix — see the checklist in the commit
+  for `Stop an unreachable daemon from borrowing another one's queue`.
+
+  Verified interactively already: `⌘⇧K` kill and `⌘⇧R` restart in the Tasks view
+  (the optimistic update holds through the reconcile — no flicker), `⏎` log view,
+  and `⌘L` live follow. The menu bar's rendering, title-at-zero, failure tint,
+  and self-refresh on its interval are verified too.
+
+  Verified against a live daemon rather than in the UI: both
+  `restart --failed-in-group` forms, `clean --group`, and the fact that
+  `--failed-in-group` on a group with no failures — or no such group — exits 0
+  silently, which is why those actions are hidden rather than disabled.'''
+assert s.count(old)==1
+s=s.replace(old,new)
+open(p,'w').write(s)
+print('ok')
+PY
+sed -n 55,110p TODO.md
+```
+
+```text
+ok
+- `[?]` **`--strict` is off in CI.** `mkdocs-llmstxt` and `mkdocs-static-i18n`
+  are incompatible under it: llmstxt's source-path lookups break once i18n
+  remaps the page index. We kept `/llms.txt`. Revisit if llmstxt gains i18n
+  awareness.
+
+## Later
+
+- `[M]` **`pueue edit`** — round-trip pueue's TOML edit payload through a Form.
+  Needs care: the task is `Locked` while editing, and abandoning the edit must
+  restore it.
+- `[M]` **Frecency-sorted command history** for Add Task, via
+  `useFrecencySorting`.
+- `[M]` **Remote profiles** — a `--profile` switcher with per-profile caching.
+  Needs a real YAML dependency to read the `profiles:` block, which is why it
+  isn't done already.
+- `[S]` **`pueue wait` notifier** — a `no-view` command that watches until a
+  group drains and HUDs.
+
+## Deferred, with notes
+
+- `P?` `[L]` **Direct CBOR unix-socket transport** —
+  [`backlog/socket-transport.md`](backlog/socket-transport.md)
+- `P?` `[M]` **AI tools (`tools[]`)** — [`backlog/ai-tools.md`](backlog/ai-tools.md)
+- `P?` `[S]` **Callback-driven notifications** —
+  [`backlog/callback-notifications.md`](backlog/callback-notifications.md)
+- `P?` **Publishing to the public store** —
+  [`backlog/store-publishing.md`](backlog/store-publishing.md)
+
+## Won't do
+
+- **A fleet view — every connection in one list.** The `fleet pueue` equivalent:
+  one row per (connection, group), read concurrently. Technically cheap now that
+  SSH multiplexing puts a remote read at 10–30 ms, and dropped anyway — it would
+  make the extension meaningfully more complicated than the problem it solves.
+  Switching connection is already a keystroke, and the opt-in per-connection
+  counts on the menu bar's Connection rows answer "how are my machines" at a
+  fraction of the cost. Revisit only if someone is actually running enough hosts
+  to need it.
+
+- **`pueue add --escape` as a UI option.** It escapes spaces along with every
+  other metacharacter, and the command is passed as a single argv element, so it
+  collapses the whole line into one token. Verified: it turns
+  `echo not-a-pipe | wc -l` into `sh: echo not-a-pipe | wc -l: command not
+  found`. The flag is only meaningful for the multi-word argv form this
+  extension doesn't use.
+- **Reading parallelism from `pueue parallel`.** Broken in 4.0.4 — with no
+  argument it logs "Received unhandled response message", exits 0, and prints
+  nothing. `group --json` is authoritative.
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:59:11Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Fix spacing and read the changelog
+
+```bash
+python3 - <<'PY'
+p='TODO.md'
+s=open(p).read()
+s=s.replace('''  to need it.
+
+- **`pueue add --escape`''','''  to need it.
+- **`pueue add --escape`''')
+open(p,'w').write(s)
+PY
+head -25 CHANGELOG.md
+```
+
+```text
+# Pueue Changelog
+
+## [Initial Version] - {PR_MERGE_DATE}
+
+- **Tasks** — browse the queue grouped by status, with a detail pane and log preview. Restart (as a new task or in place), kill, pause, stash, enqueue, remove, and clean. Accepts a pueue query as a command argument.
+- **Add Task** — queue a command with a working directory, group, label, priority, dependencies, and delay.
+- **Quick Add Task** — queue a command from root search, reusing your last group and directory.
+- **Groups** — pause and resume groups, change parallelism, add and remove groups.
+- **Queue Menu Bar** — running, queued, and failed counts in the menu bar with per-task actions, refreshing every minute.
+- Live output following for running tasks, and full log viewing that reads pueue's on-disk logs directly.
+- **Remote daemons** — watch and control a `pueued` on another machine. Setup is
+  one line: an SSH host you can already reach. No tunnel, no shared secret, no
+  config file — every command runs over ssh, multiplexed so a remote read costs
+  about the same as a local one. A forwarded-socket mode remains available for
+  those already maintaining a tunnel. A Connection submenu appears in Tasks and
+  Groups, and a Daemon dropdown on Add Task; nothing renders when no remote
+  connection is configured. Tasks submit over SSH, because pueue resolves a
+  task's working directory on whichever machine the client runs on, and log reads
+  never touch local disk for a connection whose logs live elsewhere. pueue's
+  per-command protocol-version warning is filtered out so it never masks the real
+  error underneath it.
+- Actionable onboarding when the `pueue` binary can't be found or `pueued` isn't running, including a one-click daemon start when Homebrew manages it.
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:59:18Z)**_
+
+<think><details><summary>Thought Process</summary>
+The CHANGELOG is customer-facing and currently just has the initial version entry, so I should expand those bullets to document what's actually shipped rather than creating a new v0.3.0 section. I need to update the Groups and Menu Bar items to reflect the current state, then review the rest of the changelog.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 20:59:18Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read the rest of the changelog
+
+`sed -n 22,40p CHANGELOG.md`
+
+```text
+- Actionable onboarding when the `pueue` binary can't be found or `pueued` isn't running, including a one-click daemon start when Homebrew manages it.
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:00:00Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Update the changelog and gate
+
+```bash
+python3 - <<'PY'
+p='CHANGELOG.md'
+s=open(p).read()
+pairs=[
+('- **Groups** — pause and resume groups, change parallelism, add and remove groups.',
+ "- **Groups** — batch progress per group: `6/20 done · 3 failed`, a progress ring, an ETA, and a detail pane with the full breakdown, average duration, elapsed time, and the ids that failed. Restart a group's failures in one action (as new tasks or in place), clean a group, pause and resume it, set its parallelism from presets or a custom number, add and remove groups."),
+('- **Queue Menu Bar** — running, queued, and failed counts in the menu bar with per-task actions, refreshing every minute.',
+ "- **Queue Menu Bar** — running, queued, and failed counts in the menu bar with per-task and per-group actions, refreshing every minute. Group rows carry the same progress the Groups view does. Destructive items sit behind the Option key, which is what stands in for a confirmation dialog where no dialog can render. Optionally shows every configured connection's counts on its own row."),
+]
+for a,b in pairs:
+    assert s.count(a)==1,(a,s.count(a))
+    s=s.replace(a,b)
+s = s.rstrip('\n') + "\n- Cached data can never be attributed to the wrong daemon: every read is stamped with the connection it came from, so selecting an unreachable host shows an error and a way back rather than the previous host's queue. A structural failure on top of good data greys the menu bar icon and says when the numbers froze.\n"
+open(p,'w').write(s)
+print('ok')
+PY
+just fix >/dev/null 2>&1; just check 2>&1 | grep -E "FAIL|error|✖|assertions passed|built extension" | tail -4
+```
+
+```text
+ok
+log output — pueue hides its own errors in the output field
+  ok   a pueue error in the output field is recognised
+all assertions passed
+ready  - built extension successfully
+```
+</details></tool-use>

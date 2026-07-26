@@ -47,8 +47,8 @@ This is the single most likely "it's broken" report, and it isn't a bug in the e
 | **Tasks** | Browse the queue grouped by status, with a detail pane and log preview. Restart, kill, pause, stash, enqueue, remove, and clean. Takes an optional pueue query as an argument, e.g. `status=failed order_by id desc`. |
 | **Add Task** | Queue a command with a working directory, group, label, priority, dependencies, and delay. |
 | **Quick Add Task** | Queue a command straight from root search, reusing the group and directory you last used. |
-| **Groups** | Pause and resume groups, change parallelism, add and remove groups. |
-| **Queue Menu Bar** | Running / queued / failed counts in the menu bar, with per-task actions. Refreshes every minute. |
+| **Groups** | Batch progress per group — `6/20 done · 3 failed`, a progress ring, an ETA, and a detail pane with the full breakdown. Restart a group's failures in one action, clean it, pause it, set its parallelism, add and remove groups. See [Groups and batch progress](https://daviddwlee84.github.io/Pueue-Raycast-Extension/groups/). |
+| **Queue Menu Bar** | Running / queued / failed counts in the menu bar, with per-task and per-group actions. Refreshes every minute. |
 
 ### Keyboard shortcuts (Tasks)
 
@@ -63,6 +63,19 @@ This is the single most likely "it's broken" report, and it isn't a bug in the e
 | `⌘⇧K` | Kill · `⌘⌫` Remove |
 | `⌘⇧D` | Toggle the detail pane · `⌘R` Reload |
 
+### Keyboard shortcuts (Groups)
+
+| Shortcut | Action |
+| --- | --- |
+| `⏎` | Show the group's tasks |
+| `⌘⇧R` | Restart every failed task in the group as new tasks |
+| `⌘⌥R` | Restart them in place — same ids, **overwrites their logs** |
+| `⌘⇧P` | Pause the group · `⌘⇧S` Resume it |
+| `⌘⇧L` | Set parallelism (presets, or `Custom…` for any number) |
+| `⌘⇧K` | Kill running tasks — **this also pauses the group** |
+| `⌘⌫` | Remove the group — its tasks **move to `default`**, they aren't deleted |
+| `⌘⇧D` | Toggle the detail pane · `⌘R` Reload |
+
 ## Preferences
 
 | Preference | Default | Notes |
@@ -70,7 +83,9 @@ This is the single most likely "it's broken" report, and it isn't a bug in the e
 | **Pueue Binary Path** | auto-probe | Empty probes `/opt/homebrew/bin`, `/usr/local/bin`, `~/.cargo/bin`, `~/.local/bin`. |
 | **Pueue Config Path** | pueue's default | Passed as `--config`, and used to locate `task_logs/`. |
 | **Remote Connections** | none | Connections separated by `;`, because Raycast preference fields are single-line: `name \| client config path \| ssh host`. See [Remote daemons](#remote-daemons). |
-| **Confirm destructive actions** | on | Kill, remove, clean, and reset ask first. The menu bar has no dialog available, so there the same setting puts those items behind `⌥` instead — turning this off removes both. |
+| **Confirm destructive actions** | on | Kill, remove, clean, and reset ask first. The menu bar has no dialog available, so there the same setting puts those items behind `⌥` instead — turning this off removes both. One exception: **Reset Group** in the menu bar is always behind `⌥`, because it deletes every task in the group along with its logs. |
+| **Detail Pane** (Groups) | on | The per-group breakdown, average duration, ETA, elapsed, and failed ids beside the list. `⌘⇧D` toggles it. |
+| **Connection Counts** (Queue Menu Bar) | off | Show each connection's counts on its row in the menu. Costs one read per connection per refresh; an unreachable host degrades only its own row. |
 
 ### "It works in my terminal but the extension can't find pueue"
 

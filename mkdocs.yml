@@ -47,6 +47,7 @@ plugins:
             Home: 首頁
             Getting Started: 開始使用
             Remote daemons: 遠端 daemon
+            Groups and batch progress: Group 與批次進度
             Reference: 參考資料
             The pueue JSON contract: pueue JSON 契約
             Raycast surfaces: Raycast 介面型態
@@ -96,6 +97,7 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Remote daemons: remote.md
+  - Groups and batch progress: groups.md
   - Reference:
       - The pueue JSON contract: pueue-json-contract.md
       - Raycast surfaces: raycast-surfaces.md

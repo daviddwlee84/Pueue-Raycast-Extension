@@ -31623,14 +31623,19 @@ _**Agent (claude-opus-5 2026-07-26 20:54:12Z)**_
 
 一個小修正：Plan agent 說 `bm25()` 在 CTE 裡會失敗，我實測**沒有**。仍然用 `rank` column（FTS5 文件保證的寫法），但不會寫成 pitfall。
 
-_**Agent (claude-opus-5 2026-07-26 20:54:12Z)**_
+_**Agent (claude-opus-5 2026-07-26 20:56:19Z)**_
 
 <tool-use data-tool-type="generic" data-tool-name="ExitPlanMode"><details>
 <summary>Tool use: **ExitPlanMode**</summary>
 
-**Input:**
+```text
+User has approved your plan. You can now start coding. Start with updating your todo list if applicable
 
-- plan: `# Agent Deck — a Raycast quick menu for AI coding agents
+Your plan has been saved to: /Users/david/Documents/Program/Pueue-Raycast-Extension/.claude/plans/pueue-shiny-cookie.md
+You can refer back to it if needed during implementation.
+
+## Approved Plan:
+# Agent Deck — a Raycast quick menu for AI coding agents
 
 > New repo at `../Agent-Deck-Raycast-Extension`, sibling to this one. Nothing in this repo changes.
 
@@ -32089,7 +32094,1448 @@ your interactive PATH; Raycast's launchd process does not.
    green under `just verify`, before touching React.
 5. `lib/specstory/` then `lib/herdr/` then `sessions.tsx` — the thinnest vertical slice that proves
    the join.
-`
-- planFilePath: `/Users/david/Documents/Program/Pueue-Raycast-Extension/.claude/plans/pueue-shiny-cookie.md`
+```
+</details></tool-use>
 
+_**Agent (claude-opus-5 2026-07-26 20:56:29Z)**_
+
+<think><details><summary>Thought Process</summary>
+The plan is approved, so I'm ready to start implementing. I'll create a task list first, then examine the reference repo's scaffold script and key files to understand the setup process. Let me be systematic about this—establish the tasks, then explore what I need to replicate.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 20:56:29Z)**_
+
+Plan approved. Let me set up task tracking and start building.
+
+_**Agent (claude-opus-5 2026-07-26 20:56:32Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskCreate"><details>
+<summary>Tool use: **TaskCreate**</summary>
+Create ../Agent-Deck-Raycast-Extension, git init, vendor raycast-extension-dev + project-knowledge-harness + agent-history-hygiene skills with skills-lock.json and .claude/skills symlinks, run new-raycast-extension.sh, copy+adapt Justfile / tsconfig.json / eslint.config.mjs / .github/workflows.
+
+```text
+Task #1 created successfully: Scaffold Agent-Deck-Raycast-Extension repo
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:56:35Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskCreate"><details>
+<summary>Tool use: **TaskCreate**</summary>
+Write `just fixtures` to capture AND redact in one step. Capture herdr-agent-list.json, herdr-errors.json, herdr-api-schema.json, specstory-rows.json, opencode-sessions.json, claude-sessions.json, claude-transcript.jsonl, claude-history.jsonl, codex-history.jsonl, peon-status.txt, fts-queries.json. Redact: real paths -> /Users/dev/Projects/<name>, UUIDs -> deterministic fakes stable across fixtures so joins still assert, keep one CJK + one emoji title.
+
+```text
+Task #2 created successfully: Capture and redact dev-check fixtures
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:56:37Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskCreate"><details>
+<summary>Tool use: **TaskCreate**</summary>
+src/lib/agents/{types,transport,capabilities,probe,normalize,merge,rank,errors}.ts — all pure, zero @raycast/api. Plus src/lib/dev-check.ts asserting: status normalization, 6-way FTS dedupe, empty updated_at -> undefined (not Invalid Date, not 1970), 1:N live join, ranker total ordering, FTS sanitizer, probe order reaching ~/.opencode/bin, every-capability-absent still returns results, import discipline. Must be green under `just verify` before any React.
+
+```text
+Task #3 created successfully: Build pure domain layer + dev-check
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:56:40Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskCreate"><details>
+<summary>Tool use: **TaskCreate**</summary>
+src/lib/specstory/ (binary, fts sanitizer, sql builders, wire, cli via /usr/bin/sqlite3), src/lib/opencode/ (metadata + LIKE, no FTS), src/lib/claude/ (paths, registry, history, transcript), src/lib/codex/ (paths, rollout, history). Each independently optional and gated on its capability.
+
+```text
+Task #4 created successfully: Implement session index providers
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:56:42Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskCreate"><details>
+<summary>Tool use: **TaskCreate**</summary>
+src/lib/herdr/{binary,wire,errors,cli}.ts. LiveAgentSource + AgentActuator. Classify on "stdout did not parse as JSON" never on exit code. pane_id is the only actuator handle. Fall back to ~/.claude/sessions registry when herdr is absent or its server is down (and distinguish those two states).
+
+```text
+Task #5 created successfully: Implement herdr live-agent source
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:56:44Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskCreate"><details>
+<summary>Tool use: **TaskCreate**</summary>
+sessions.tsx (search view, the thinnest vertical slice first to prove the search-to-live join), agents.tsx (live list + detail), agent-menu.tsx (menu bar, blocked-first, Sources section), focus-agent.tsx (no-view). Plus error-states.tsx, format.tsx, session-detail.tsx, agent-tail.tsx.
+
+```text
+Task #6 created successfully: Build the four v0.1 commands
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:56:44Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskCreate"><details>
+<summary>Tool use: **TaskCreate**</summary>
+14 symptom-titled pitfalls/ entries with grep-able verbatim blocks, 6 backlog/ entries in what/why-not/what-would-have-to-be-true shape, TODO.md with a "Won't do" section recording the three reasons the OAuth usage endpoint is rejected, README, and bilingual docs/ (en + .zh-TW.md siblings).
+
+```text
+Task #7 created successfully: Write docs, pitfalls, backlog, TODO
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:56:51Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #1 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:56:51Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read scaffold script and skills lock
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+echo "=== scaffold script usage ==="
+sed -n '1,60p' .agents/skills/raycast-extension-dev/scripts/new-raycast-extension.sh
+echo "=== skills-lock.json ==="; cat skills-lock.json
+echo "=== .claude/skills symlinks ==="; ls -la .claude/skills/
+```
+
+```text
+=== scaffold script usage ===
+#!/usr/bin/env bash
+# Scaffold a Raycast extension that is gated from the first commit.
+#
+# Raycast's own "Create Extension" command generates a working extension. What it
+# does NOT give you is the four-stage gate — and `ray build` bundles with esbuild,
+# which strips types without checking them, so an ungated extension ships type
+# errors silently. This script lays down the gate along with the manifest.
+set -euo pipefail
+
+VERSION="1.0.0"
+
+usage() {
+  cat <<'EOF'
+Usage: new-raycast-extension.sh --dir DIR --name NAME [OPTIONS]
+
+Scaffold a Raycast extension with the four-stage gate (tsc --noEmit, a dev-check
+harness, ray lint, ray build) already wired into a Justfile.
+
+Required:
+  --dir DIR                  Target directory (created if absent)
+  --name NAME                Manifest name / store slug, kebab-case
+
+Options:
+  --title TITLE              Display title (default: Title Case of NAME)
+  --author USERNAME          Your registered Raycast username (default: __AUTHOR__)
+  --description TEXT         One-sentence store description
+  --command NAME:MODE[:TITLE]  Repeatable. MODE is view | no-view | menu-bar.
+                             Defaults to one `--command <NAME>:view`.
+  --license SPDX             Default: MIT
+  --no-verify-harness        Skip src/lib/dev-check.ts and the `verify` recipe
+  --dry-run                  Print the plan as JSON; write nothing
+  --force                    Write into a non-empty directory
+  --json                     Emit the result object on stdout (default)
+  --version                  Print the script version and exit
+  --help, -h                 Show this help and exit
+
+Examples:
+  new-raycast-extension.sh --dir ./gh-queue --name gh-queue --author octocat \
+    --command tasks:view --command "queue-menu:menu-bar:Queue Menu Bar"
+  new-raycast-extension.sh --dir ./x --name x --dry-run
+
+Output:
+  One JSON object on stdout: {dir, name, files[], commands[], next_steps[]}.
+  Prose goes to stderr.
+
+Notes:
+  Does NOT run npm install — no network, no side effects outside DIR. `npm run
+  build` is what generates raycast-env.d.ts; it is listed in next_steps.
+
+Exit codes:
+  0  scaffolded (or --dry-run planned)
+  1  invalid arguments
+  2  target directory is not empty and --force was not given
+  3  the skill's bundled assets/ are missing or unreadable
+  4  post-write self-check failed
+EOF
+}
+
+die() { printf '%s\n' "$*" >&2; exit 1; }
+log() { printf '%s\n' "$*" >&2; }
+=== skills-lock.json ===
+{
+  "version": 1,
+  "skills": {
+    "agent-history-hygiene": {
+      "source": "daviddwlee84/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/local/agent-history-hygiene/SKILL.md",
+      "computedHash": "aa7e6fe192518ecbddccc9c29c501b50200e41a753948cdb925254b373744259"
+    },
+    "mkdocs-site-bootstrap": {
+      "source": "daviddwlee84/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/local/mkdocs-site-bootstrap/SKILL.md",
+      "computedHash": "976267291b56eb84d845733f3eb0e4b2427157e42449c2d75c5c4102ff712eae"
+    },
+    "project-knowledge-harness": {
+      "source": "daviddwlee84/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/local/project-knowledge-harness/SKILL.md",
+      "computedHash": "0a8d0b4888de715160f947499408251de0530ccb5f7e8bb65c9c994b685e5d5a"
+    },
+    "pueue-job-queue": {
+      "source": "daviddwlee84/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/local/pueue-job-queue/SKILL.md",
+      "computedHash": "f09862fee433ea238b97595f7c598c09b119488f508d731607b8eade60529568"
+    },
+    "raycast-extension-dev": {
+      "source": "daviddwlee84/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/local/raycast-extension-dev/SKILL.md",
+      "computedHash": "8d7c3f1fe0a329ee325d40ca670ea9c2dc65f46297225700c08c6e1339ad0ae1"
+    }
+  }
+}
+=== .claude/skills symlinks ===
+lrwxr-xr-x@ - david 27 Jul 00:58 agent-history-hygiene -> ../../.agents/skills/agent-history-hygiene
+lrwxr-xr-x@ - david 27 Jul 00:58 mkdocs-site-bootstrap -> ../../.agents/skills/mkdocs-site-bootstrap
+lrwxr-xr-x@ - david 27 Jul 00:58 project-knowledge-harness -> ../../.agents/skills/project-knowledge-harness
+lrwxr-xr-x@ - david 27 Jul 00:58 pueue-job-queue -> ../../.agents/skills/pueue-job-queue
+lrwxr-xr-x@ - david 27 Jul 03:37 raycast-extension-dev -> ../../.agents/skills/raycast-extension-dev
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:56:59Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'll run the scaffold script with a dry run first to see what gets generated, then execute it with those menu and session commands.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 20:56:59Z)**_
+
+The scaffold script exists. Let me create the repo.
+
+_**Agent (claude-opus-5 2026-07-26 20:57:02Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Scaffold the new extension repo
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+./.agents/skills/raycast-extension-dev/scripts/new-raycast-extension.sh \
+  --dir ../Agent-Deck-Raycast-Extension \
+  --name agent-deck \
+  --title "Agent Deck" \
+  --author "da-wei_lee" \
+  --description "Find any past AI coding session by what was said in it, see which agents are running or waiting on you, and jump straight back into either." \
+  --command "agent-menu:menu-bar:Agents Menu Bar" \
+  --command "sessions:view:Search Agent Sessions" \
+  --command "agents:view:Live Agents" \
+  --command "focus-agent:no-view:Focus Agent" \
+  2>&1 | tail -40
+```
+
+```text
+scaffolded agent-deck in ../Agent-Deck-Raycast-Extension
+next: cd ../Agent-Deck-Raycast-Extension && npm install
+{"dir":"../Agent-Deck-Raycast-Extension","name":"agent-deck","dry_run":false,"files":["package.json","tsconfig.json","eslint.config.mjs",".gitignore","Justfile","LICENSE","CHANGELOG.md","README.md","metadata/README.md","assets/extension-icon.png","assets/menu-bar-icon.svg","src/agent-menu.tsx","src/sessions.tsx","src/agents.tsx","src/focus-agent.tsx","src/lib/dev-check.ts"],"commands":[{"name":"agent-menu","mode":"menu-bar"},{"name":"sessions","mode":"view"},{"name":"agents","mode":"view"},{"name":"focus-agent","mode":"no-view"}],"next_steps":["cd ../Agent-Deck-Raycast-Extension && npm install","npm run build   # this is what GENERATES raycast-env.d.ts","just check      # tsc --noEmit, verify, ray lint, ray build","npm run dev, then open the command FROM RAYCAST ROOT SEARCH, not the dev console","replace assets/extension-icon.png — the placeholder is rejected by review"]}
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:57:12Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Init git and vendor skills
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension
+git init -q 2>&1 | head -2
+mkdir -p .agents/skills .claude/skills .claude/plans pitfalls backlog src/lib/{agents,herdr,specstory,opencode,claude,codex,fixtures}
+# vendor the skills we actually need
+for s in raycast-extension-dev project-knowledge-harness agent-history-hygiene mkdocs-site-bootstrap; do
+  cp -R "../Pueue-Raycast-Extension/.agents/skills/$s" .agents/skills/
+  ln -sfn "../../.agents/skills/$s" ".claude/skills/$s"
+done
+# skills-lock.json: keep only the four we vendored
+jq '{version, skills: (.skills | with_entries(select(.key | IN("raycast-extension-dev","project-knowledge-harness","agent-history-hygiene","mkdocs-site-bootstrap"))))}' \
+  ../Pueue-Raycast-Extension/skills-lock.json > skills-lock.json
+cp ../Pueue-Raycast-Extension/.skills/preferences.yaml .skills/preferences.yaml 2>/dev/null || { mkdir -p .skills && cp ../Pueue-Raycast-Extension/.skills/preferences.yaml .skills/; }
+echo "=== vendored ==="; ls .agents/skills/; echo "=== symlinks ==="; ls -la .claude/skills/ | tail -5
+echo "=== tree ==="; ls -A
+```
+
+```text
+=== vendored ===
+agent-history-hygiene
+mkdocs-site-bootstrap
+project-knowledge-harness
+raycast-extension-dev
+=== symlinks ===
+lrwxr-xr-x@ - david 27 Jul 04:57 agent-history-hygiene -> ../../.agents/skills/agent-history-hygiene
+lrwxr-xr-x@ - david 27 Jul 04:57 mkdocs-site-bootstrap -> ../../.agents/skills/mkdocs-site-bootstrap
+lrwxr-xr-x@ - david 27 Jul 04:57 project-knowledge-harness -> ../../.agents/skills/project-knowledge-harness
+lrwxr-xr-x@ - david 27 Jul 04:57 raycast-extension-dev -> ../../.agents/skills/raycast-extension-dev
+=== tree ===
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:57:17Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to be careful with paths since the shell working directory was reset, so I'll use absolute paths or keep everything within a single command. Let me check what's in the new repo.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 20:57:18Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Inspect scaffolded repo state
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && ls -A && echo "--- src ---" && find src -type f | sort && echo "--- Justfile recipes ---" && grep -E "^[a-z-]+:" Justfile`
+
+```text
+--- src ---
+src/agent-menu.tsx
+src/agents.tsx
+src/focus-agent.tsx
+src/lib/dev-check.ts
+src/sessions.tsx
+--- Justfile recipes ---
+default:
+dev:
+build:
+dist:
+lint:
+fix:
+typecheck:
+verify:
+check: typecheck verify lint build
+ci:
+preflight:
+store-export:
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:57:26Z)**_
+
+<think><details><summary>Thought Process</summary>
+The `ls -A` output seems to have disappeared between the command and the src listing, which is strange since files should exist. Let me try using `find` instead to get a clearer picture, and I should verify whether those empty directories I created earlier (.agents/skills, etc.) actually persisted through the previous operations.
+
+Now I need to examine the reference repo's core files — transport.ts, binary.ts, errors.ts, plus the package.json, Justfile, and dev-check.ts — to understand the structure I should mirror.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 20:57:27Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+List top level and read package.json
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && find . -maxdepth 1 -not -name '.' | sort && echo "=== package.json ===" && cat package.json`
+
+```text
+./.agents
+./.claude
+./.git
+./.gitignore
+./.skills
+./assets
+./backlog
+./CHANGELOG.md
+./eslint.config.mjs
+./Justfile
+./LICENSE
+./metadata
+./package.json
+./pitfalls
+./README.md
+./skills-lock.json
+./src
+./tsconfig.json
+=== package.json ===
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "agent-deck",
+  "title": "Agent Deck",
+  "description": "Find any past AI coding session by what was said in it, see which agents are running or waiting on you, and jump straight back into either.",
+  "icon": "extension-icon.png",
+  "author": "da-wei_lee",
+  "license": "MIT",
+  "categories": ["Developer Tools"],
+  "platforms": ["macOS"],
+  "commands": [
+    {
+      "name": "agent-menu",
+      "title": "Agents Menu Bar",
+      "description": "Open the Agents Menu Bar command.",
+      "mode": "menu-bar",
+      "interval": "1m"
+    },
+    {
+      "name": "sessions",
+      "title": "Search Agent Sessions",
+      "description": "Open the Search Agent Sessions command.",
+      "mode": "view"
+    },
+    {
+      "name": "agents",
+      "title": "Live Agents",
+      "description": "Open the Live Agents command.",
+      "mode": "view"
+    },
+    {
+      "name": "focus-agent",
+      "title": "Focus Agent",
+      "description": "Open the Focus Agent command.",
+      "mode": "no-view"
+    }
+  ],
+  "preferences": [],
+  "dependencies": {
+    "@raycast/api": "^1.104.23",
+    "@raycast/utils": "^2.2.7"
+  },
+  "devDependencies": {
+    "@raycast/eslint-config": "^2.2.0",
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.0.10",
+    "eslint": "^9.0.0",
+    "prettier": "^3.5.3",
+    "react": "^19.0.0",
+    "typescript": "^5.8.2"
+  },
+  "scripts": {
+    "build": "ray build",
+    "dev": "ray develop",
+    "lint": "ray lint",
+    "fix-lint": "ray lint --fix",
+    "publish": "npx @raycast/api@latest publish"
+  }
+}
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:57:26Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="Read"><details>
+<summary>Tool use: **Read**</summary>
+ `./src/lib/pueue/binary.ts`
+
+```text
+1	/**
+2	 * Locating pueue, and the files it keeps.
+3	 *
+4	 * This is the #1 hazard in a Raycast extension: Raycast runs extensions in a
+5	 * managed Node process under launchd, which never sources a shell rc, so
+6	 * neither Homebrew nor ~/.cargo/bin is on PATH and a bare `pueue` fails with
+7	 * `spawn pueue ENOENT`. Every call therefore goes through an absolute path.
+8	 *
+9	 * A terminal hides this completely — `npm run dev`'s console inherits your
+10	 * full PATH — so anything touched here must be tested *from Raycast*.
+11	 */
+12	
+13	import { existsSync, readFileSync } from "node:fs";
+14	import { homedir } from "node:os";
+15	import { dirname, join } from "node:path";
+16	import { getPreferenceValues } from "@raycast/api";
+17	
+18	import {
+19	  expandTilde,
+20	  LOCAL_CONNECTION_NAME,
+21	  parseConnections,
+22	  type Connection,
+23	} from "./connections";
+24	import { PueueError } from "./errors";
+25	
+26	/**
+27	 * Ordered by likelihood, not alphabetically.
+28	 *
+29	 * Both Homebrew prefixes are probed: /opt/homebrew is Apple Silicon, but an
+30	 * x86_64 Homebrew (including under Rosetta) installs to /usr/local, and
+31	 * hardcoding either one breaks half of all Macs.
+32	 */
+33	const PROBE_DIRS = [
+34	  "/opt/homebrew/bin",
+35	  "/usr/local/bin",
+36	  join(homedir(), ".cargo", "bin"),
+37	  join(homedir(), ".local", "bin"),
+38	  "/usr/bin",
+39	  "/bin",
+40	];
+41	
+42	/** macOS puts config, data, socket, and logs all in this one directory. */
+43	const MACOS_PUEUE_DIR = join(
+44	  homedir(),
+45	  "Library",
+46	  "Application Support",
+47	  "pueue",
+48	);
+49	
+50	let cachedPueue: string | undefined;
+51	let cachedPueued: string | undefined;
+52	
+53	function prefs(): Preferences {
+54	  return getPreferenceValues<Preferences>();
+55	}
+56	
+57	/**
+58	 * Absolute path to the `pueue` client.
+59	 *
+60	 * The preference is consulted *before* the module cache so that changing it
+61	 * takes effect immediately rather than after the next command launch, and it is
+62	 * existsSync-validated so a stale path degrades into the probe instead of
+63	 * producing an unexplained ENOENT.
+64	 */
+65	export function resolvePueue(): string {
+66	  const configured = prefs().pueuePath?.trim();
+67	  if (configured && existsSync(configured)) return configured;
+68	
+69	  if (cachedPueue && existsSync(cachedPueue)) return cachedPueue;
+70	
+71	  for (const dir of PROBE_DIRS) {
+72	    const candidate = join(dir, "pueue");
+73	    if (existsSync(candidate)) {
+74	      cachedPueue = candidate;
+75	      return candidate;
+76	    }
+77	  }
+78	  throw new PueueError("binary-not-found", "pueue CLI not found");
+79	}
+80	
+81	/**
+82	 * Absolute path to the `pueued` daemon, or undefined.
+83	 *
+84	 * Prefers the sibling of the resolved client: a Homebrew client driving a
+85	 * cargo-built daemon is version skew waiting to happen, and pueue v4 broke the
+86	 * wire protocol outright.
+87	 */
+88	export function resolvePueued(): string | undefined {
+89	  if (cachedPueued && existsSync(cachedPueued)) return cachedPueued;
+90	
+91	  try {
+92	    const sibling = join(dirname(resolvePueue()), "pueued");
+93	    if (existsSync(sibling)) return (cachedPueued = sibling);
+94	  } catch {
+95	    // No client either — fall through to the plain probe.
+96	  }
+97	  for (const dir of PROBE_DIRS) {
+98	    const candidate = join(dir, "pueued");
+99	    if (existsSync(candidate)) return (cachedPueued = candidate);
+100	  }
+101	  return undefined;
+102	}
+103	
+104	/**
+105	 * Environment for every spawn.
+106	 *
+107	 * HOME is passed through so pueue can find its config directory. NO_COLOR is
+108	 * deliberately *not* set: it has no effect on color_eyre's stderr (verified),
+109	 * and setting it would imply otherwise to the next reader.
+110	 */
+111	export function baseEnv(): NodeJS.ProcessEnv {
+112	  return { ...process.env, HOME: process.env.HOME ?? homedir() };
+113	}
+114	
+115	/** The `--config` path for the local connection, if the user pinned one. */
+116	export function configPath(): string | undefined {
+117	  const p = prefs().configPath?.trim();
+118	  return p ? expandTilde(p) : undefined;
+119	}
+120	
+121	/**
+122	 * Every connection, the implicit local one first.
+123	 *
+124	 * The local entry still honours the `configPath` preference — someone may keep
+125	 * a non-default local config — but is never treated as remote.
+126	 */
+127	export function connections(): Connection[] {
+128	  return [
+129	    {
+130	      name: LOCAL_CONNECTION_NAME,
+131	      mode: "local",
+132	      configPath: configPath(),
+133	      remote: false,
+134	    },
+135	    ...parseConnections(prefs().connections).connections,
+136	  ];
+137	}
+138	
+139	/**
+140	 * Lines of the `connections` preference we could not parse.
+141	 *
+142	 * Surfaced in the UI rather than swallowed: a typed line that produces nothing
+143	 * and says nothing is indistinguishable from the feature being broken.
+144	 */
+145	export function invalidConnectionLines(): string[] {
+146	  return parseConnections(prefs().connections).invalid;
+147	}
+148	
+149	export function defaultConnection(): Connection {
+150	  return connections()[0];
+151	}
+152	
+153	/** Look a connection up by name, falling back to local rather than throwing. */
+154	export function connectionByName(name: string | undefined): Connection {
+155	  const all = connections();
+156	  return all.find((c) => c.name === name) ?? all[0];
+157	}
+158	
+159	/**
+160	 * The directory pueue keeps state and logs in.
+161	 *
+162	 * `pueue_directory` in the config wins if it is set to something other than
+163	 * null; otherwise macOS's data dir, which is the same path as the config dir.
+164	 * Probed with a regex rather than a YAML parser — one optional key does not
+165	 * justify a dependency, and a miss only costs us the on-disk log fast path.
+166	 */
+167	export function pueueDirectory(): string | undefined {
+168	  const cfg = configPath() ?? join(MACOS_PUEUE_DIR, "pueue.yml");
+169	  try {
+170	    const yaml = readFileSync(cfg, "utf8");
+171	    const m =
+172	      /^\s*pueue_directory:\s*(?!null\s*$)(?:"([^"]+)"|'([^']+)'|(\S+))\s*$/m.exec(
+173	        yaml,
+174	      );
+175	    const dir = m?.[1] ?? m?.[2] ?? m?.[3];
+176	    if (dir) return dir.replace(/^~(?=\/|$)/, homedir());
+177	  } catch {
+178	    // No readable config — fall back to the platform default below.
+179	  }
+180	  return existsSync(MACOS_PUEUE_DIR) ? MACOS_PUEUE_DIR : undefined;
+181	}
+182	
+183	/**
+184	 * Where a task's captured output lives on disk.
+185	 *
+186	 * stdout and stderr are written to this one file, interleaved, uncompressed,
+187	 * with no timestamps or stream markers. Reading it directly is what `pueue log`
+188	 * itself does when `client.read_local_logs` is true (the default).
+189	 */
+190	export function taskLogPath(id: number): string | undefined {
+191	  const dir = pueueDirectory();
+192	  return dir ? join(dir, "task_logs", `${id}.log`) : undefined;
+193	}
+194	
+195	export function resolveBrew(): string | undefined {
+196	  for (const candidate of ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"]) {
+197	    if (existsSync(candidate)) return candidate;
+198	  }
+199	  return undefined;
+200	}
+201	
+202	/**
+203	 * True when pueued is managed by `brew services` on this machine.
+204	 *
+205	 * Gates the one-click "Start Daemon" action. Starting `pueued -d` from Raycast
+206	 * would make the daemon a child of Raycast's launchd process, so every task it
+207	 * later ran would inherit Raycast's minimal environment — the same PATH problem
+208	 * as above, except it silently poisons every future task instead of failing
+209	 * loudly once. Only offer the button when we can hand the job to launchd.
+210	 */
+211	export function isBrewManagedDaemon(): boolean {
+212	  return (
+213	    resolveBrew() !== undefined &&
+214	    existsSync(
+215	      join(homedir(), "Library", "LaunchAgents", "homebrew.mxcl.pueue.plist"),
+216	    )
+217	  );
+218	}
+219	
+220	/** Reset the probe caches. Only used by tests and preference changes. */
+221	export function clearBinaryCache(): void {
+222	  cachedPueue = undefined;
+223	  cachedPueued = undefined;
+224	}
+225
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:58:15Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm setting up the core domain layer by writing out the pure modules—starting with type definitions, then the probe module as an improvement, followed by capabilities, normalization, transport types, merging, ranking, and error handling.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 20:58:15Z)**_
+
+Now the pure domain layer. Starting with types.
+
+_**Agent (claude-opus-5 2026-07-26 20:58:16Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * The domain.
+ *
+ * Two nouns carry the whole extension, and the difference between them is the
+ * one thing worth getting right:
+ *
+ *   AgentSession — a *conversation*. Keyed by (agent, sessionId), which is also
+ *                  SpecStory's own primary key.
+ *   LiveAgent    — a *process*. NOT keyed by sessionId.
+ *
+ * Measured on the capture machine: `~/.claude/sessions/` held 49 files, all 49
+ * pids alive, but only 48 distinct sessionIds — pids 21952 and 95663 both
+ * reported sessionId 1b31cf2b-…, one idle and one busy. So the relation is
+ * SessionKey -> LiveAgent[], and any code that treats sessionId as a live-agent
+ * primary key silently drops one of the two.
+ *
+ * No @raycast/api in this file, or anywhere under lib/agents/. That is not
+ * stylistic: it is what lets src/lib/dev-check.ts compile with plain tsc and run
+ * under plain node, which is the only test harness a Raycast extension gets.
+ */
+
+/**
+ * Every agent we can name.
+ *
+ * `unknown` is a member rather than an error case so that a new agent appearing
+ * in herdr's output degrades to an unlabelled row instead of throwing. The list
+ * is the union of what herdr reports and what the session indexes contain, which
+ * are not the same set: SpecStory indexes cursor but has zero cursor rows here,
+ * and indexes no opencode at all.
+ */
+export type AgentKind =
+  | "claude"
+  | "codex"
+  | "opencode"
+  | "gemini"
+  | "cursor"
+  | "unknown";
+
+/**
+ * Normalized status, five values.
+ *
+ * Taken from herdr's own enum (`herdr api schema --json` ->
+ * `$defs.AgentStatus.enum` = ["idle","working","blocked","done","unknown"]) and
+ * asserted against it at `just verify` time, so a herdr upgrade that adds a
+ * state fails the build rather than rendering as a blank badge.
+ *
+ * Claude's registry speaks a different vocabulary — `idle` / `busy` — and maps
+ * in via normalizeStatus(). Two sources, one union.
+ */
+export type AgentStatus = "idle" | "working" | "blocked" | "done" | "unknown";
+
+/** A conversation. Matches SpecStory's `sessions` PK exactly. */
+export interface SessionKey {
+  agent: AgentKind;
+  sessionId: string;
+}
+
+/**
+ * Something the app can do, gated on a tool being present and working.
+ *
+ * Every one of these is optional. The three marked "always" need no binary and
+ * no third-party database — they are plain filesystem reads — which is what
+ * makes "every external tool absent" a supported configuration rather than a
+ * crash. dev-check asserts that exact scenario still returns results.
+ */
+export type Capability =
+  /** herdr binary present AND its server answering. */
+  | "live.herdr"
+  /** ~/.claude/sessions/*.json. Always available on a Mac that runs Claude Code. */
+  | "live.claude"
+  /** sqlite3 + ~/.specstory/sessions.db + the schema we expect. */
+  | "index.specstory"
+  /** sqlite3 + ~/.local/share/opencode/opencode.db. */
+  | "index.opencode"
+  /** ~/.claude/projects/. Always. */
+  | "index.claudefs"
+  /** ~/.codex/sessions/. Always. */
+  | "index.codexfs"
+  /** herdr focus / prompt / send-keys. Implies live.herdr. */
+  | "act.herdr"
+  /** codexbar CLI. */
+  | "quota.codexbar"
+  /** peon CLI. */
+  | "sound.peon"
+  /** pueue CLI, for agent-wakeup scheduling. */
+  | "queue.pueue";
+
+/**
+ * Why a capability is or is not available, and what to tell the user.
+ *
+ * The distinction that earns this type its keep: `available: false` with an
+ * `install` hint means *the tool is not on this machine*, which is normal and
+ * renders as a disabled affordance. A tool that is present but broken (herdr
+ * installed, server down) is NOT modelled here — that is an ErrorDescriptor,
+ * and it renders as a structural failure screen with a fix. Collapsing the two
+ * produces the worst possible message: "install herdr" to someone who has it.
+ */
+export interface CapabilityState {
+  capability: Capability;
+  available: boolean;
+  /** Human-readable, already ANSI-free. Shown in the Sources section. */
+  reason?: string;
+  /** Absolute path to the binary or database that satisfied this capability. */
+  resolvedPath?: string;
+  /** Rendered as a copyable hint when unavailable. */
+  install?: { label: string; command?: string; url?: string };
+  /** What picked up the slack, so the UI can say "using X instead". */
+  degradedTo?: Capability;
+}
+
+export type CapabilityMap = Readonly<Record<Capability, CapabilityState>>;
+
+/**
+ * A running agent process.
+ *
+ * `paneId` is not decoration. Verified against herdr 0.7.5: `herdr agent
+ * get|focus <target>` accepts a pane_id ("w3:p7") and nothing else — passing a
+ * terminal_id or the session UUID returns
+ * {"error":{"code":"agent_not_found","message":"agent target … not found"}}.
+ * So an agent without a paneId cannot be focused, and the UI must not offer it.
+ */
+export interface LiveAgent {
+  /** Stable within a snapshot: "herdr:w3:p7" | "claude-pid:18933". */
+  handle: string;
+  source: "herdr" | "claude-registry";
+  agent: AgentKind;
+  status: AgentStatus;
+  /** herdr reports the pane's shell cwd, which drifts from the project. */
+  cwd: string;
+  /** The join to AgentSession. Absent when we could not resolve one. */
+  session?: SessionKey;
+  title?: string;
+  /** herdr only. The ONLY accepted actuator target. */
+  paneId?: string;
+  workspaceId?: string;
+  tabId?: string;
+  /** claude-registry only. */
+  pid?: number;
+  /**
+   * herdr's detection rule, e.g. "live_prompt_box".
+   *
+   * Surfaced so the UI can say "detected" rather than "is". herdr infers state
+   * by scraping rendered terminal text — `herdr agent explain` returns
+   * `rule: live_prompt_box (region=prompt_box_body priority=950), evidence: "❯\n"`
+   * — so it is a good guess, not ground truth, and will lag a real change.
+   */
+  detectedBy?: string;
+  startedAt?: Date;
+}
+
+/**
+ * A stored conversation, from whichever index found it.
+ *
+ * Dates are `undefined` when unknown, never `new Date(0)` and never
+ * `new Date("")`. Measured: 7 rows in sessions.db have an empty `updated_at`,
+ * and they are exactly the `project_id='unknown'` rows — `created_at`,
+ * `origin_cwd` and `slug` are empty on the same rows. `new Date("")` is an
+ * Invalid Date that renders as "Invalid Date"; `new Date(0)` sorts to 1970 and
+ * looks like real data. Only `undefined` is honest.
+ */
+export interface AgentSession {
+  key: SessionKey;
+  title: string;
+  cwd?: string;
+  /** Display name for the grouping bucket. Derived from cwd, not project_id. */
+  project?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+  userTurns?: number;
+  totalTurns?: number;
+  /** The raw JSONL / rollout file, when we know it. */
+  transcriptPath?: string;
+  /** A matched .specstory/history/*.md, when one exists. */
+  markdownPath?: string;
+  /** Which index produced this, for the Sources UI and for dedupe precedence. */
+  origin: Capability;
+  /**
+   * fts5 rowid. Carried only so the snippet query can look up by rowid.
+   *
+   * rowid is fts5's real primary key; session_id is UNINDEXED, so the
+   * `session_id IN (…)` form is a table scan, not a lookup.
+   */
+  ftsRowId?: number;
+}
+
+/** Why a session matched, for the accessory row and for scoring. */
+export type MatchReason = "fts" | "prompt" | "title" | "cwd" | "live";
+
+export interface SessionHit {
+  session: AgentSession;
+  score: number;
+  matched: MatchReason[];
+  /**
+   * Highlighted excerpt. Fetched per-selection, never on the typeahead path.
+   *
+   * Measured: on the largest matching body (7.36 MB of 9.99 MB max, 257 KB avg)
+   * `snippet()` took 1144 ms against 20 ms for the same query without it — 57x.
+   * The cost scales with body size, so it is capped and off by default.
+   */
+  snippet?: string;
+  /** Every process currently running this conversation. Usually 0 or 1. */
+  live: LiveAgent[];
+}
+
+/**
+ * A read plus when it happened, as one value.
+ *
+ * The menu bar is restored from a database on Raycast restart rather than by
+ * re-running the command, so a stale render outlives a restart with no way to
+ * tell. Carrying `fetchedAt` inside the same cache entry as the data means the
+ * two can never drift, and lets the menu show an honest "Updated HH:MM".
+ */
+export interface Snapshot<T> {
+  data: T;
+  fetchedAt: Date;
+  /** Which capabilities actually contributed, so the UI can be specific. */
+  sources: Capability[];
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/agents/types.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:58:40Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Finding binaries, purely.
+ *
+ * Raycast runs extensions in a managed Node process under launchd, which never
+ * sources a shell rc: PATH is roughly /usr/bin:/bin and a bare `herdr` fails
+ * with `spawn herdr ENOENT`. Every spawn therefore uses an absolute path. A
+ * terminal hides this completely — `ray develop`'s console inherits your full
+ * PATH — so anything that touches this must be tested from Raycast root search.
+ *
+ * Why this module is pure, unlike the equivalent in the sibling Pueue
+ * extension: there, binary.ts imports @raycast/api for getPreferenceValues, so
+ * dev-check.ts cannot import it and re-declares PROBE_DIRS with a comment
+ * admitting the duplication. That list then has to be kept in sync by hand —
+ * and it already needed a new entry here (~/.opencode/bin). Splitting the
+ * decision (pure, tested) from the inputs (preferences, fs) means dev-check
+ * asserts the real probe order instead of a copy of it.
+ */
+
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+/**
+ * Ordered by likelihood, not alphabetically.
+ *
+ * Both Homebrew prefixes are probed: /opt/homebrew is Apple Silicon, but an
+ * x86_64 Homebrew (including under Rosetta) installs to /usr/local, and
+ * hardcoding either breaks half of all Macs.
+ *
+ * Two entries here are not in the sibling extension's list and are load-bearing:
+ *
+ *   ~/.opencode/bin — where OpenCode installs itself. In none of the six
+ *                     conventional directories. Measured on the capture machine:
+ *                     /Users/david/.opencode/bin/opencode.
+ *   /usr/bin        — where the ONLY sqlite3 on the capture machine lives.
+ *                     Homebrew does not install one by default, so a probe list
+ *                     that stops at the Homebrew prefixes finds nothing and the
+ *                     entire search feature silently disables.
+ */
+export const PROBE_DIRS: readonly string[] = [
+  "/opt/homebrew/bin",
+  "/usr/local/bin",
+  join(homedir(), ".local", "bin"),
+  join(homedir(), ".cargo", "bin"),
+  join(homedir(), ".opencode", "bin"),
+  "/usr/bin",
+  "/bin",
+];
+
+/** Injected so dev-check can drive the probe without touching the filesystem. */
+export type ExistsFn = (path: string) => boolean;
+
+export interface PickOptions {
+  /** The user's preference value, if they set one. Trimmed by the caller. */
+  configured?: string;
+  /** A previously resolved path, from the caller's module-level cache. */
+  cached?: string;
+  dirs?: readonly string[];
+}
+
+/**
+ * Resolve a binary to an absolute path, or undefined.
+ *
+ * Order is deliberate and asserted in dev-check:
+ *
+ *  1. The preference, BEFORE the cache — so changing it takes effect on the
+ *     next command launch rather than after a Raycast restart.
+ *  2. But only if it exists. A stale preference degrades into the probe instead
+ *     of producing an unexplained ENOENT, which is the difference between "the
+ *     path you set is gone, using the one I found" and a blank screen.
+ *  3. The cache, likewise existence-checked (a `brew uninstall` between calls).
+ *  4. The probe.
+ *
+ * Returns undefined rather than throwing. Absence is the normal case for every
+ * tool this extension talks to; only the caller knows whether that is fatal
+ * (it never is) or merely disabling (it always is).
+ */
+export function pickBinary(
+  name: string,
+  exists: ExistsFn,
+  opts: PickOptions = {},
+): string | undefined {
+  const configured = opts.configured?.trim();
+  if (configured && exists(configured)) return configured;
+
+  if (opts.cached && exists(opts.cached)) return opts.cached;
+
+  for (const dir of opts.dirs ?? PROBE_DIRS) {
+    const candidate = join(dir, name);
+    if (exists(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+/**
+ * Expand a leading `~`, and nothing else.
+ *
+ * Not a shell: `~user` is left alone because we cannot resolve another user's
+ * home without a lookup, and silently mangling it into $HOME/user would point
+ * at a path that usually exists and is always wrong.
+ */
+export function expandTilde(p: string): string {
+  return p.replace(/^~(?=\/|$)/, homedir());
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/agents/probe.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:58:43Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #1 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:58:43Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #3 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:59:25Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Flattening five vocabularies into one.
+ *
+ * Every source describes the same things differently:
+ *   herdr            status: idle | working | blocked | done | unknown
+ *   ~/.claude/sessions  status: idle | busy
+ *   SpecStory        agent: "claude" | "codex" | "gemini" | …
+ *   herdr            agent: "claude" | "codex" | "opencode" | …
+ *   opencode.db      no status at all; a `time_archived` column instead
+ *
+ * Pure, React-free, @raycast/api-free. The predicates below are allowlists on
+ * purpose — a denylist would silently mis-file whichever status herdr adds next,
+ * and "unknown" rendering as a grey dot is strictly better than "blocked"
+ * rendering as idle.
+ */
+
+import type { AgentKind, AgentSession, AgentStatus, SessionKey } from "./types";
+
+const AGENT_KINDS: readonly AgentKind[] = [
+  "claude",
+  "codex",
+  "opencode",
+  "gemini",
+  "cursor",
+  "unknown",
+];
+
+/**
+ * Map any source's agent label onto the union.
+ *
+ * SpecStory distinguishes `cursor` (the CLI) from `cursoride` (the IDE
+ * composer); both collapse to "cursor" here because the extension does not
+ * resume them differently. `antigravity`, `deepseek` and `droid` are SpecStory
+ * providers we have no live-state or resume story for, so they land on
+ * "unknown" and still show up in search — findable but not actionable, which is
+ * the honest rendering.
+ */
+export function normalizeAgent(raw: string | null | undefined): AgentKind {
+  const v = (raw ?? "").trim().toLowerCase();
+  if (!v) return "unknown";
+  if (v === "cursoride" || v === "cursor-agent") return "cursor";
+  if (v === "claude-code" || v === "claudecode") return "claude";
+  return (AGENT_KINDS as readonly string[]).includes(v)
+    ? (v as AgentKind)
+    : "unknown";
+}
+
+/**
+ * Map any source's status onto the union.
+ *
+ * "busy" is Claude's registry word for herdr's "working". They mean the same
+ * thing and the UI must not show both.
+ */
+export function normalizeStatus(raw: string | null | undefined): AgentStatus {
+  const v = (raw ?? "").trim().toLowerCase();
+  switch (v) {
+    case "idle":
+      return "idle";
+    case "working":
+    case "busy":
+    case "running":
+      return "working";
+    case "blocked":
+    case "waiting":
+      return "blocked";
+    case "done":
+    case "completed":
+      return "done";
+    default:
+      return "unknown";
+  }
+}
+
+/** True when this agent is waiting on a human. The menu bar's headline number. */
+export function needsAttention(status: AgentStatus): boolean {
+  return status === "blocked";
+}
+
+export function isActive(status: AgentStatus): boolean {
+  return status === "working" || status === "blocked";
+}
+
+export function keyOf(agent: AgentKind, sessionId: string): SessionKey {
+  return { agent, sessionId };
+}
+
+/** Stable string form of a SessionKey, for Map keys and React keys. */
+export function keyString(k: SessionKey): string {
+  return `${k.agent}:${k.sessionId}`;
+}
+
+export function sameSession(
+  a: SessionKey | undefined,
+  b: SessionKey | undefined,
+): boolean {
+  if (!a || !b) return false;
+  return a.agent === b.agent && a.sessionId === b.sessionId;
+}
+
+/**
+ * Parse a timestamp into a Date, or undefined.
+ *
+ * Guarded because both failure modes look like success:
+ *
+ *   new Date("")   -> Invalid Date. Renders literally as "Invalid Date", and
+ *                     every comparison with it is false, so it sorts wherever
+ *                     the sort happens to leave it.
+ *   new Date(0)    -> 1970-01-01. Sorts to the bottom and looks like real data.
+ *
+ * Measured: 7 rows in ~/.specstory/sessions.db have an empty `updated_at`, and
+ * they are exactly the rows with project_id='unknown' — created_at, origin_cwd
+ * and slug are empty on the same rows. They still have FTS bodies, so they are
+ * genuinely findable; they just have no date, and the UI says so.
+ *
+ * Accepts ISO 8601 (SpecStory, Claude transcripts), epoch milliseconds
+ * (~/.claude/history.jsonl, opencode.db) and epoch seconds (~/.codex/history.jsonl,
+ * and the statusline's resets_at). The seconds/milliseconds split is decided by
+ * magnitude: anything below 1e11 would be 1973 or earlier as milliseconds, and
+ * this data does not predate 2023.
+ */
+export function parseTs(
+  raw: string | number | null | undefined,
+): Date | undefined {
+  if (raw === null || raw === undefined) return undefined;
+
+  if (typeof raw === "number") {
+    if (!Number.isFinite(raw) || raw <= 0) return undefined;
+    const ms = raw < 1e11 ? raw * 1000 : raw;
+    const d = new Date(ms);
+    return Number.isNaN(d.getTime()) ? undefined : d;
+  }
+
+  const s = raw.trim();
+  if (!s) return undefined;
+
+  if (/^\d+$/.test(s)) return parseTs(Number(s));
+
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
+/**
+ * The best available title for a session.
+ *
+ * Measured: 341 of 470 rows in sessions.db have an empty `name`, so the first
+ * link in this chain misses ~70% of the time and the fallbacks are the common
+ * path, not the exception.
+ *
+ * Only `aiTitle` and `firstPrompt` cost I/O; both are resolved lazily and
+ * cached by the caller. The final fallback is a truncated session id, which is
+ * ugly but is never empty — a blank row is indistinguishable from a bug.
+ */
+export function titleOf(parts: {
+  name?: string | null;
+  aiTitle?: string | null;
+  slug?: string | null;
+  firstPrompt?: string | null;
+  sessionId: string;
+}): string {
+  const clean = (s: string | null | undefined): string | undefined => {
+    const v = s?.trim();
+    return v ? v : undefined;
+  };
+  return (
+    clean(parts.name) ??
+    clean(parts.aiTitle) ??
+    clean(parts.slug)?.replace(/-/g, " ") ??
+    clean(parts.firstPrompt) ??
+    parts.sessionId.slice(0, 8)
+  );
+}
+
+/** Collapse whitespace and truncate for a single-line accessory. */
+export function oneline(text: string, max = 140): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+}
+
+/**
+ * Normalize a directory for use as a grouping key.
+ *
+ * NOT for display and NOT for opening — only for deciding whether two rows are
+ * "the same project". /private/tmp and /tmp are the same directory on macOS
+ * (the former is the real path, the latter a symlink), and a trailing slash is
+ * meaningless, so both are folded away.
+ */
+export function normalizeCwd(cwd: string | null | undefined): string | undefined {
+  const v = cwd?.trim();
+  if (!v) return undefined;
+  const noSlash = v.length > 1 ? v.replace(/\/+$/, "") : v;
+  return noSlash.replace(/^\/private(?=\/(tmp|var)\b)/, "");
+}
+
+/**
+ * The bucket a session belongs to.
+ *
+ * Deliberately derived from cwd, never from SpecStory's `project_id`. Measured:
+ * this very repository appears under TWO project_ids — b1f0-5789-c7e2-3090
+ * (workspace-derived) and f1dd-2f59-be9e-fc79 (git-derived), both recorded in
+ * .specstory/.project.json as `workspace_id` and `git_id`. Grouping by
+ * project_id splits one project into two piles that look like different repos.
+ */
+export function projectOf(
+  cwd: string | null | undefined,
+  fallbackName?: string | null,
+): string | undefined {
+  const norm = normalizeCwd(cwd);
+  if (norm) {
+    const base = norm.split("/").filter(Boolean).pop();
+    if (base) return base;
+  }
+  return fallbackName?.trim() || undefined;
+}
+
+/**
+ * Sort newest first, with undated rows last.
+ *
+ * A total order, always: two rows with the same (or no) timestamp fall through
+ * to the session id so the list never reshuffles between renders on equal keys.
+ */
+export function byRecency(a: AgentSession, b: AgentSession): number {
+  const at = a.updatedAt?.getTime() ?? a.createdAt?.getTime();
+  const bt = b.updatedAt?.getTime() ?? b.createdAt?.getTime();
+  if (at !== undefined && bt !== undefined && at !== bt) return bt - at;
+  if (at !== undefined && bt === undefined) return -1;
+  if (at === undefined && bt !== undefined) return 1;
+  return a.key.sessionId.localeCompare(b.key.sessionId);
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/agents/normalize.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 20:59:56Z)**_
+
+<think><details><summary>Thought Process</summary>
+Moving on to write the type definitions for transport.ts, then tackle errors, capabilities, merge, and rank modules.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 20:59:56Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * The seams. TYPES ONLY — no runtime imports, so implementations can depend on
+ * this file without a cycle, and the factory lives in index.ts.
+ *
+ * There are six external tools here but only four seams, because a seam belongs
+ * to a *capability*, not to a tool. herdr implements LiveAgentSource and
+ * AgentActuator; SpecStory, OpenCode, the Claude filesystem and the Codex
+ * filesystem each implement SessionIndex; codexbar implements QuotaSource.
+ * Minting one Transport per tool would produce six near-identical interfaces
+ * with one implementation each forever, which is a taxonomy, not a seam.
+ *
+ * The rule inherited from the sibling Pueue extension still holds: actions are
+ * modelled as DATA, never as argv. If act() took a string[] of arguments, a
+ * future socket transport would have to parse argv back into intent — which is
+ * not a seam, it is a shell.
+ */
+
+import type {
+  AgentSession,
+  Capability,
+  LiveAgent,
+  SessionKey,
+  Snapshot,
+} from "./types";
+
+/** Every read takes one, so a superseded query cancels its own subprocess. */
+export interface ReadOptions {
+  signal?: AbortSignal;
+}
+
+/**
+ * Something that can list stored conversations.
+ *
+ * Four implementations, each independently optional:
+ *   specstory  — FTS5 over 470 sessions (claude 451, codex 18, gemini 1)
+ *   opencode   — 93 sessions, rich metadata, NO full-text index
+ *   claude-fs  — ~/.claude/projects/**\/*.jsonl, always available
+ *   codex-fs   — ~/.codex/sessions/**\/rollout-*.jsonl, always available
+ *
+ * `search` returning [] and `search` throwing are different: [] means "I looked
+ * and found nothing", throwing means "I could not look". The merger keeps
+ * going either way, but only the second is reported in the Sources section.
+ */
+export interface SessionIndex {
+  readonly capability: Capability;
+  /** Cheap enough to run on every keystroke. See the latency budget in docs/. */
+  search(query: string, limit: number, opts?: ReadOptions): Promise<IndexHit[]>;
+  /** No query. Backs the empty-search-text state. */
+  recent(limit: number, opts?: ReadOptions): Promise<AgentSession[]>;
+  /**
+   * A highlighted excerpt for ONE session.
+   *
+   * Optional because only SpecStory can do it, and expensive even there:
+   * measured 1144 ms on a 7.36 MB body against 20 ms for the same query
+   * without it. Never called from the typeahead path.
+   */
+  snippet?(session: AgentSession, query: string, opts?: ReadOptions): Promise<string | undefined>;
+}
+
+export interface IndexHit {
+  session: AgentSession;
+  /**
+   * The index's own relevance, lower is better, matching fts5's `rank`.
+   *
+   * Left in the index's native scale rather than pre-normalized, because
+   * normalization needs the whole result set and that only exists after the
+   * merge. rank.ts does it there.
+   */
+  rank: number;
+}
+
+/** Something that can enumerate running agent processes. */
+export interface LiveAgentSource {
+  readonly capability: Capability;
+  list(opts?: ReadOptions): Promise<LiveAgent[]>;
+  /**
+   * Cheap health check, separate from list().
+   *
+   * Exists to tell "not installed" from "installed but the server is down",
+   * which are different messages: one is an install hint, the other is a
+   * structural error with a fix. A list() that returns [] cannot distinguish
+   * them — and herdr with no socket prints a non-JSON
+   * `Error: Os { code: 2, kind: NotFound, … }` whose exit code is not a
+   * reliable discriminator either.
+   */
+  probe(opts?: ReadOptions): Promise<{ reachable: boolean; version?: string; detail?: string }>;
+}
+
+/**
+ * Actions, as data.
+ *
+ * v0.1 ships `focus` only — the extension is read-and-navigate, so nothing here
+ * needs an optimistic prediction and herdr's unmeasured reconcile latency
+ * blocks nothing. The rest of the union is declared now so that adding the
+ * implementation in v0.2 does not also mean redesigning the seam.
+ */
+export type AgentAction =
+  | { op: "focus"; agent: LiveAgent }
+  | { op: "prompt"; agent: LiveAgent; text: string }
+  | { op: "send-keys"; agent: LiveAgent; keys: string }
+  | { op: "rename"; agent: LiveAgent; name: string }
+  | { op: "wait"; agent: LiveAgent; until: "idle" | "working" | "blocked"; timeoutMs?: number };
+
+export interface AgentActuator {
+  readonly capability: Capability;
+  act(action: AgentAction, opts?: ReadOptions): Promise<void>;
+  /** Terminal scrollback for the detail pane. */
+  read(agent: LiveAgent, lines: number, opts?: ReadOptions): Promise<string>;
+  /** herdr's own explanation of why it thinks this agent is in this state. */
+  explain?(agent: LiveAgent, opts?: ReadOptions): Promise<string>;
+}
+
+/** v0.3. Declared here so the capability model has something to point at. */
+export interface QuotaSource {
+  readonly capability: Capability;
+  report(opts?: ReadOptions): Promise<unknown>;
+}
+
+/**
+ * What the views actually call.
+ *
+ * One facade over however many providers are available, so no view ever asks
+ * "is SpecStory installed" — it asks for sessions and gets whatever the machine
+ * can produce, plus the capability map describing what it could not.
+ */
+export interface Deck {
+  liveAgents(opts?: ReadOptions): Promise<Snapshot<LiveAgent[]>>;
+  searchSessions(query: string, limit: number, opts?: ReadOptions): Promise<Snapshot<AgentSession[]>>;
+  recentSessions(limit: number, opts?: ReadOptions): Promise<Snapshot<AgentSession[]>>;
+  resolveSnippet(session: AgentSession, query: string, opts?: ReadOptions): Promise<string | undefined>;
+  act(action: AgentAction, opts?: ReadOptions): Promise<void>;
+  readTerminal(agent: LiveAgent, lines: number, opts?: ReadOptions): Promise<string>;
+  /** The shell command that resumes this session, for copy and for run. */
+  resumeCommand(key: SessionKey, cwd?: string): string | undefined;
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/agents/transport.ts (file state is current in your context — no need to Read it back)
+```
 </details></tool-use>

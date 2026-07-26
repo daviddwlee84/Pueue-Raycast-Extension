@@ -17,21 +17,27 @@ shape isn't decided yet and there's a note in [`backlog/`](backlog/).
   and `fallback_to_default: true` will not surface the drift.
 - `[S]` **Remaining interactive pass** — paths needing a real keypress rather
   than a deeplink, not yet exercised: submitting the **Add Task** form, the
-  **Groups** action panel and its two confirmations, **Quick Add** from root
-  search, and firing an action from the **menu bar**.
+  **Groups** action panel and its confirmations (now including the four batch
+  actions and the `Custom…` parallelism form), **Quick Add** from root search,
+  and firing an action from the **menu bar**. Everything from v0.3.0 is in this
+  bucket, including the connection-switch fix — see the checklist in the commit
+  for `Stop an unreachable daemon from borrowing another one's queue`.
 
   Verified interactively already: `⌘⇧K` kill and `⌘⇧R` restart in the Tasks view
   (the optimistic update holds through the reconcile — no flicker), `⏎` log view,
   and `⌘L` live follow. The menu bar's rendering, title-at-zero, failure tint,
   and self-refresh on its interval are verified too.
+
+  Verified against a live daemon rather than in the UI: both
+  `restart --failed-in-group` forms, `clean --group`, and the fact that
+  `--failed-in-group` on a group with no failures — or no such group — exits 0
+  silently, which is why those actions are hidden rather than disabled.
 - `[S]` **Verify remote against a real second machine** — the plumbing is
   asserted and was exercised against a second client config, but never against
   an actual remote `pueued` over a forwarded socket. See
   [`docs/remote.md`](docs/remote.md).
 - `[S]` **`pueue send`** — a form to send input to a running task. Inherently
   best-effort: there is no way to know whether the process is reading stdin.
-- `[S]` **Dependency graph in the task detail** — render `dependencies[]` as
-  rows with their live status instead of a comma-separated list of ids.
 
 ## Docs site
 
@@ -51,24 +57,6 @@ Live at <https://daviddwlee84.github.io/Pueue-Raycast-Extension/>, bilingual
   remaps the page index. We kept `/llms.txt`. Revisit if llmstxt gains i18n
   awareness.
 
-## v0.3.0 candidates
-
-Connection UX is done; these are the next layer.
-
-- `[M]` **Group progress bars** — `pqsum` already shows `done/total`, a bar, and
-  an ETA per group, and the same numbers would read well as a `List.Item`
-  accessory or in the Groups detail. Everything needed is already in `State`:
-  done vs total per group, and `durationMs` over finished tasks gives the
-  average for an ETA. See `~/.local/share/chezmoi/docs/tools/pueue.md`.
-- `[L]` **A fleet view — all connections at once** — the equivalent of
-  `fleet pueue`: one row per (connection, group), read concurrently. Now cheap,
-  because SSH mode multiplexes at 10–30 ms per call, so N hosts is N parallel
-  reads rather than N handshakes. Needs a decision on failure isolation: one
-  unreachable host must degrade its own row, never the view.
-- `[S]` **Per-connection menu bar counts** — the menu bar follows one connection
-  today. Showing `2 local · 5 lab` would need a read per connection on every
-  interval, which is affordable now but should be opt-in.
-
 ## Later
 
 - `[M]` **`pueue edit`** — round-trip pueue's TOML edit payload through a Form.
@@ -79,7 +67,6 @@ Connection UX is done; these are the next layer.
 - `[M]` **Remote profiles** — a `--profile` switcher with per-profile caching.
   Needs a real YAML dependency to read the `profiles:` block, which is why it
   isn't done already.
-- `[S]` **Group-scoped clean** in the Groups view (`clean --group`).
 - `[S]` **`pueue wait` notifier** — a `no-view` command that watches until a
   group drains and HUDs.
 
@@ -95,6 +82,14 @@ Connection UX is done; these are the next layer.
 
 ## Won't do
 
+- **A fleet view — every connection in one list.** The `fleet pueue` equivalent:
+  one row per (connection, group), read concurrently. Technically cheap now that
+  SSH multiplexing puts a remote read at 10–30 ms, and dropped anyway — it would
+  make the extension meaningfully more complicated than the problem it solves.
+  Switching connection is already a keystroke, and the opt-in per-connection
+  counts on the menu bar's Connection rows answer "how are my machines" at a
+  fraction of the cost. Revisit only if someone is actually running enough hosts
+  to need it.
 - **`pueue add --escape` as a UI option.** It escapes spaces along with every
   other metacharacter, and the command is passed as a single argv element, so it
   collapses the whole line into one token. Verified: it turns
