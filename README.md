@@ -70,7 +70,7 @@ This is the single most likely "it's broken" report, and it isn't a bug in the e
 | **Pueue Binary Path** | auto-probe | Empty probes `/opt/homebrew/bin`, `/usr/local/bin`, `~/.cargo/bin`, `~/.local/bin`. |
 | **Pueue Config Path** | pueue's default | Passed as `--config`, and used to locate `task_logs/`. |
 | **Remote Connections** | none | Connections separated by `;`, because Raycast preference fields are single-line: `name \| client config path \| ssh host`. See [Remote daemons](#remote-daemons). |
-| **Confirm destructive actions** | on | Kill, remove, clean, and reset ask first. Menu bar destructive actions are always behind `⌥`. |
+| **Confirm destructive actions** | on | Kill, remove, clean, and reset ask first. The menu bar has no dialog available, so there the same setting puts those items behind `⌥` instead — turning this off removes both. |
 
 ### "It works in my terminal but the extension can't find pueue"
 

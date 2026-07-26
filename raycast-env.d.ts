@@ -14,7 +14,7 @@ type ExtensionPreferences = {
   "configPath"?: string,
   /** Remote Connections - Separate connections with ';'. Simplest form is just an SSH host you can already reach - everything runs over ssh, nothing to set up: local_ubuntu. Add a label with 'name | ssh-host', and the remote pueue path if it is not on the non-interactive PATH (a cargo install is not): 'lab | local_ubuntu | ~/.cargo/bin/pueue'. Advanced: a config path as the second field selects a forwarded socket instead. */
   "connections"?: string,
-  /** Confirmations - Ask before destructive actions in the view commands. Menu bar destructive actions are always behind ⌥ regardless of this setting. */
+  /** Confirmations - Ask before destructive actions. In the view commands this is a confirmation dialog. The menu bar has no dialog available - a Raycast alert cannot show while the menu is open - so there the same setting hides those items behind the Option key instead. Turn this off and both go away. */
   "confirmDestructive": boolean
 }
 

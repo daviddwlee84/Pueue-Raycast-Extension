@@ -65,6 +65,18 @@ export default function Command() {
   const prefs = getPreferenceValues<Preferences.QueueMenu>();
   const perSection = Math.max(1, Number(prefs.maxItemsPerSection) || 7);
 
+  /**
+   * Whether destructive menu bar items hide behind ⌥.
+   *
+   * The ⌥ hold *is* this menu's confirmation — `confirmAlert` presents in the
+   * Raycast window, which is closed while the menu is open, so there is no
+   * dialog to show. It therefore answers to the same preference: someone who
+   * turned confirmations off has said they don't want friction on destructive
+   * actions, and honouring that everywhere except here would be a surprise.
+   */
+  const guardDestructive =
+    getPreferenceValues<Preferences>().confirmDestructive;
+
   // Shares the selection with the view commands, so the menu bar and Tasks
   // never disagree about which daemon you're looking at.
   const [connectionName, setConnectionName] = useCachedState(
@@ -180,6 +192,7 @@ export default function Command() {
         tasks={running}
         limit={perSection}
         onShowLog={showLog}
+        guardDestructive={guardDestructive}
         actionsFor={(task) => [
           {
             title: "Kill",
@@ -203,6 +216,7 @@ export default function Command() {
         tasks={queued}
         limit={perSection}
         onShowLog={showLog}
+        guardDestructive={guardDestructive}
         actionsFor={(task) => [
           {
             title: "Start Now",
@@ -232,6 +246,7 @@ export default function Command() {
         tasks={failed}
         limit={perSection}
         onShowLog={showLog}
+        guardDestructive={guardDestructive}
         actionsFor={(task) => [
           // Two genuinely different operations, verified against the daemon:
           // --not-in-place mints a new task id and keeps the old log; --in-place
@@ -357,18 +372,25 @@ export default function Command() {
       </MenuBarExtra.Section>
 
       <MenuBarExtra.Section>
-        {/* ⌥-only: destructive, and there is no confirmation available here. */}
-        <MenuBarExtra.Item
-          title="Hold ⌥ to Clean Finished Tasks"
-          icon={Icon.Trash}
-          alternate={
-            <MenuBarExtra.Item
-              title="Clean Finished Tasks"
-              icon={Icon.Trash}
-              onAction={() => run({ op: "clean" }, "Cleaned finished tasks")}
-            />
-          }
-        />
+        {guardDestructive ? (
+          <MenuBarExtra.Item
+            title="Hold ⌥ to Clean Finished Tasks"
+            icon={Icon.Trash}
+            alternate={
+              <MenuBarExtra.Item
+                title="Clean Finished Tasks"
+                icon={Icon.Trash}
+                onAction={() => run({ op: "clean" }, "Cleaned finished tasks")}
+              />
+            }
+          />
+        ) : (
+          <MenuBarExtra.Item
+            title="Clean Finished Tasks"
+            icon={Icon.Trash}
+            onAction={() => run({ op: "clean" }, "Cleaned finished tasks")}
+          />
+        )}
       </MenuBarExtra.Section>
 
       <MenuBarExtra.Section>
@@ -410,6 +432,7 @@ function TaskSection(props: {
   actionsFor: (task: Task) => ItemAction[];
   run: (m: Mutation, done: string) => void;
   onShowLog: (taskId: number) => void;
+  guardDestructive: boolean;
 }) {
   if (props.tasks.length === 0) return null;
   const shown = props.tasks.slice(0, props.limit);
@@ -440,7 +463,7 @@ function TaskSection(props: {
             {props
               .actionsFor(task)
               .map((a) =>
-                a.alternate ? (
+                a.alternate && props.guardDestructive ? (
                   <MenuBarExtra.Item
                     key={a.title}
                     title={`Hold ⌥ to ${a.title}`}

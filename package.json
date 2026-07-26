@@ -177,7 +177,7 @@
       "name": "confirmDestructive",
       "title": "Confirmations",
       "label": "Confirm kill, remove, clean, and reset",
-      "description": "Ask before destructive actions in the view commands. Menu bar destructive actions are always behind \u2325 regardless of this setting.",
+      "description": "Ask before destructive actions. In the view commands this is a confirmation dialog. The menu bar has no dialog available - a Raycast alert cannot show while the menu is open - so there the same setting hides those items behind the Option key instead. Turn this off and both go away.",
       "type": "checkbox",
       "required": false,
       "default": true
