@@ -8,7 +8,11 @@
 
 import { snapshot, taskList } from "../lib/pueue";
 import { capped, toAiTask, type AiTask } from "../lib/ai-shape";
-import { connectionNames, resolveConnectionStrict } from "../lib/ai-connection";
+import {
+  connectionNames,
+  noRemotesNote,
+  resolveConnectionStrict,
+} from "../lib/ai-connection";
 
 type Input = {
   /**
@@ -40,7 +44,7 @@ type Input = {
 };
 
 export default async function tool(input: Input) {
-  const connection = resolveConnectionStrict(input.connection);
+  const connection = await resolveConnectionStrict(input.connection);
   const snap = await snapshot({ connection, group: input.group });
   const now = Date.now();
 
@@ -73,10 +77,13 @@ export default async function tool(input: Input) {
     Math.min(input.limit ?? 100, 100),
   );
 
+  const names = await connectionNames();
+
   return {
     connection: connection.name,
     isRemote: connection.remote,
-    availableConnections: connectionNames(),
+    availableConnections: names,
+    connectionsNote: noRemotesNote(names),
     matched: total,
     returned: items.length,
     truncated,

@@ -31,7 +31,7 @@ type Input = {
 };
 
 async function affected(input: Input) {
-  const connection = resolveConnectionStrict(input.connection);
+  const connection = await resolveConnectionStrict(input.connection);
   const snap = await snapshot({ connection });
   const failed = taskList(snap.state.tasks).filter(isFailed);
   if (input.taskIds && input.taskIds.length > 0) {

@@ -13,7 +13,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { getPreferenceValues } from "@raycast/api";
+import { getPreferenceValues, LocalStorage } from "@raycast/api";
 
 import {
   expandTilde,
@@ -119,12 +119,41 @@ export function configPath(): string | undefined {
 }
 
 /**
+ * Where commands leave the raw `connections` preference for the AI tools.
+ *
+ * Raycast does not pass extension-level preferences to a tool the way it does
+ * to a command — a tool sees an empty preference object, so `connections` comes
+ * back undefined and the extension looks, from inside an AI conversation, like
+ * it has no remotes configured. Observed: the menu bar listed `lab` and `nas`
+ * while a tool in the same session reported only `Local`.
+ *
+ * A `preferences` array on each `tools[]` entry is schema-valid (measured), but
+ * would mean configuring the same connection list once per tool. Mirroring it
+ * is one write when the value changes, and the commands run constantly — the
+ * menu bar alone refreshes every minute.
+ */
+export const AI_CONNECTIONS_KEY = "ai.connections.raw";
+
+/** The last value written, so a re-render is not a write. */
+let mirroredConnections: string | undefined;
+
+/**
  * Every connection, the implicit local one first.
  *
  * The local entry still honours the `configPath` preference — someone may keep
  * a non-default local config — but is never treated as remote.
  */
 export function connections(): Connection[] {
+  const raw = prefs().connections;
+
+  // Only a context that can actually see preferences writes the mirror. In a
+  // tool `raw` is undefined, and writing then would erase what the commands
+  // put there — the opposite of the point.
+  if (raw !== undefined && raw !== mirroredConnections) {
+    mirroredConnections = raw;
+    LocalStorage.setItem(AI_CONNECTIONS_KEY, raw).catch(() => {});
+  }
+
   return [
     {
       name: LOCAL_CONNECTION_NAME,
@@ -132,7 +161,7 @@ export function connections(): Connection[] {
       configPath: configPath(),
       remote: false,
     },
-    ...parseConnections(prefs().connections).connections,
+    ...parseConnections(raw).connections,
   ];
 }
 

@@ -9,7 +9,11 @@
 import { snapshot, taskList } from "../lib/pueue";
 import { summarizeGroups } from "../lib/group-summary";
 import { toAiGroup } from "../lib/ai-shape";
-import { connectionNames, resolveConnectionStrict } from "../lib/ai-connection";
+import {
+  connectionNames,
+  noRemotesNote,
+  resolveConnectionStrict,
+} from "../lib/ai-connection";
 
 type Input = {
   /** Which daemon to ask. Omit for this machine's own. */
@@ -19,7 +23,7 @@ type Input = {
 };
 
 export default async function tool(input: Input) {
-  const connection = resolveConnectionStrict(input.connection);
+  const connection = await resolveConnectionStrict(input.connection);
   const snap = await snapshot({ connection });
   const tasks = taskList(snap.state.tasks);
 
@@ -38,10 +42,13 @@ export default async function tool(input: Input) {
     groups = match;
   }
 
+  const names = await connectionNames();
+
   return {
     connection: connection.name,
     isRemote: connection.remote,
-    availableConnections: connectionNames(),
+    availableConnections: names,
+    connectionsNote: noRemotesNote(names),
     groups,
     notes: [
       "percentComplete counts every finished task, successful or not — a failed task is finished.",

@@ -36,7 +36,7 @@ type Input = {
 };
 
 async function affected(input: Input) {
-  const connection = resolveConnectionStrict(input.connection);
+  const connection = await resolveConnectionStrict(input.connection);
   const snap = await snapshot({ connection });
   let finished = taskList(snap.state.tasks).filter(isDone);
   if (input.group) finished = finished.filter((t) => t.group === input.group);

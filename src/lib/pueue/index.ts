@@ -37,6 +37,7 @@ export {
 } from "./errors";
 export type { PueueErrorKind } from "./errors";
 export {
+  AI_CONNECTIONS_KEY,
   connectionByName,
   connections,
   defaultConnection,

@@ -70,6 +70,37 @@ Every mutating tool here uses it. None of them is silent.
   running tasks included. No sentence is ambiguous enough to be worth that; it
   stays a deliberate action in the Groups view.
 
+## Preferences do not reach a tool
+
+Found by using it: the menu bar listed `lab` and `nas` while a tool in the same
+session reported `availableConnections: ["Local"]`. Raycast passes
+extension-level preferences to *commands*; a tool gets an empty preference
+object, so `connections` comes back `undefined` and every remote disappears.
+
+Nothing fails loudly. `pueuePath` degrades into the probe, which finds Homebrew's
+pueue anyway, so the tools work perfectly against the local daemon and simply
+cannot see any other one.
+
+Two fixes were possible:
+
+| | |
+| --- | --- |
+| a `preferences` array on each `tools[]` entry | schema-valid — `ray lint` accepts it, measured — but it would mean configuring the same connection list once per tool, eight times over |
+| mirror the raw preference into `LocalStorage` | one write when the value changes, read by the tools as a fallback |
+
+The mirror won. `connections()` writes `AI_CONNECTIONS_KEY` whenever it sees a
+preference value that differs from the last one written, and **only** when it can
+see preferences at all — in a tool the value is `undefined`, and writing then
+would erase what the commands put there. The commands run constantly; the menu
+bar alone refreshes every minute.
+
+`toolConnections()` prefers the real preference and falls back to the mirror, so
+nothing has to change if Raycast ever starts passing them through.
+
+When a tool can still see only `Local` it says which of the two things is true —
+"no remotes are configured" and "I cannot see your remotes" are different claims,
+and only one of them is safe to make.
+
 ## Requirements
 
 Raycast's docs state that AI Extensions need a Pro subscription. In practice a

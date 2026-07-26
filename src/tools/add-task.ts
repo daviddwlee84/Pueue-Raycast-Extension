@@ -42,7 +42,7 @@ type Input = {
 };
 
 export const confirmation: Tool.Confirmation<Input> = async (input) => {
-  const connection = resolveConnectionStrict(input.connection);
+  const connection = await resolveConnectionStrict(input.connection);
   return {
     // Not Destructive: this adds work rather than destroying any. It still
     // confirms, because the command was assembled from prose.
@@ -71,7 +71,7 @@ export const confirmation: Tool.Confirmation<Input> = async (input) => {
 };
 
 export default async function tool(input: Input) {
-  const connection = resolveConnectionStrict(input.connection);
+  const connection = await resolveConnectionStrict(input.connection);
   const id = await mutate(
     {
       op: "add",

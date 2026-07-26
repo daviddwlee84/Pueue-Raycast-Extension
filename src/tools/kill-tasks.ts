@@ -37,7 +37,7 @@ type Input = {
 
 /** The tasks a request would actually stop — killing only affects live ones. */
 async function affected(input: Input) {
-  const connection = resolveConnectionStrict(input.connection);
+  const connection = await resolveConnectionStrict(input.connection);
   const snap = await snapshot({ connection });
   const live = taskList(snap.state.tasks).filter(
     (t) => isRunning(t) || isPaused(t),

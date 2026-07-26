@@ -39092,3 +39092,4806 @@ Multi-agent 方面，`SessionIndex` 是有 4 個實作的 provider interface —
 剩 3 件：session index providers（specstory/opencode/claude-fs/codex-fs 的 cli 層）、4 個 command 的 UI、docs/pitfalls/backlog。
 
 一個提醒：v0.2 的 mutation 我留成 stub，**因為 herdr 的 reconcile 延遲還沒量**。不能直接抄 Pueue extension 的 400/1500ms —— 那是 pueued 的 update loop，herdr 是靠 scrape 終端機畫面判斷狀態（`rule: live_prompt_box, evidence: "❯\n"`），機制不同，大概率更慢也更吵。
+
+---
+
+_**User (2026-07-26 21:29:34Z)**_
+
+所以現在是什麼情況？需要幫忙？還是可以繼續？
+
+---
+
+_**Agent (claude-opus-5 2026-07-26 21:29:52Z)**_
+
+<think><details><summary>Thought Process</summary>
+I can continue without help. Let me move forward with the remaining tasks: session index providers, then commands, and finally the documentation.
+
+One thing to keep in mind for later testing—I'll need to verify this works from the Raycast root search, not just the dev console, since that's where the launchd PATH issue shows up. But that's a validation step further down.
+
+Let me focus on building the backbone first: specstory's CLI and binary, then the facade layer in agents/index.ts, then wire it into sessions.tsx to get a working vertical slice end-to-end. Once that's proven, I'll fill in the other index providers.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:29:52Z)**_
+
+沒有卡住，可以繼續。目前沒有需要你決定的事。
+
+唯一之後會需要你的地方：UI 做完後要**從 Raycast root search 實測**（不能只在 `ray develop` console 裡看）——launchd 的 PATH 環境跟終端機不一樣，只在終端機測過等於沒測。那是後面的事。
+
+繼續：先把 SpecStory 的 cli 層 + facade + `sessions.tsx` 打通，這是能證明「搜尋結果 ↔ 活著的 process」那個 join 的最薄一刀。
+
+_**Agent (claude-opus-5 2026-07-26 21:30:28Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #4 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:30:29Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * The SpecStory index, read through /usr/bin/sqlite3.
+ *
+ * Why a subprocess and not a library: Raycast's runtime is Node 22, where
+ * `node:sqlite` exists but is gated behind `--experimental-sqlite`, and Raycast
+ * controls the argv of the process it starts. A native module (better-sqlite3)
+ * would need a prebuilt binary per architecture inside the extension bundle,
+ * which the store does not want. macOS ships sqlite3 3.51 with FTS5 and -json
+ * at /usr/bin, which is all this needs — but note it is ONLY at /usr/bin on a
+ * stock machine, so the probe list has to reach that far.
+ *
+ * This is a third party's private database, opened read-only. We never write.
+ */
+
+import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { promisify } from "node:util";
+
+import { AgentDeckError, classifySqlite, fromExecError } from "../agents/errors";
+import { keyOf, normalizeAgent, parseTs, projectOf, titleOf } from "../agents/normalize";
+import { pickBinary } from "../agents/probe";
+import type { IndexHit, ReadOptions, SessionIndex } from "../agents/transport";
+import type { AgentSession } from "../agents/types";
+import { looksBalanced, toFts5 } from "./fts";
+import {
+  dbUri,
+  parseRows,
+  probeQuery,
+  rankQuery,
+  recentQuery,
+  snippetQuery,
+  warmupQuery,
+} from "./sql";
+import { schemaOk, type ProbeRow, type SessionRow, type SnippetRow } from "./wire";
+
+const run = promisify(execFile);
+
+/** Measured: the rank query is 282 ms including the spawn. */
+const QUERY_TIMEOUT_MS = 8_000;
+
+/**
+ * Snippets get their own, shorter budget.
+ *
+ * Measured: snippet() on the largest matching body (7.36 MB) took 1144 ms
+ * against 20 ms for the same MATCH without it — 57x, and the table's largest
+ * body is 10.5 MB. Rather than make the user wait an unbounded amount for a
+ * decoration, give up and say why.
+ */
+const SNIPPET_TIMEOUT_MS = 2_000;
+
+/** 470 sessions of metadata is small; a transcript body is not. */
+const BIG_BUFFER = 32 * 1024 * 1024;
+
+let cachedSqlite: string | undefined;
+
+export function resolveSqlite(configured?: string): string | undefined {
+  const found = pickBinary("sqlite3", existsSync, { configured, cached: cachedSqlite });
+  if (found) cachedSqlite = found;
+  return found;
+}
+
+export function defaultDbPath(): string {
+  return `${homedir()}/.specstory/sessions.db`;
+}
+
+export function clearSqliteCache(): void {
+  cachedSqlite = undefined;
+}
+
+async function query<T>(
+  bin: string,
+  uri: string,
+  sql: string,
+  timeout: number,
+  opts?: ReadOptions,
+): Promise<T[]> {
+  try {
+    const { stdout, stderr } = await run(bin, ["-json", uri, sql], {
+      timeout,
+      maxBuffer: BIG_BUFFER,
+      signal: opts?.signal,
+      encoding: "utf8",
+    });
+    const classified = classifySqlite({ stderr, exitCode: 0 });
+    if (classified) throw classified;
+    // parseRows, never JSON.parse: sqlite3 -json prints NOTHING for zero rows.
+    return parseRows<T>(stdout);
+  } catch (e) {
+    if (e instanceof AgentDeckError) throw e;
+    const err = e as { stderr?: string; code?: number | string; killed?: boolean };
+    if (!err.killed && typeof err.stderr === "string" && err.stderr.trim()) {
+      const classified = classifySqlite({
+        stderr: err.stderr,
+        exitCode: typeof err.code === "number" ? err.code : null,
+      });
+      if (classified) throw classified;
+    }
+    throw fromExecError(e, "index.specstory", [bin, "-json", uri]);
+  }
+}
+
+/**
+ * One database row -> one AgentSession.
+ *
+ * Every date goes through parseTs, which returns undefined rather than
+ * `new Date("")` (Invalid Date) or `new Date(0)` (1970). Measured: 7 of 470
+ * rows have no usable timestamp at all, and they are the same 7 rows that have
+ * no cwd, no slug and no name — they are still findable by full text, they just
+ * have nothing else, and the UI says "date unknown" rather than inventing one.
+ */
+function toSession(row: SessionRow): AgentSession {
+  const agent = normalizeAgent(row.agent);
+  return {
+    key: keyOf(agent, row.sid),
+    title: titleOf({ name: row.name, slug: row.slug, sessionId: row.sid }),
+    cwd: row.cwd ?? undefined,
+    // From the cwd, never from project_id — one repository can have two of
+    // those (a workspace-derived id and a git-derived one), and grouping by it
+    // splits a single project into two piles.
+    project: projectOf(row.cwd, row.project_name),
+    createdAt: parseTs(row.created_at),
+    updatedAt: parseTs(row.ts),
+    userTurns: row.user_turns ?? undefined,
+    totalTurns: row.total_turns ?? undefined,
+    transcriptPath: row.native_path ?? undefined,
+    origin: "index.specstory",
+    ftsRowId: row.rid ?? undefined,
+  };
+}
+
+export function createSpecstoryIndex(bin: string, dbPath: string): SessionIndex {
+  const uri = dbUri(dbPath);
+  let warmed = false;
+
+  return {
+    capability: "index.specstory",
+
+    async search(text: string, limit: number, opts?: ReadOptions): Promise<IndexHit[]> {
+      const { expr, raw } = toFts5(text);
+      if (!expr) return [];
+
+      // Only raw (/-prefixed) expressions can be unbalanced; generated ones are
+      // balanced by construction. Catching it here saves a subprocess round
+      // trip and turns the error into an instant grammar hint.
+      if (raw && !looksBalanced(expr)) {
+        throw new AgentDeckError("bad-query", "Unbalanced quote", {
+          source: "index.specstory",
+          detail: 'That expression has an odd number of " characters.',
+        });
+      }
+
+      // Ask for more rows than we want: 81 of 470 sessions have more than one
+      // row in sessions_fts (worst case 6), so asking for exactly N would
+      // return fewer than N distinct sessions after dedupe.
+      const fanout = Math.min(Math.max(limit * 3, 30), 300);
+      const rows = await query<SessionRow>(bin, uri, rankQuery(expr, fanout), QUERY_TIMEOUT_MS, opts);
+      return rows.map((row) => ({
+        session: toSession(row),
+        // fts5's rank: negative, lower is better. Left in its native scale —
+        // normalizing needs the whole merged result set, which only exists
+        // after every index has answered.
+        rank: typeof row.r === "number" ? row.r : 0,
+      }));
+    },
+
+    async recent(limit: number, opts?: ReadOptions): Promise<AgentSession[]> {
+      const rows = await query<SessionRow>(bin, uri, recentQuery(limit), QUERY_TIMEOUT_MS, opts);
+      return rows.map(toSession);
+    },
+
+    async snippet(session: AgentSession, text: string, opts?: ReadOptions): Promise<string | undefined> {
+      const rowId = session.ftsRowId;
+      if (rowId === undefined) return undefined;
+      const { expr } = toFts5(text);
+      if (!expr) return undefined;
+
+      try {
+        const rows = await query<SnippetRow>(bin, uri, snippetQuery(expr, rowId), SNIPPET_TIMEOUT_MS, opts);
+        return rows[0]?.snip ?? undefined;
+      } catch (e) {
+        // A snippet is a decoration. Timing out on a 10 MB body must not take
+        // the row down with it — the caller renders the row without a preview.
+        if (e instanceof AgentDeckError && (e.kind === "timeout" || e.kind === "bad-query")) return undefined;
+        throw e;
+      }
+    },
+  };
+}
+
+/**
+ * Is this database the shape we expect?
+ *
+ * SpecStory owns the schema and can change it. Checking up front lets a changed
+ * schema degrade to the filesystem readers with an honest message, instead of
+ * throwing "no such column" from the middle of someone's search.
+ */
+export async function probeSpecstory(
+  bin: string,
+  dbPath: string,
+  opts?: ReadOptions,
+): Promise<{ ok: boolean; detail?: string; rows?: number }> {
+  try {
+    const rows = await query<ProbeRow>(bin, dbUri(dbPath), probeQuery(), QUERY_TIMEOUT_MS, opts);
+    const row = rows[0];
+    if (!schemaOk(row)) {
+      return {
+        ok: false,
+        detail:
+          "The session index is not the shape this extension expects. SpecStory owns " +
+          "that database and can change it; search falls back to reading transcripts on disk.",
+      };
+    }
+    return { ok: true, rows: row?.rows };
+  } catch (e) {
+    return { ok: false, detail: e instanceof AgentDeckError ? e.detail : String(e) };
+  }
+}
+
+/**
+ * Fault the index into the page cache before the user has typed.
+ *
+ * The first query after a reboot pays for reading a 290 MB b-tree off disk.
+ * Fired at view mount and deliberately not awaited: the list renders from
+ * recent() meanwhile, so the cost is paid during the time the user spends
+ * looking at the window rather than during their first keystroke.
+ */
+export function warmSpecstory(bin: string, dbPath: string): void {
+  run(bin, ["-json", dbUri(dbPath), warmupQuery()], {
+    timeout: QUERY_TIMEOUT_MS,
+    maxBuffer: 1024,
+  }).catch(() => {
+    // A failed warm-up is not worth reporting: whatever went wrong will be
+    // reported properly by the real query a moment later.
+  });
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/specstory/cli.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:31:05Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm focusing on the filesystem index modules as the foundation—paths.ts and history.ts are the quick wins that enable prompt search and session transcript lookup. For the vertical slice, I need to wire these together with the facade agents and sessions component to complete the flow.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:31:05Z)**_
+
+Now the Claude filesystem readers — the always-available fallback.
+
+_**Agent (claude-opus-5 2026-07-26 21:31:06Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Where Claude Code keeps things, and the one directory name you must not trust.
+ *
+ * ~/.claude/projects/<mangled-cwd>/<sessionId>.jsonl
+ *
+ * The directory name is the absolute cwd with `/`, `.` and `_` ALL replaced by
+ * `-`. Three characters map onto one, so the mapping is many-to-one and cannot
+ * be inverted:
+ *
+ *   /Users/dev/.local/share/chezmoi   ->  -Users-dev--local-share-chezmoi
+ *   /Users/dev/zyc_friend_backup      ->  -Users-dev-zyc-friend-backup
+ *
+ * Given `-Users-dev-a-b` the original could be /Users/dev/a/b, /Users/dev/a.b,
+ * /Users/dev/a_b, /Users/dev.a/b, and so on. Any code that "un-mangles" a
+ * directory name produces a path that usually exists and is sometimes wrong,
+ * which is the worst kind of bug: it opens someone else's project.
+ *
+ * So: never invert it. Read `cwd` from inside the file, or glob for the session
+ * id across all project directories — the id is a UUID and is unique.
+ */
+
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+/**
+ * Claude Code's config root.
+ *
+ * CLAUDE_CONFIG_DIR may hold a comma-separated list; the first entry wins,
+ * which is what Claude Code itself treats as primary.
+ */
+export function claudeHome(configured?: string): string {
+  const pref = configured?.trim();
+  if (pref) return pref.replace(/^~(?=\/|$)/, homedir());
+  const env = process.env.CLAUDE_CONFIG_DIR?.split(",")[0]?.trim();
+  if (env) return env;
+  return join(homedir(), ".claude");
+}
+
+export function projectsDir(home: string): string {
+  return join(home, "projects");
+}
+
+export function historyPath(home: string): string {
+  return join(home, "history.jsonl");
+}
+
+/** A transcript file, as found on disk. */
+export interface TranscriptRef {
+  sessionId: string;
+  path: string;
+  /** The mangled directory name. Useful as a weak grouping hint, never a path. */
+  bucket: string;
+  mtimeMs: number;
+  size: number;
+}
+
+/**
+ * Every transcript, newest first.
+ *
+ * One readdir per project directory, no file contents read. Measured on the
+ * capture machine: 40 project directories holding 1455 .jsonl files, which is
+ * a few milliseconds of stat calls — cheap enough to do on every search, and
+ * the reason this can be the always-available fallback.
+ *
+ * Subagent transcripts live at <sessionId>/subagents/agent-*.jsonl and are
+ * skipped: they are not separately resumable, and including them would show
+ * one conversation as dozens of rows.
+ */
+export function listTranscripts(projects: string, limit = 5000): TranscriptRef[] {
+  if (!existsSync(projects)) return [];
+
+  let buckets: string[];
+  try {
+    buckets = readdirSync(projects);
+  } catch {
+    return [];
+  }
+
+  const out: TranscriptRef[] = [];
+  for (const bucket of buckets) {
+    const dir = join(projects, bucket);
+    let names: string[];
+    try {
+      names = readdirSync(dir);
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      if (!name.endsWith(".jsonl")) continue;
+      const path = join(dir, name);
+      try {
+        const st = statSync(path);
+        if (!st.isFile()) continue;
+        out.push({
+          sessionId: name.slice(0, -".jsonl".length),
+          path,
+          bucket,
+          mtimeMs: st.mtimeMs,
+          size: st.size,
+        });
+      } catch {
+        // Raced with a delete. Skip it.
+      }
+    }
+    if (out.length > limit * 4) break;
+  }
+
+  out.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return out.slice(0, limit);
+}
+
+/**
+ * Find one session's transcript.
+ *
+ * Searches by filename across every project directory rather than deriving the
+ * directory from a cwd — see the note at the top of this file. Session ids are
+ * UUIDs, so the first hit is the only hit.
+ */
+export function findTranscript(projects: string, sessionId: string): string | undefined {
+  if (!existsSync(projects)) return undefined;
+  let buckets: string[];
+  try {
+    buckets = readdirSync(projects);
+  } catch {
+    return undefined;
+  }
+  for (const bucket of buckets) {
+    const candidate = join(projects, bucket, `${sessionId}.jsonl`);
+    if (existsSync(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+/**
+ * Codex keeps rollouts under a date tree, not a project tree.
+ *
+ * ~/.codex/sessions/YYYY/MM/DD/rollout-<ISO>-<uuid>.jsonl
+ *
+ * Note there is NO ~/.codex/session_index.jsonl on a current install, despite
+ * what some tooling assumes — verified absent on the capture machine, which had
+ * 19 rollout files and no index.
+ */
+export function codexSessionsDir(codexHome: string): string {
+  return join(codexHome, "sessions");
+}
+
+export function codexHistoryPath(codexHome: string): string {
+  return join(codexHome, "history.jsonl");
+}
+
+/** Rollout files, newest first. Walks the YYYY/MM/DD tree. */
+export function listCodexRollouts(sessions: string, limit = 2000): TranscriptRef[] {
+  if (!existsSync(sessions)) return [];
+  const out: TranscriptRef[] = [];
+
+  const walk = (dir: string, depth: number): void => {
+    if (depth > 4 || out.length > limit * 4) return;
+    let names: string[];
+    try {
+      names = readdirSync(dir, { withFileTypes: true }).map((d) => (d.isDirectory() ? `/${d.name}` : d.name));
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      if (name.startsWith("/")) {
+        walk(join(dir, name.slice(1)), depth + 1);
+        continue;
+      }
+      if (!name.startsWith("rollout-") || !name.endsWith(".jsonl")) continue;
+      const path = join(dir, name);
+      try {
+        const st = statSync(path);
+        // The uuid is the last 36 characters before the extension. The real id
+        // is inside the file's session_meta record; this is the cheap guess
+        // used for listing, and the reader corrects it when it opens the file.
+        const m = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i.exec(name);
+        out.push({
+          sessionId: m?.[1] ?? name.slice("rollout-".length, -".jsonl".length),
+          path,
+          bucket: dir,
+          mtimeMs: st.mtimeMs,
+          size: st.size,
+        });
+      } catch {
+        // Raced with a delete.
+      }
+    }
+  };
+
+  walk(sessions, 0);
+  out.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return out.slice(0, limit);
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/claude/paths.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:31:36Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * The prompt history: every prompt you have ever submitted, in one small file.
+ *
+ * ~/.claude/history.jsonl, measured at 548 KB / 1508 lines on the capture
+ * machine. One line per submitted prompt:
+ *
+ *   {"display":"fix the retry loop","pastedContents":{},
+ *    "timestamp":1770440530332,"project":"/Users/dev/x","sessionId":"…"}
+ *
+ * Two things make it worth reading even though SpecStory's FTS index is better
+ * at full text:
+ *
+ *  1. `project` is the REAL cwd, unmangled. It is the cheapest correct answer
+ *     to "where was this run", and ~/.claude/projects/ cannot give it.
+ *  2. It covers sessions SpecStory never indexed — anything from before
+ *     SpecStory was installed, or run outside a synced project.
+ *
+ * Codex keeps the same idea at ~/.codex/history.jsonl with different field
+ * names and epoch SECONDS instead of milliseconds.
+ *
+ * Pure apart from one readFileSync, cached on mtime. No @raycast/api.
+ */
+
+import { readFileSync, statSync } from "node:fs";
+
+import { parseTs } from "../agents/normalize";
+import type { AgentKind } from "../agents/types";
+
+export interface PromptEntry {
+  agent: AgentKind;
+  sessionId: string;
+  /** The prompt text as submitted. */
+  text: string;
+  /** The real working directory. Unmangled, unlike the projects/ dir name. */
+  cwd?: string;
+  at?: Date;
+  /** True when the prompt carried pasted files, which are not stored here. */
+  hasPaste: boolean;
+}
+
+interface ClaudeRow {
+  display?: string;
+  project?: string;
+  sessionId?: string;
+  timestamp?: number;
+  pastedContents?: Record<string, unknown>;
+}
+
+interface CodexRow {
+  text?: string;
+  session_id?: string;
+  /** Epoch SECONDS here, not milliseconds. */
+  ts?: number;
+}
+
+interface CacheEntry {
+  mtimeMs: number;
+  size: number;
+  entries: PromptEntry[];
+}
+
+const cache = new Map<string, CacheEntry>();
+
+/**
+ * Read and parse, or return the cached parse.
+ *
+ * Keyed on mtime AND size: mtime alone has one-second granularity on some
+ * filesystems, and this file is appended to several times a minute.
+ */
+export function readPromptHistory(path: string, agent: AgentKind): PromptEntry[] {
+  let mtimeMs: number;
+  let size: number;
+  try {
+    const st = statSync(path);
+    mtimeMs = st.mtimeMs;
+    size = st.size;
+  } catch {
+    return [];
+  }
+
+  const hit = cache.get(path);
+  if (hit && hit.mtimeMs === mtimeMs && hit.size === size) return hit.entries;
+
+  let text: string;
+  try {
+    text = readFileSync(path, "utf8");
+  } catch {
+    return [];
+  }
+
+  const entries = parsePromptHistory(text, agent);
+  cache.set(path, { mtimeMs, size, entries });
+  return entries;
+}
+
+/** Pure. Exported so dev-check can drive it from a fixture. */
+export function parsePromptHistory(text: string, agent: AgentKind): PromptEntry[] {
+  const out: PromptEntry[] = [];
+
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    let row: ClaudeRow & CodexRow;
+    try {
+      row = JSON.parse(line) as ClaudeRow & CodexRow;
+    } catch {
+      // A torn final line is normal — the file is appended to live.
+      continue;
+    }
+
+    const sessionId = (row.sessionId ?? row.session_id ?? "").trim();
+    const body = (row.display ?? row.text ?? "").trim();
+    if (!sessionId || !body) continue;
+
+    out.push({
+      agent,
+      sessionId,
+      text: body,
+      cwd: row.project?.trim() || undefined,
+      // parseTs handles both scales: Claude writes epoch ms, Codex epoch
+      // seconds, and the magnitude branch keeps Codex out of 1973.
+      at: parseTs(row.timestamp ?? row.ts),
+      hasPaste: Boolean(row.pastedContents && Object.keys(row.pastedContents).length > 0),
+    });
+  }
+  return out;
+}
+
+/**
+ * Sessions whose prompts contain every token.
+ *
+ * A plain case-insensitive substring AND — not fuzzy, not ranked. This exists
+ * to catch what the FTS index cannot see, and to supply the real cwd; SpecStory
+ * does the relevance work when it is available.
+ *
+ * Returns at most one entry per session (the most recent matching prompt),
+ * because a session where you asked the same thing five times is still one
+ * session, and five identical rows is not more information.
+ */
+export function searchPrompts(
+  entries: readonly PromptEntry[],
+  tokens: readonly string[],
+  limit: number,
+): PromptEntry[] {
+  if (tokens.length === 0) return [];
+  const needles = tokens.map((t) => t.toLowerCase()).filter((t) => t.length > 0);
+  if (needles.length === 0) return [];
+
+  const best = new Map<string, PromptEntry>();
+  // Walk backwards: the file is append-ordered, so the last match for a session
+  // is its most recent prompt, and that is the one worth showing.
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i];
+    if (best.has(e.sessionId)) continue;
+    const hay = e.text.toLowerCase();
+    if (!needles.every((n) => hay.includes(n))) continue;
+    best.set(e.sessionId, e);
+    if (best.size >= limit) break;
+  }
+  return [...best.values()];
+}
+
+/**
+ * The first prompt of a session, for the title chain.
+ *
+ * Cheap enough to call per row: the whole file is already parsed and in memory.
+ * Slash commands are skipped — "/exit" and "/clear" are real entries here and
+ * make a terrible title.
+ */
+export function firstPromptOf(entries: readonly PromptEntry[], sessionId: string): string | undefined {
+  for (const e of entries) {
+    if (e.sessionId !== sessionId) continue;
+    if (e.text.startsWith("/")) continue;
+    return e.text;
+  }
+  return undefined;
+}
+
+/** The real cwd for a session, which the projects/ directory name cannot give. */
+export function cwdOf(entries: readonly PromptEntry[], sessionId: string): string | undefined {
+  for (const e of entries) {
+    if (e.sessionId === sessionId && e.cwd) return e.cwd;
+  }
+  return undefined;
+}
+
+export function clearHistoryCache(): void {
+  cache.clear();
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/claude/history.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:32:21Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm working through how to parse the transcript reader to extract the title from the last ai-title record and handle the tail. The transcript contains various record types like assistant, user, ai-title, and others, but no summary type. Since the last ai-title gets appended at the end of each turn, I can't just read the first N lines — I need to scan through the entire file to find it, along with capturing the working directory from the first record that has one.
+
+For a large 31MB file, reading everything at once would be inefficient, so I'm planning to use a bounded head-and-tail reading strategy with fs.open and read operations instead of readFileSync. This way I can grab the beginning for the cwd and first prompt, and the end for the last ai-title without loading the whole file into memory.
+
+Writing transcript.ts...
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:32:21Z)**_
+
+Now the transcript reader. The key constraint: `ai-title` is appended *per turn*, so the last one wins — but transcripts reach 31 MB, so I can't read the whole file.
+
+_**Agent (claude-opus-5 2026-07-26 21:32:22Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Reading a Claude Code transcript without reading all of it.
+ *
+ * ~/.claude/projects/<bucket>/<sessionId>.jsonl is line-delimited JSON with
+ * mixed record types. Observed on CLI 2.1.220, across one project:
+ *
+ *   assistant 1372   user 814   ai-title 231   last-prompt 228   mode 228
+ *   permission-mode 228   attachment 204   agent-name 198
+ *   file-history-delta 87   system 42   file-history-snapshot 21
+ *   queue-operation 20
+ *
+ * THERE IS NO `type: "summary"` RECORD. Not one, anywhere on the capture
+ * machine. Tooling and blog posts written against older builds grep for it and
+ * silently find nothing, then fall back to showing a bare UUID. The title lives
+ * in `{"type":"ai-title","aiTitle":"…"}` — appended once per turn, so the LAST
+ * one is the current title and the first one is a stale guess from turn one.
+ *
+ * The size problem: the largest transcript on the capture machine is 31 MB, and
+ * there are 1455 of them. Reading a whole file to find a title is not viable in
+ * a list that renders on every keystroke. So this reads a bounded HEAD (for the
+ * cwd and the opening prompt, which are near the start) and a bounded TAIL (for
+ * the current title, which is near the end), and never the middle.
+ */
+
+import { closeSync, openSync, readSync, statSync } from "node:fs";
+
+import { parseTs } from "../agents/normalize";
+
+/** Enough for the first few records; they are small. */
+const HEAD_BYTES = 64 * 1024;
+/**
+ * Enough for the last few records.
+ *
+ * A single assistant record carrying a large tool result can be hundreds of
+ * kilobytes, so this is generous — but it is a fixed cost per file, not a
+ * function of the 31 MB the file might be.
+ */
+const TAIL_BYTES = 256 * 1024;
+
+export interface TranscriptFacts {
+  /** The real working directory. Authoritative — the bucket name is not. */
+  cwd?: string;
+  /** The last ai-title, which is the current one. */
+  aiTitle?: string;
+  /** Set when this session ran as a named subagent. */
+  agentName?: string;
+  /** The first human prompt, skipping the injected system preamble. */
+  firstPrompt?: string;
+  gitBranch?: string;
+  /** The model of the last assistant record we saw. */
+  model?: string;
+  updatedAt?: Date;
+}
+
+interface Record_ {
+  type?: string;
+  cwd?: string;
+  aiTitle?: string;
+  agentName?: string;
+  gitBranch?: string;
+  timestamp?: string;
+  slug?: string;
+  message?: { role?: string; model?: string; content?: unknown };
+}
+
+/**
+ * Prefixes that mean "this was injected, not typed".
+ *
+ * A transcript's first `user` record is very often a caveat block, a slash
+ * command's stdout, or a pasted AGENTS.md — using it as the title produces
+ * hundreds of sessions all called "Caveat: The messages below were generated…".
+ * This list was built by reading what actually appears first in real files.
+ */
+const INJECTED = [
+  "<local-command-caveat>",
+  "<local-command-stdout>",
+  "<local-command-stderr>",
+  "<system-reminder>",
+  "<command-name>",
+  "<command-message>",
+  "<command-args>",
+  "<environment_context>",
+  "<user_instructions>",
+  "<INSTRUCTIONS>",
+  "# AGENTS.md",
+  "# AGENTS instructions",
+  "Caveat:",
+];
+
+function isInjected(text: string): boolean {
+  const t = text.trimStart();
+  return INJECTED.some((p) => t.startsWith(p));
+}
+
+/** Pull plain text out of the several shapes `message.content` takes. */
+function textOf(content: unknown): string | undefined {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return undefined;
+  for (const part of content) {
+    if (part && typeof part === "object" && (part as { type?: string }).type === "text") {
+      const t = (part as { text?: string }).text;
+      if (typeof t === "string" && t.trim()) return t;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Read up to `bytes` from one end of a file.
+ *
+ * Returns whole lines only. A head read drops its last line (it is almost
+ * certainly truncated); a tail read drops its first, for the same reason at the
+ * other end. Dropping a line is correct here — every record type we want
+ * appears many times.
+ */
+function readEnd(path: string, bytes: number, end: "head" | "tail"): string[] {
+  let fd: number | undefined;
+  try {
+    const size = statSync(path).size;
+    if (size === 0) return [];
+    const length = Math.min(bytes, size);
+    const position = end === "head" ? 0 : size - length;
+
+    fd = openSync(path, "r");
+    const buf = Buffer.allocUnsafe(length);
+    const read = readSync(fd, buf, 0, length, position);
+    const lines = buf.subarray(0, read).toString("utf8").split("\n");
+
+    if (length < size) {
+      if (end === "head") lines.pop();
+      else lines.shift();
+    }
+    return lines.filter((l) => l.trim().length > 0);
+  } catch {
+    return [];
+  } finally {
+    if (fd !== undefined) {
+      try {
+        closeSync(fd);
+      } catch {
+        // Already gone.
+      }
+    }
+  }
+}
+
+function parseLine(line: string): Record_ | undefined {
+  try {
+    return JSON.parse(line) as Record_;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The facts a list row needs, for one transcript.
+ *
+ * Two bounded reads, no matter how big the file is.
+ */
+export function readTranscriptFacts(path: string): TranscriptFacts {
+  const facts: TranscriptFacts = {};
+
+  for (const line of readEnd(path, HEAD_BYTES, "head")) {
+    const rec = parseLine(line);
+    if (!rec) continue;
+
+    if (!facts.cwd && typeof rec.cwd === "string" && rec.cwd.trim()) facts.cwd = rec.cwd.trim();
+    if (!facts.gitBranch && rec.gitBranch) facts.gitBranch = rec.gitBranch;
+
+    if (!facts.firstPrompt && rec.type === "user") {
+      const text = textOf(rec.message?.content);
+      if (text && !isInjected(text)) facts.firstPrompt = text.trim();
+    }
+    if (facts.cwd && facts.firstPrompt && facts.gitBranch) break;
+  }
+
+  // Backwards: ai-title is appended once per turn, so the LAST one is current.
+  // Reading forwards and taking the first gives the title Claude guessed after
+  // the opening message, which is usually wrong by the end of a long session.
+  const tail = readEnd(path, TAIL_BYTES, "tail");
+  for (let i = tail.length - 1; i >= 0; i--) {
+    const rec = parseLine(tail[i]);
+    if (!rec) continue;
+
+    if (!facts.aiTitle && rec.type === "ai-title" && rec.aiTitle?.trim()) {
+      facts.aiTitle = rec.aiTitle.trim();
+    }
+    if (!facts.agentName && rec.type === "agent-name" && rec.agentName?.trim()) {
+      facts.agentName = rec.agentName.trim();
+    }
+    if (!facts.model && rec.message?.model) facts.model = rec.message.model;
+    if (!facts.updatedAt && rec.timestamp) facts.updatedAt = parseTs(rec.timestamp);
+    if (!facts.cwd && rec.cwd) facts.cwd = rec.cwd;
+
+    if (facts.aiTitle && facts.model && facts.updatedAt) break;
+  }
+
+  return facts;
+}
+
+/**
+ * The last `lines` conversational turns, rendered for a Detail pane.
+ *
+ * Tool calls and file-history records are dropped: they are most of the bytes
+ * and none of the meaning when you are trying to remember what a session was
+ * about.
+ */
+export function readTranscriptTail(path: string, turns = 12): string {
+  const out: string[] = [];
+  const lines = readEnd(path, TAIL_BYTES, "tail");
+
+  for (let i = lines.length - 1; i >= 0 && out.length < turns; i--) {
+    const rec = parseLine(lines[i]);
+    if (!rec || (rec.type !== "user" && rec.type !== "assistant")) continue;
+
+    const text = textOf(rec.message?.content);
+    if (!text || isInjected(text)) continue;
+
+    const who = rec.type === "user" ? "You" : (rec.message?.model ?? "Agent");
+    const body = text.trim().slice(0, 1200);
+    out.push(`**${who}**\n\n${body}`);
+  }
+
+  return out.reverse().join("\n\n---\n\n");
+}
+
+/**
+ * Codex's rollout files, which are a different format entirely.
+ *
+ * The first record is `session_meta`, and it carries the authoritative id and
+ * cwd — the uuid in the filename is a good guess but the file is the truth:
+ *
+ *   {"timestamp":"…","type":"session_meta","payload":{"session_id":"019f…",
+ *    "cwd":"/Users/dev","originator":"codex-tui","cli_version":"0.142.0"}}
+ */
+export function readCodexMeta(path: string): { sessionId?: string; cwd?: string; at?: Date } {
+  for (const line of readEnd(path, HEAD_BYTES, "head")) {
+    const rec = parseLine(line) as
+      | { type?: string; timestamp?: string; payload?: { session_id?: string; id?: string; cwd?: string } }
+      | undefined;
+    if (rec?.type !== "session_meta") continue;
+    return {
+      sessionId: rec.payload?.session_id ?? rec.payload?.id,
+      cwd: rec.payload?.cwd,
+      at: parseTs(rec.timestamp),
+    };
+  }
+  return {};
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/claude/transcript.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:32:56Z)**_
+
+<think><details><summary>Thought Process</summary>
+Now I'm moving on to the filesystem-based SessionIndex implementations for both claude and codex. I'll create separate modules for each—`claude/index-fs.ts` and `codex/index-fs.ts`—that combine paths, history, and transcript data into a SessionIndex. Starting with the claude-fs index, which will use the history for its search functionality.
+
+For search, I'm doing a prompt-history lookup plus lazy title resolution rather than scanning full transcript bodies, since that would be too expensive. The recent() method will list transcripts sorted by modification time and resolve titles lazily for just the top results. This is an honest fallback approach—it searches prompts and titles but not the full transcript contents—and I'll document that limitation clearly.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:32:56Z)**_
+
+Now the filesystem indexes that make everything else optional.
+
+_**Agent (claude-opus-5 2026-07-26 21:32:56Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Claude Code's transcripts, as a session index.
+ *
+ * The floor. No binary, no third-party database, no herdr — just
+ * ~/.claude/projects/ and ~/.claude/history.jsonl. This is what keeps the
+ * extension useful when every optional tool is missing, and dev-check asserts
+ * exactly that scenario.
+ *
+ * What it can and cannot do, stated plainly because the UI says so too:
+ *
+ *   CAN   search your prompts (history.jsonl is 548 KB and fully in memory),
+ *         search titles, list recent sessions, resolve a real title and a real
+ *         cwd, and find the transcript for any session id.
+ *   CANNOT search the full text of what the ASSISTANT said. That would mean
+ *         scanning 687 MB across 1455 files on every keystroke. SpecStory's
+ *         FTS5 index exists precisely for that, and when it is present it does
+ *         the relevance work instead.
+ *
+ * Presenting this as a lesser SpecStory would be dishonest — it finds things
+ * SpecStory cannot, because history.jsonl predates any SpecStory install and
+ * carries the real unmangled cwd.
+ */
+
+import { existsSync } from "node:fs";
+
+import { keyOf, parseTs, projectOf, titleOf } from "../agents/normalize";
+import type { IndexHit, ReadOptions, SessionIndex } from "../agents/transport";
+import type { AgentSession } from "../agents/types";
+import { readPromptHistory, searchPrompts, type PromptEntry } from "./history";
+import { findTranscript, historyPath, listTranscripts, projectsDir } from "./paths";
+import { readTranscriptFacts } from "./transcript";
+
+/**
+ * Resolving a title costs two bounded file reads, so it is memoized.
+ *
+ * Titles are append-only in practice — a session's ai-title changes as it goes
+ * but never for a session that has finished — so a cache with no invalidation
+ * is wrong only for the session you are actively running, which is also the
+ * one whose title you already know.
+ */
+const factsCache = new Map<string, ReturnType<typeof readTranscriptFacts>>();
+
+function facts(path: string) {
+  const hit = factsCache.get(path);
+  if (hit) return hit;
+  const read = readTranscriptFacts(path);
+  factsCache.set(path, read);
+  return read;
+}
+
+export function clearTranscriptCache(): void {
+  factsCache.clear();
+}
+
+function toSession(
+  sessionId: string,
+  path: string,
+  mtimeMs: number,
+  prompts: readonly PromptEntry[],
+): AgentSession {
+  const f = facts(path);
+  // The prompt history's `project` is the real cwd. The transcript's `cwd` is
+  // equally real. The bucket directory name is NOT — it is a lossy mangling
+  // and is never consulted. See the note at the top of paths.ts.
+  const fromHistory = prompts.find((p) => p.sessionId === sessionId);
+  const cwd = f.cwd ?? fromHistory?.cwd;
+
+  return {
+    key: keyOf("claude", sessionId),
+    title: titleOf({
+      aiTitle: f.aiTitle ?? f.agentName,
+      firstPrompt: f.firstPrompt ?? fromHistory?.text,
+      sessionId,
+    }),
+    cwd,
+    project: projectOf(cwd),
+    updatedAt: f.updatedAt ?? parseTs(mtimeMs),
+    transcriptPath: path,
+    origin: "index.claudefs",
+  };
+}
+
+export function createClaudeFsIndex(home: string): SessionIndex {
+  const projects = projectsDir(home);
+  const history = historyPath(home);
+
+  return {
+    capability: "index.claudefs",
+
+    async search(text: string, limit: number, _opts?: ReadOptions): Promise<IndexHit[]> {
+      const tokens = text.split(/\s+/).filter(Boolean);
+      if (tokens.length === 0) return [];
+
+      const prompts = readPromptHistory(history, "claude");
+      const matches = searchPrompts(prompts, tokens, limit * 2);
+
+      const out: IndexHit[] = [];
+      for (const m of matches) {
+        const path = findTranscript(projects, m.sessionId);
+        if (!path) {
+          // A prompt whose transcript has been deleted. Still worth showing —
+          // the user asked something and we know where and when — but it
+          // cannot be resumed, and the missing transcriptPath says so.
+          out.push({
+            session: {
+              key: keyOf("claude", m.sessionId),
+              title: titleOf({ firstPrompt: m.text, sessionId: m.sessionId }),
+              cwd: m.cwd,
+              project: projectOf(m.cwd),
+              updatedAt: m.at,
+              origin: "index.claudefs",
+            },
+            // Positive, unlike fts5's negative rank: these are unranked, and
+            // the merged scorer treats a missing fts entry as zero relevance
+            // rather than mixing two incompatible scales.
+            rank: 0,
+          });
+          continue;
+        }
+        out.push({ session: toSession(m.sessionId, path, m.at?.getTime() ?? 0, prompts), rank: 0 });
+      }
+
+      // Titles too, for the sessions whose prompts did not match but whose
+      // subject did. Bounded to the most recent transcripts because resolving a
+      // title is two file reads and this runs per keystroke.
+      const needles = tokens.map((t) => t.toLowerCase());
+      const seen = new Set(out.map((h) => h.session.key.sessionId));
+      for (const ref of listTranscripts(projects, 200)) {
+        if (out.length >= limit * 2) break;
+        if (seen.has(ref.sessionId)) continue;
+        const f = facts(ref.path);
+        const hay = `${f.aiTitle ?? ""} ${f.agentName ?? ""} ${f.cwd ?? ""}`.toLowerCase();
+        if (!needles.every((n) => hay.includes(n))) continue;
+        out.push({ session: toSession(ref.sessionId, ref.path, ref.mtimeMs, prompts), rank: 0 });
+        seen.add(ref.sessionId);
+      }
+
+      return out;
+    },
+
+    async recent(limit: number, _opts?: ReadOptions): Promise<AgentSession[]> {
+      if (!existsSync(projects)) return [];
+      const prompts = readPromptHistory(history, "claude");
+      return listTranscripts(projects, limit).map((ref) =>
+        toSession(ref.sessionId, ref.path, ref.mtimeMs, prompts),
+      );
+    },
+
+    // No snippet(): highlighting a match means finding it in the body, and the
+    // body is what this index deliberately does not read. The UI renders these
+    // rows without a preview rather than pretending.
+  };
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/claude/index-fs.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:33:27Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * OpenCode's own database, as a session index.
+ *
+ * OpenCode needs its own reader for a reason worth stating: **SpecStory does
+ * not index it at all.** `specstory list --help` names its providers —
+ * antigravity, claude, codex, cursor, cursoride, deepseek, droid, gemini — and
+ * opencode is not among them. On the capture machine SpecStory held 470
+ * sessions and zero of them were OpenCode's, while opencode.db held 93.
+ *
+ * The database is at ~/.local/share/opencode/opencode.db (339 MB there) and has
+ * NO FTS table. So this index does what it can do well and does not pretend to
+ * the rest:
+ *
+ *   metadata search  title, slug and directory, via LIKE. 93 rows — instant.
+ *   full text        would mean LIKE over the `part` table's JSON blobs, which
+ *                    is a scan of the whole 339 MB. Not on the typeahead path.
+ *
+ * What it has that nobody else does: real per-session `cost` and `tokens_*`
+ * columns, maintained by OpenCode itself. That is the seed of the v0.3 usage
+ * view, and it needs no auth, no network and no scan.
+ */
+
+import { execFile } from "node:child_process";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
+
+import { AgentDeckError, classifySqlite, fromExecError } from "../agents/errors";
+import { keyOf, parseTs, projectOf, titleOf } from "../agents/normalize";
+import type { IndexHit, ReadOptions, SessionIndex } from "../agents/transport";
+import type { AgentSession } from "../agents/types";
+import { parseRows } from "../specstory/sql";
+import { sqlQuote } from "../specstory/fts";
+
+const run = promisify(execFile);
+
+const QUERY_TIMEOUT_MS = 8_000;
+const BIG_BUFFER = 16 * 1024 * 1024;
+
+export function defaultOpencodeDb(): string {
+  return join(homedir(), ".local", "share", "opencode", "opencode.db");
+}
+
+/**
+ * The `session` table's columns, transcribed from the live schema.
+ *
+ * Note `time_created` / `time_updated` are epoch MILLISECONDS here (verified:
+ * 1785071161239), unlike Codex's history which uses seconds. parseTs decides by
+ * magnitude, so both land in the right decade.
+ */
+interface SessionRow {
+  id: string;
+  slug: string | null;
+  directory: string | null;
+  title: string | null;
+  agent: string | null;
+  model: string | null;
+  cost: number | null;
+  tokens_input: number | null;
+  tokens_output: number | null;
+  time_created: number | null;
+  time_updated: number | null;
+}
+
+const COLUMNS = `id, NULLIF(slug,'') AS slug, NULLIF(directory,'') AS directory,
+  NULLIF(title,'') AS title, NULLIF(agent,'') AS agent, NULLIF(model,'') AS model,
+  cost, tokens_input, tokens_output, time_created, time_updated`;
+
+async function query<T>(bin: string, db: string, sql: string, opts?: ReadOptions): Promise<T[]> {
+  const uri = `file:${encodeURI(db)}?mode=ro`;
+  try {
+    const { stdout, stderr } = await run(bin, ["-json", uri, sql], {
+      timeout: QUERY_TIMEOUT_MS,
+      maxBuffer: BIG_BUFFER,
+      signal: opts?.signal,
+      encoding: "utf8",
+    });
+    const classified = classifySqlite({ stderr, exitCode: 0 });
+    if (classified) throw classified;
+    return parseRows<T>(stdout);
+  } catch (e) {
+    if (e instanceof AgentDeckError) throw e;
+    const err = e as { stderr?: string; code?: number | string; killed?: boolean };
+    if (!err.killed && typeof err.stderr === "string" && err.stderr.trim()) {
+      const classified = classifySqlite({
+        stderr: err.stderr,
+        exitCode: typeof err.code === "number" ? err.code : null,
+      });
+      if (classified) throw classified;
+    }
+    throw fromExecError(e, "index.opencode", [bin, "-json", uri]);
+  }
+}
+
+function toSession(row: SessionRow): AgentSession {
+  return {
+    key: keyOf("opencode", row.id),
+    // OpenCode writes a real title for every session, so unlike SpecStory's
+    // 70%-empty `name` this first link almost always hits.
+    title: titleOf({ name: row.title, slug: row.slug, sessionId: row.id }),
+    cwd: row.directory ?? undefined,
+    project: projectOf(row.directory),
+    createdAt: parseTs(row.time_created),
+    updatedAt: parseTs(row.time_updated),
+    origin: "index.opencode",
+  };
+}
+
+/**
+ * Escape a LIKE pattern.
+ *
+ * `%` and `_` are wildcards; a user searching for "100%" or "my_file" means
+ * those characters literally. Without the ESCAPE clause below, "my_file"
+ * quietly also matches "myXfile", which is the kind of wrongness nobody
+ * reports because it only ever returns too much.
+ */
+function likePattern(token: string): string {
+  return `%${token.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+}
+
+export function createOpencodeIndex(bin: string, db: string): SessionIndex {
+  return {
+    capability: "index.opencode",
+
+    async search(text: string, limit: number, opts?: ReadOptions): Promise<IndexHit[]> {
+      const tokens = text.split(/\s+/).filter(Boolean);
+      if (tokens.length === 0) return [];
+
+      // AND across tokens, OR across the three searchable columns — the same
+      // shape as the FTS index's implicit AND, so the two feel alike.
+      const clauses = tokens.map((t) => {
+        const p = sqlQuote(likePattern(t));
+        return `(COALESCE(title,'') LIKE ${p} ESCAPE '\\' OR COALESCE(slug,'') LIKE ${p} ESCAPE '\\' OR COALESCE(directory,'') LIKE ${p} ESCAPE '\\')`;
+      });
+
+      const rows = await query<SessionRow>(
+        bin,
+        db,
+        `SELECT ${COLUMNS} FROM session
+         WHERE time_archived IS NULL AND ${clauses.join(" AND ")}
+         ORDER BY time_updated DESC LIMIT ${clampInt(limit)};`,
+        opts,
+      );
+      // rank 0, not a negative fts score: these two scales are incomparable, so
+      // the merged scorer treats a missing fts rank as zero relevance and lets
+      // recency and liveness order them instead of inventing a number.
+      return rows.map((row) => ({ session: toSession(row), rank: 0 }));
+    },
+
+    async recent(limit: number, opts?: ReadOptions): Promise<AgentSession[]> {
+      const rows = await query<SessionRow>(
+        bin,
+        db,
+        `SELECT ${COLUMNS} FROM session
+         WHERE time_archived IS NULL
+         ORDER BY time_updated DESC LIMIT ${clampInt(limit)};`,
+        opts,
+      );
+      return rows.map(toSession);
+    },
+  };
+}
+
+function clampInt(n: number): number {
+  const v = Math.trunc(Number(n));
+  return Number.isFinite(v) && v > 0 ? Math.min(v, 1000) : 30;
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/opencode/cli.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:33:36Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Typecheck the index providers
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && npx tsc --noEmit 2>&1 | head -20; echo "typecheck done"`
+
+```text
+typecheck done
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:34:33Z)**_
+
+Now the facade that ties every optional provider together.
+
+_**Agent (claude-opus-5 2026-07-26 21:34:39Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * The facade. Views import from here and nowhere else under lib/.
+ *
+ * Its whole job is to make "which tools are installed" invisible to the UI. A
+ * view asks for sessions and gets whatever this machine can produce, plus a
+ * capability map describing what it could not — it never asks "is SpecStory
+ * installed", and there is no code path where a missing tool becomes an
+ * exception.
+ *
+ * This is the one file under lib/agents/ that is NOT pure: it reads
+ * preferences and constructs the providers. Everything it orchestrates is pure
+ * and separately tested, which is what keeps that acceptable.
+ */
+
+import { existsSync } from "node:fs";
+
+import { getPreferenceValues } from "@raycast/api";
+
+import { resolveCapabilities } from "./capabilities";
+import { AgentDeckError } from "./errors";
+import { attachLive, dedupeFtsRows, mergeLiveAgents, mergeSessions, pruneDead, toHits } from "./merge";
+import { keyString } from "./normalize";
+import { rankHits } from "./rank";
+import type {
+  AgentAction,
+  AgentActuator,
+  Deck,
+  IndexHit,
+  LiveAgentSource,
+  ReadOptions,
+  SessionIndex,
+} from "./transport";
+import type {
+  AgentSession,
+  Capability,
+  CapabilityMap,
+  LiveAgent,
+  MatchReason,
+  SessionHit,
+  SessionKey,
+  Snapshot,
+} from "./types";
+
+import { createClaudeRegistrySource } from "../claude/registry";
+import { createClaudeFsIndex } from "../claude/index-fs";
+import { claudeHome } from "../claude/paths";
+import { createHerdrSource, resolveHerdr } from "../herdr/cli";
+import { createOpencodeIndex } from "../opencode/cli";
+import { createSpecstoryIndex, resolveSqlite, warmSpecstory } from "../specstory/cli";
+import { readPromptHistory, searchPrompts } from "../claude/history";
+import { historyPath } from "../claude/paths";
+
+interface Wiring {
+  caps: CapabilityMap;
+  indexes: SessionIndex[];
+  live: LiveAgentSource[];
+  actuator?: AgentActuator;
+  claudeHome: string;
+}
+
+let wiring: Wiring | undefined;
+/** herdr's server health, probed once per command launch. */
+let herdrReachable: boolean | undefined;
+let herdrDetail: string | undefined;
+
+function prefs(): Preferences {
+  return getPreferenceValues<Preferences>();
+}
+
+/**
+ * Probe herdr's server, once.
+ *
+ * Separate from the capability resolution because it is a subprocess, not a
+ * filesystem check — and because the ANSWER is what distinguishes "not
+ * installed" from "installed but down", which are the two states the whole
+ * capability model exists to keep apart.
+ */
+export async function probeHerdr(): Promise<void> {
+  const bin = resolveHerdr(prefs().herdrPath);
+  if (!bin) {
+    herdrReachable = undefined;
+    return;
+  }
+  const result = await createHerdrSource(bin).probe();
+  herdrReachable = result.reachable;
+  herdrDetail = result.detail;
+  // Force a rebuild so the capability map reflects what we just learned.
+  wiring = undefined;
+}
+
+function wire(): Wiring {
+  if (wiring) return wiring;
+
+  const p = prefs();
+  const home = claudeHome(p.claudeHome);
+  const caps = resolveCapabilities({
+    exists: existsSync,
+    herdrPath: p.herdrPath,
+    sqlitePath: p.sqlitePath,
+    specstoryDb: p.specstoryDb,
+    opencodeDb: p.opencodeDb,
+    claudeHome: p.claudeHome,
+    codexHome: p.codexHome,
+    herdrServerReachable: herdrReachable,
+    herdrServerDetail: herdrDetail,
+  });
+
+  const indexes: SessionIndex[] = [];
+  const live: LiveAgentSource[] = [];
+  let actuator: AgentActuator | undefined;
+
+  const sqlite = resolveSqlite(p.sqlitePath);
+
+  if (caps["index.specstory"].available && sqlite) {
+    const db = caps["index.specstory"].resolvedPath!;
+    indexes.push(createSpecstoryIndex(sqlite, db));
+    // Not awaited. The first read after a reboot faults in a ~290 MB b-tree;
+    // paying for it while the user is still reading the window beats paying
+    // for it on their first keystroke.
+    warmSpecstory(sqlite, db);
+  }
+  if (caps["index.opencode"].available && sqlite) {
+    indexes.push(createOpencodeIndex(sqlite, caps["index.opencode"].resolvedPath!));
+  }
+  // Always last: it is the fallback, and mergeSessions gives earlier indexes
+  // precedence for identity while still taking this one's fields.
+  if (caps["index.claudefs"].available) {
+    indexes.push(createClaudeFsIndex(home));
+  }
+
+  const liveSource = p.liveSource ?? "auto";
+  const herdrBin = resolveHerdr(p.herdrPath);
+
+  if (herdrBin && caps["live.herdr"].available && liveSource !== "claude-registry") {
+    const source = createHerdrSource(herdrBin);
+    live.push(source);
+    actuator = source;
+  }
+  // The fallback runs whenever herdr is not the sole source — including in
+  // "auto" alongside herdr, because the registry saw 3 Claude processes herdr
+  // could not (panes outside a herdr workspace).
+  if (caps["live.claude"].available && liveSource !== "herdr") {
+    live.push(createClaudeRegistrySource(home));
+  }
+
+  wiring = { caps, indexes, live, actuator, claudeHome: home };
+  return wiring;
+}
+
+/** Rebuild on the next call. Preferences changed, or a tool was installed. */
+export function resetDeck(): void {
+  wiring = undefined;
+  herdrReachable = undefined;
+  herdrDetail = undefined;
+}
+
+export function capabilities(): CapabilityMap {
+  return wire().caps;
+}
+
+/**
+ * Run every provider, keep what worked, remember what did not.
+ *
+ * A provider that throws does NOT take the others down: with three indexes
+ * available, one failing means slightly fewer results, not an error screen.
+ * The failures are returned so the UI can mention them without making them the
+ * headline.
+ */
+async function gather<T>(
+  providers: readonly { capability: Capability }[],
+  call: (p: never, i: number) => Promise<T>,
+): Promise<{ values: T[]; used: Capability[]; failed: { capability: Capability; error: AgentDeckError }[] }> {
+  const settled = await Promise.allSettled(providers.map((p, i) => call(p as never, i)));
+  const values: T[] = [];
+  const used: Capability[] = [];
+  const failed: { capability: Capability; error: AgentDeckError }[] = [];
+
+  settled.forEach((r, i) => {
+    const capability = providers[i].capability;
+    if (r.status === "fulfilled") {
+      values.push(r.value);
+      used.push(capability);
+    } else {
+      const e = r.reason;
+      failed.push({
+        capability,
+        error:
+          e instanceof AgentDeckError
+            ? e
+            : new AgentDeckError("command-failed", String(e), { source: capability }),
+      });
+    }
+  });
+  return { values, used, failed };
+}
+
+export interface SearchResult extends Snapshot<SessionHit[]> {
+  failed: { capability: Capability; error: AgentDeckError }[];
+  /** Set when the user's query was rejected. Rendered as a hint, not an error. */
+  badQuery?: AgentDeckError;
+}
+
+export async function liveAgents(opts?: ReadOptions): Promise<Snapshot<LiveAgent[]> & {
+  failed: { capability: Capability; error: AgentDeckError }[];
+}> {
+  const { live } = wire();
+  const { values, used, failed } = await gather(live, (_p, i) => live[i].list(opts));
+
+  const herdrAgents = values[live.findIndex((s) => s.capability === "live.herdr")] ?? [];
+  const registryAgents = values[live.findIndex((s) => s.capability === "live.claude")] ?? [];
+
+  // pruneDead is a no-op for herdr rows (no pid) and is what removes a stale
+  // ~/.claude/sessions/<pid>.json, which would otherwise be a phantom agent.
+  const merged = pruneDead(mergeLiveAgents(herdrAgents, registryAgents), () => true);
+
+  return { data: merged, fetchedAt: new Date(), sources: used, failed };
+}
+
+export async function searchSessions(
+  query: string,
+  limit: number,
+  agents: readonly LiveAgent[],
+  opts?: ReadOptions,
+): Promise<SearchResult> {
+  const { indexes, claudeHome: home } = wire();
+  const text = query.trim();
+
+  if (!text) {
+    const recent = await recentSessions(limit, agents, opts);
+    return { ...recent, badQuery: undefined };
+  }
+
+  const { values, used, failed } = await gather(indexes, (_p, i) => indexes[i].search(text, limit, opts));
+
+  // A rejected query is the user's, not the machine's: surfaced separately so
+  // the UI can show the grammar instead of a broken-database screen.
+  const badQuery = failed.find((f) => f.error.kind === "bad-query")?.error;
+
+  const hits: IndexHit[] = dedupeFtsRows(values.flat());
+  const sessions = mergeSessions([hits.map((h) => h.session)]);
+
+  // The prompt-history pass runs regardless of which index answered: it is an
+  // in-memory scan of a 548 KB file, and it knows things the FTS index does not
+  // (sessions from before SpecStory was installed, and the real unmangled cwd).
+  const reasons = new Map<string, MatchReason[]>();
+  for (const h of hits) reasons.set(keyString(h.session.key), ["fts"]);
+
+  const tokens = text.split(/\s+/).filter(Boolean);
+  const promptHits = searchPrompts(readPromptHistory(historyPath(home), "claude"), tokens, limit);
+  for (const p of promptHits) {
+    const k = `claude:${p.sessionId}`;
+    const existing = reasons.get(k);
+    if (existing) existing.push("prompt");
+    else reasons.set(k, ["prompt"]);
+  }
+
+  const ranks = new Map<string, number>();
+  for (const h of hits) {
+    if (h.rank !== 0) ranks.set(keyString(h.session.key), h.rank);
+  }
+
+  const live = attachLive(sessions, agents);
+  const ranked = rankHits(toHits(sessions, live, reasons), ranks, new Date());
+
+  return {
+    data: ranked.slice(0, limit),
+    fetchedAt: new Date(),
+    sources: used,
+    failed,
+    badQuery,
+  };
+}
+
+export async function recentSessions(
+  limit: number,
+  agents: readonly LiveAgent[],
+  opts?: ReadOptions,
+): Promise<SearchResult> {
+  const { indexes } = wire();
+  const { values, used, failed } = await gather(indexes, (_p, i) => indexes[i].recent(limit, opts));
+
+  const sessions = mergeSessions(values);
+  const live = attachLive(sessions, agents);
+  const hits = toHits(sessions, live, new Map());
+
+  // No text, so no relevance: order by recency, with live sessions lifted by
+  // the scorer's live term.
+  const ranked = rankHits(hits, new Map(), new Date());
+  return { data: ranked.slice(0, limit), fetchedAt: new Date(), sources: used, failed };
+}
+
+/**
+ * A highlighted excerpt, or undefined.
+ *
+ * Only SpecStory can do this, and only for a session it indexed. Everything
+ * else renders without a preview rather than pretending — see the 57x
+ * measurement in specstory/sql.ts for why this is never on the typeahead path.
+ */
+export async function resolveSnippet(
+  session: AgentSession,
+  query: string,
+  opts?: ReadOptions,
+): Promise<string | undefined> {
+  const { indexes } = wire();
+  for (const index of indexes) {
+    if (!index.snippet) continue;
+    try {
+      const snip = await index.snippet(session, query, opts);
+      if (snip) return snip;
+    } catch {
+      // A decoration must never take a row down with it.
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+export async function act(action: AgentAction, opts?: ReadOptions): Promise<void> {
+  const { actuator, caps } = wire();
+  if (!actuator) {
+    throw new AgentDeckError("source-unreachable", "No way to control agents", {
+      source: "act.herdr",
+      detail:
+        caps["act.herdr"].reason ??
+        "herdr is what focuses and prompts a running agent. Without it, Agent Deck can " +
+          "still find and list sessions, but not act on them.",
+    });
+  }
+  await actuator.act(action, opts);
+}
+
+export async function readTerminal(agent: LiveAgent, lines: number, opts?: ReadOptions): Promise<string> {
+  const { actuator } = wire();
+  if (!actuator) return "";
+  return actuator.read(agent, lines, opts);
+}
+
+export async function explainDetection(agent: LiveAgent, opts?: ReadOptions): Promise<string | undefined> {
+  const { actuator } = wire();
+  if (!actuator?.explain) return undefined;
+  try {
+    return await actuator.explain(agent, opts);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The shell command that resumes a session.
+ *
+ * Each agent's own flag, verified against its --help. Returns undefined for an
+ * agent we have no resume story for (SpecStory indexes several we cannot
+ * launch), and the UI hides the action rather than offering one that fails.
+ */
+export function resumeCommand(key: SessionKey): string | undefined {
+  switch (key.agent) {
+    case "claude":
+      return `claude --resume ${key.sessionId}`;
+    case "codex":
+      return `codex resume ${key.sessionId}`;
+    case "opencode":
+      return `opencode --session ${key.sessionId}`;
+    case "cursor":
+      return `cursor-agent --resume ${key.sessionId}`;
+    default:
+      return undefined;
+  }
+}
+
+/** `cd <dir> && <resume>`, for the copy action and for a new terminal tab. */
+export function resumeCommandIn(key: SessionKey, cwd?: string): string | undefined {
+  const cmd = resumeCommand(key);
+  if (!cmd) return undefined;
+  return cwd ? `cd ${shellQuote(cwd)} && ${cmd}` : cmd;
+}
+
+/** POSIX single-quote escaping: end the quote, escape one quote, reopen. */
+export function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+export type { Deck };
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/agents/index.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:35:13Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to set up the package.json with all the preferences and command arguments, then build the project to generate the raycast-env.d.ts file so the Preferences type is available.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:35:13Z)**_
+
+Now the manifest — preferences and arguments, which generate the `Preferences` type.
+
+_**Agent (claude-opus-5 2026-07-26 21:35:13Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```json
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "agent-deck",
+  "title": "Agent Deck",
+  "description": "Find any past AI coding session by what was said in it, see which agents are running or waiting on you, and jump straight back into either.",
+  "icon": "extension-icon.png",
+  "author": "da-wei_lee",
+  "license": "MIT",
+  "categories": ["Developer Tools", "Productivity"],
+  "platforms": ["macOS"],
+  "commands": [
+    {
+      "name": "agent-menu",
+      "title": "Agents Menu Bar",
+      "subtitle": "Agent Deck",
+      "description": "Show running coding agents in the menu bar, agents that are waiting on you first.",
+      "mode": "menu-bar",
+      "interval": "1m",
+      "preferences": [
+        {
+          "name": "titleCounts",
+          "title": "Menu Bar Title",
+          "description": "What the number next to the icon counts. The title is hidden entirely when the count is zero, so 'Blocked' means the menu bar stays quiet until an agent actually needs you.",
+          "type": "dropdown",
+          "required": false,
+          "default": "blocked",
+          "data": [
+            { "title": "Agents waiting on you", "value": "blocked" },
+            { "title": "Waiting and working", "value": "blocked-working" },
+            { "title": "Working only", "value": "working" },
+            { "title": "No count", "value": "none" }
+          ]
+        },
+        {
+          "name": "showIdle",
+          "title": "Idle Agents",
+          "label": "List idle agents too",
+          "description": "Off by default because idle is the normal state and there can be a lot of them — 50 of 52 on the machine this was built against. The count in the submenu header is always accurate whether this is on or not.",
+          "type": "checkbox",
+          "required": false,
+          "default": false
+        },
+        {
+          "name": "maxItemsPerSection",
+          "title": "Items per Section",
+          "description": "Longer sections collapse into a single row that opens the full list. A macOS menu is not a scrollable list; 400 items in it is not a menu.",
+          "type": "textfield",
+          "required": false,
+          "default": "7"
+        }
+      ]
+    },
+    {
+      "name": "sessions",
+      "title": "Search Agent Sessions",
+      "subtitle": "Agent Deck",
+      "description": "Search every past Claude Code, Codex, OpenCode and Gemini session by what was said in it.",
+      "mode": "view",
+      "arguments": [
+        {
+          "name": "query",
+          "placeholder": "words to look for",
+          "type": "text",
+          "required": false
+        }
+      ],
+      "preferences": [
+        {
+          "name": "maxResults",
+          "title": "Results",
+          "description": "How many sessions to show at once.",
+          "type": "textfield",
+          "required": false,
+          "default": "30"
+        },
+        {
+          "name": "showSnippets",
+          "title": "Match Preview",
+          "label": "Show the matching text in the detail pane",
+          "description": "Off by default, and the reason is measured: highlighting a match costs one extra query per selected row, which took 20 ms on a small session and 1144 ms on a 7 MB one. The list itself stays instant either way.",
+          "type": "checkbox",
+          "required": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "agents",
+      "title": "Live Agents",
+      "subtitle": "Agent Deck",
+      "description": "See which coding agents are running, working, or waiting on you, and jump to the one you want.",
+      "mode": "view"
+    },
+    {
+      "name": "focus-agent",
+      "title": "Focus Agent",
+      "subtitle": "Agent Deck",
+      "description": "Jump straight to a running agent by name, directory, or pane.",
+      "mode": "no-view",
+      "arguments": [
+        {
+          "name": "target",
+          "placeholder": "name, folder, or pane",
+          "type": "text",
+          "required": true
+        }
+      ]
+    }
+  ],
+  "preferences": [
+    {
+      "name": "liveSource",
+      "title": "Live Agents From",
+      "description": "Where running agents are read from. Auto uses herdr when its server is answering and falls back to Claude Code's own session registry otherwise. The registry needs nothing installed but only sees Claude Code, and cannot focus a terminal.",
+      "type": "dropdown",
+      "required": false,
+      "default": "auto",
+      "data": [
+        { "title": "Auto", "value": "auto" },
+        { "title": "herdr only", "value": "herdr" },
+        { "title": "Claude session registry only", "value": "claude-registry" }
+      ]
+    },
+    {
+      "name": "herdrPath",
+      "title": "herdr Path",
+      "description": "Absolute path to the herdr binary. Leave empty to search the usual places. Raycast runs under launchd with no shell rc, so a bare 'herdr' is never on PATH — every call uses an absolute path, and this is only needed for an unusual install location.",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "/Users/you/.local/bin/herdr"
+    },
+    {
+      "name": "sqlitePath",
+      "title": "sqlite3 Path",
+      "description": "Absolute path to sqlite3, used to read the SpecStory and OpenCode indexes. macOS ships one at /usr/bin/sqlite3 with FTS5 support, which is all this needs; Homebrew does not install one by default.",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "/usr/bin/sqlite3"
+    },
+    {
+      "name": "specstoryDb",
+      "title": "SpecStory Index",
+      "description": "SpecStory's session database, which provides full-text search across agents. Optional — without it, search falls back to your prompt history and session titles.",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "~/.specstory/sessions.db"
+    },
+    {
+      "name": "opencodeDb",
+      "title": "OpenCode Database",
+      "description": "OpenCode's session database. Needed because SpecStory does not index OpenCode at all.",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "~/.local/share/opencode/opencode.db"
+    },
+    {
+      "name": "claudeHome",
+      "title": "Claude Code Directory",
+      "description": "Where Claude Code keeps its transcripts and session registry. Defaults to CLAUDE_CONFIG_DIR when set, otherwise ~/.claude.",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "~/.claude"
+    },
+    {
+      "name": "codexHome",
+      "title": "Codex Directory",
+      "description": "Where Codex keeps its rollout files.",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "~/.codex"
+    },
+    {
+      "name": "terminalApp",
+      "title": "Terminal",
+      "description": "Brought to the front after focusing an agent. herdr moves focus inside its own session, but it cannot raise the window the session is running in.",
+      "type": "appPicker",
+      "required": false
+    },
+    {
+      "name": "confirmDestructive",
+      "title": "Confirmations",
+      "label": "Ask before actions that interrupt an agent",
+      "description": "Applies to sending keys or prompts to a running agent. In the menu bar, where a dialog cannot be shown, these actions sit behind the Option key instead.",
+      "type": "checkbox",
+      "required": false,
+      "default": true
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^1.104.23",
+    "@raycast/utils": "^2.2.7"
+  },
+  "devDependencies": {
+    "@raycast/eslint-config": "^2.2.0",
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.0.10",
+    "eslint": "^9.0.0",
+    "prettier": "^3.5.3",
+    "react": "^19.0.0",
+    "typescript": "^5.8.2"
+  },
+  "scripts": {
+    "build": "ray build",
+    "dev": "ray develop",
+    "lint": "ray lint",
+    "fix-lint": "ray lint --fix",
+    "publish": "npx @raycast/api@latest publish"
+  }
+}
+
+```
+
+```text
+<tool_use_error>File has not been read yet. Read it first before writing to it.</tool_use_error>
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:35:17Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="Read"><details>
+<summary>Tool use: **Read**</summary>
+ `/Users/david/Documents/Program/Agent-Deck-Raycast-Extension/package.json`
+
+```text
+1	{
+2	  "$schema": "https://www.raycast.com/schemas/extension.json",
+3	  "name": "agent-deck",
+4	  "title": "Agent Deck",
+5	  "description": "Find any past AI coding session by what was said in it, see which agents are running or waiting on you, and jump straight back into either.",
+6	  "icon": "extension-icon.png",
+7	  "author": "da-wei_lee",
+8	  "license": "MIT",
+9	  "categories": ["Developer Tools"],
+10	  "platforms": ["macOS"],
+11	  "commands": [
+12	    {
+13	      "name": "agent-menu",
+14	      "title": "Agents Menu Bar",
+15	      "description": "Open the Agents Menu Bar command.",
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:35:45Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```json
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "agent-deck",
+  "title": "Agent Deck",
+  "description": "Find any past AI coding session by what was said in it, see which agents are running or waiting on you, and jump straight back into either.",
+  "icon": "extension-icon.png",
+  "author": "da-wei_lee",
+  "license": "MIT",
+  "categories": ["Developer Tools", "Productivity"],
+  "platforms": ["macOS"],
+  "commands": [
+    {
+      "name": "agent-menu",
+      "title": "Agents Menu Bar",
+      "subtitle": "Agent Deck",
+      "description": "Show running coding agents in the menu bar, agents that are waiting on you first.",
+      "mode": "menu-bar",
+      "interval": "1m",
+      "preferences": [
+        {
+          "name": "titleCounts",
+          "title": "Menu Bar Title",
+          "description": "What the number next to the icon counts. The title is hidden entirely when the count is zero, so 'Agents waiting on you' means the menu bar stays quiet until one actually does.",
+          "type": "dropdown",
+          "required": false,
+          "default": "blocked",
+          "data": [
+            { "title": "Agents waiting on you", "value": "blocked" },
+            { "title": "Waiting and working", "value": "blocked-working" },
+            { "title": "Working only", "value": "working" },
+            { "title": "No count", "value": "none" }
+          ]
+        },
+        {
+          "name": "showIdle",
+          "title": "Idle Agents",
+          "label": "List idle agents too",
+          "description": "Off by default because idle is the normal state and there can be a lot of them — 50 of 52 on the machine this was built against. The count in the section header is accurate either way.",
+          "type": "checkbox",
+          "required": false,
+          "default": false
+        },
+        {
+          "name": "maxItemsPerSection",
+          "title": "Items per Section",
+          "description": "Longer sections collapse into one row that opens the full list. A macOS menu does not scroll, so 400 items in it is not a menu.",
+          "type": "textfield",
+          "required": false,
+          "default": "7"
+        }
+      ]
+    },
+    {
+      "name": "sessions",
+      "title": "Search Agent Sessions",
+      "subtitle": "Agent Deck",
+      "description": "Search every past Claude Code, Codex, OpenCode and Gemini session by what was said in it.",
+      "mode": "view",
+      "arguments": [
+        {
+          "name": "query",
+          "placeholder": "words to look for",
+          "type": "text",
+          "required": false
+        }
+      ],
+      "preferences": [
+        {
+          "name": "maxResults",
+          "title": "Results",
+          "description": "How many sessions to show at once.",
+          "type": "textfield",
+          "required": false,
+          "default": "30"
+        },
+        {
+          "name": "showSnippets",
+          "title": "Match Preview",
+          "label": "Show the matching text in the detail pane",
+          "description": "Off by default, and the reason is measured: highlighting a match costs one extra query per selected row, which took 20 ms on a small session and 1144 ms on a 7 MB one. The list itself stays instant either way.",
+          "type": "checkbox",
+          "required": false,
+          "default": false
+        }
+      ]
+    },
+    {
+      "name": "agents",
+      "title": "Live Agents",
+      "subtitle": "Agent Deck",
+      "description": "See which coding agents are running, working, or waiting on you, and jump to the one you want.",
+      "mode": "view"
+    },
+    {
+      "name": "focus-agent",
+      "title": "Focus Agent",
+      "subtitle": "Agent Deck",
+      "description": "Jump straight to a running agent by name, directory, or pane.",
+      "mode": "no-view",
+      "arguments": [
+        {
+          "name": "target",
+          "placeholder": "name, folder, or pane",
+          "type": "text",
+          "required": true
+        }
+      ]
+    }
+  ],
+  "preferences": [
+    {
+      "name": "liveSource",
+      "title": "Live Agents From",
+      "description": "Where running agents are read from. Auto uses herdr when its server answers, and falls back to Claude Code's own session registry. The registry needs nothing installed but only sees Claude Code, and cannot focus a terminal.",
+      "type": "dropdown",
+      "required": false,
+      "default": "auto",
+      "data": [
+        { "title": "Auto", "value": "auto" },
+        { "title": "herdr only", "value": "herdr" },
+        { "title": "Claude session registry only", "value": "claude-registry" }
+      ]
+    },
+    {
+      "name": "herdrPath",
+      "title": "herdr Path",
+      "description": "Absolute path to the herdr binary. Leave empty to search the usual places. Raycast runs under launchd with no shell rc, so a bare 'herdr' is never on PATH — every call already uses an absolute path, and this is only for an unusual install location.",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "/Users/you/.local/bin/herdr"
+    },
+    {
+      "name": "sqlitePath",
+      "title": "sqlite3 Path",
+      "description": "Absolute path to sqlite3, used to read the SpecStory and OpenCode indexes. macOS ships one at /usr/bin/sqlite3 with FTS5 support, which is all this needs; Homebrew does not install one by default.",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "/usr/bin/sqlite3"
+    },
+    {
+      "name": "specstoryDb",
+      "title": "SpecStory Index",
+      "description": "SpecStory's session database, which provides full-text search across agents. Optional — without it, search falls back to your prompt history and session titles.",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "~/.specstory/sessions.db"
+    },
+    {
+      "name": "opencodeDb",
+      "title": "OpenCode Database",
+      "description": "OpenCode's session database. Read separately because SpecStory does not index OpenCode at all.",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "~/.local/share/opencode/opencode.db"
+    },
+    {
+      "name": "claudeHome",
+      "title": "Claude Code Directory",
+      "description": "Where Claude Code keeps its transcripts and session registry. Defaults to CLAUDE_CONFIG_DIR when set, otherwise ~/.claude.",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "~/.claude"
+    },
+    {
+      "name": "codexHome",
+      "title": "Codex Directory",
+      "description": "Where Codex keeps its rollout files.",
+      "type": "textfield",
+      "required": false,
+      "placeholder": "~/.codex"
+    },
+    {
+      "name": "terminalApp",
+      "title": "Terminal",
+      "description": "Brought to the front after focusing an agent. herdr moves focus inside its own session but cannot raise the window that session is running in.",
+      "type": "appPicker",
+      "required": false
+    },
+    {
+      "name": "confirmDestructive",
+      "title": "Confirmations",
+      "label": "Ask before actions that interrupt an agent",
+      "description": "Applies to sending keys or prompts to a running agent. In the menu bar, where a dialog cannot be shown, these sit behind the Option key instead.",
+      "type": "checkbox",
+      "required": false,
+      "default": true
+    }
+  ],
+  "dependencies": {
+    "@raycast/api": "^1.104.23",
+    "@raycast/utils": "^2.2.7"
+  },
+  "devDependencies": {
+    "@raycast/eslint-config": "^2.2.0",
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.0.10",
+    "eslint": "^9.0.0",
+    "prettier": "^3.5.3",
+    "react": "^19.0.0",
+    "typescript": "^5.8.2"
+  },
+  "scripts": {
+    "build": "ray build",
+    "dev": "ray develop",
+    "lint": "ray lint",
+    "fix-lint": "ray lint --fix",
+    "publish": "npx @raycast/api@latest publish"
+  }
+}
+
+```
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/package.json has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:35:53Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Build to generate raycast-env.d.ts
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && npm run build 2>&1 | tail -15; echo "--- raycast-env.d.ts ---"; head -40 raycast-env.d.ts 2>&1`
+
+```text
+> build
+> ray build
+
+info  - entry points ["src/agent-menu.tsx","src/sessions.tsx","src/agents.tsx","src/focus-agent.tsx"]
+info  - compiled entry points
+info  - generated extension's TypeScript definitions
+ready  - built extension successfully
+--- raycast-env.d.ts ---
+/// <reference types="@raycast/api">
+
+/* 🚧 🚧 🚧
+ * This file is auto-generated from the extension's manifest.
+ * Do not modify manually. Instead, update the `package.json` file.
+ * 🚧 🚧 🚧 */
+
+/* eslint-disable @typescript-eslint/ban-types */
+
+type ExtensionPreferences = {
+  /** Live Agents From - Where running agents are read from. Auto uses herdr when its server answers, and falls back to Claude Code's own session registry. The registry needs nothing installed but only sees Claude Code, and cannot focus a terminal. */
+  "liveSource": "auto" | "herdr" | "claude-registry",
+  /** herdr Path - Absolute path to the herdr binary. Leave empty to search the usual places. Raycast runs under launchd with no shell rc, so a bare 'herdr' is never on PATH — every call already uses an absolute path, and this is only for an unusual install location. */
+  "herdrPath"?: string,
+  /** sqlite3 Path - Absolute path to sqlite3, used to read the SpecStory and OpenCode indexes. macOS ships one at /usr/bin/sqlite3 with FTS5 support, which is all this needs; Homebrew does not install one by default. */
+  "sqlitePath"?: string,
+  /** SpecStory Index - SpecStory's session database, which provides full-text search across agents. Optional — without it, search falls back to your prompt history and session titles. */
+  "specstoryDb"?: string,
+  /** OpenCode Database - OpenCode's session database. Read separately because SpecStory does not index OpenCode at all. */
+  "opencodeDb"?: string,
+  /** Claude Code Directory - Where Claude Code keeps its transcripts and session registry. Defaults to CLAUDE_CONFIG_DIR when set, otherwise ~/.claude. */
+  "claudeHome"?: string,
+  /** Codex Directory - Where Codex keeps its rollout files. */
+  "codexHome"?: string,
+  /** Terminal - Brought to the front after focusing an agent. herdr moves focus inside its own session but cannot raise the window that session is running in. */
+  "terminalApp"?: import("@raycast/api").Application,
+  /** Confirmations - Applies to sending keys or prompts to a running agent. In the menu bar, where a dialog cannot be shown, these sit behind the Option key instead. */
+  "confirmDestructive": boolean
+}
+
+/** Preferences accessible in all the extension's commands */
+declare type Preferences = ExtensionPreferences
+
+declare namespace Preferences {
+  /** Preferences accessible in the `agent-menu` command */
+  export type AgentMenu = ExtensionPreferences & {
+  /** Menu Bar Title - What the number next to the icon counts. The title is hidden entirely when the count is zero, so 'Agents waiting on you' means the menu bar stays quiet until one actually does. */
+  "titleCounts": "blocked" | "blocked-working" | "working" | "none",
+  /** Idle Agents - Off by default because idle is the normal state and there can be a lot of them — 50 of 52 on the machine this was built against. The count in the section header is accurate either way. */
+  "showIdle": boolean,
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:36:25Z)**_
+
+<think><details><summary>Thought Process</summary>
+Now I'm moving on to build out the utility files—I'll create format.tsx to handle icons, colors, and relative time formatting, then write a compact error-states.tsx, and finally put together the sessions.tsx view.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:36:25Z)**_
+
+Now the UI layer. Format helpers first.
+
+_**Agent (claude-opus-5 2026-07-26 21:36:26Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```tsx
+/**
+ * Turning domain values into things Raycast can render.
+ *
+ * The only file that decides what a status looks like, so a colour never
+ * disagrees with itself between the list, the menu bar and the detail pane.
+ */
+
+import { Color, Icon, type Image } from "@raycast/api";
+
+import { capabilityLabel } from "./agents/capabilities";
+import type { AgentKind, AgentSession, AgentStatus, CapabilityState, LiveAgent } from "./agents/types";
+
+/**
+ * Status colour, in one place.
+ *
+ * Red is reserved for "waiting on you" and is never used for an error, because
+ * in this extension an error is a property of a TOOL and a colour here is a
+ * property of an AGENT — using red for both makes a broken herdr look like
+ * eleven agents needing attention.
+ */
+export function statusColor(status: AgentStatus): Color {
+  switch (status) {
+    case "blocked":
+      return Color.Red;
+    case "working":
+      return Color.Green;
+    case "idle":
+      return Color.SecondaryText;
+    case "done":
+      return Color.Blue;
+    case "unknown":
+      return Color.Orange;
+  }
+}
+
+export function statusIcon(status: AgentStatus): Image.ImageLike {
+  switch (status) {
+    case "blocked":
+      return { source: Icon.ExclamationMark, tintColor: Color.Red };
+    case "working":
+      return { source: Icon.CircleProgress100, tintColor: Color.Green };
+    case "idle":
+      return { source: Icon.Circle, tintColor: Color.SecondaryText };
+    case "done":
+      return { source: Icon.CheckCircle, tintColor: Color.Blue };
+    case "unknown":
+      return { source: Icon.QuestionMark, tintColor: Color.Orange };
+  }
+}
+
+export function statusLabel(status: AgentStatus): string {
+  switch (status) {
+    case "blocked":
+      return "Waiting on you";
+    case "working":
+      return "Working";
+    case "idle":
+      return "Idle";
+    case "done":
+      return "Done";
+    case "unknown":
+      return "Unknown";
+  }
+}
+
+export function agentLabel(agent: AgentKind): string {
+  switch (agent) {
+    case "claude":
+      return "Claude Code";
+    case "codex":
+      return "Codex";
+    case "opencode":
+      return "OpenCode";
+    case "gemini":
+      return "Gemini";
+    case "cursor":
+      return "Cursor";
+    case "unknown":
+      return "Agent";
+  }
+}
+
+/**
+ * A short tag for the accessory row.
+ *
+ * Two letters, matching the tags the tv channels in the author's dotfiles
+ * already use, so the two surfaces read the same way.
+ */
+export function agentTag(agent: AgentKind): string {
+  switch (agent) {
+    case "claude":
+      return "cc";
+    case "codex":
+      return "cx";
+    case "opencode":
+      return "oc";
+    case "gemini":
+      return "gm";
+    case "cursor":
+      return "cu";
+    case "unknown":
+      return "??";
+  }
+}
+
+export function agentColor(agent: AgentKind): Color {
+  switch (agent) {
+    case "claude":
+      return Color.Orange;
+    case "codex":
+      return Color.Blue;
+    case "opencode":
+      return Color.Purple;
+    case "gemini":
+      return Color.Green;
+    case "cursor":
+      return Color.Magenta;
+    case "unknown":
+      return Color.SecondaryText;
+  }
+}
+
+/**
+ * "3m ago", or "date unknown".
+ *
+ * The second case is not decoration. 7 of 470 rows in the SpecStory index have
+ * no usable timestamp — they are genuinely findable by full text and genuinely
+ * undated — and every alternative lies: an empty string looks like a rendering
+ * bug, and a zero timestamp reads as 1 January 1970.
+ */
+export function relativeTime(when: Date | undefined): string {
+  if (!when) return "date unknown";
+
+  const ms = Date.now() - when.getTime();
+  if (!Number.isFinite(ms)) return "date unknown";
+  if (ms < 0) return "just now";
+
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  if (days < 365) return `${Math.floor(days / 7)}w ago`;
+  return `${Math.floor(days / 365)}y ago`;
+}
+
+/** The last path component, for a compact "which project" accessory. */
+export function projectLabel(session: AgentSession): string {
+  return session.project ?? session.cwd?.split("/").filter(Boolean).pop() ?? "no folder";
+}
+
+/**
+ * How a live agent is described in a one-line accessory.
+ *
+ * Says "detected" rather than "is" for herdr's status, because herdr infers it
+ * by scraping rendered terminal text — `herdr agent explain` answers with
+ * `rule: live_prompt_box … evidence: "❯\n"`. It is a good guess that lags a
+ * real change, and presenting a guess as a fact is how a UI loses trust.
+ */
+export function liveSummary(agents: readonly LiveAgent[]): string | undefined {
+  if (agents.length === 0) return undefined;
+  if (agents.length === 1) return statusLabel(agents[0].status);
+  const blocked = agents.filter((a) => a.status === "blocked").length;
+  return blocked > 0 ? `${agents.length} running, ${blocked} waiting` : `${agents.length} running`;
+}
+
+/** For the Sources section: what worked, what did not, and what to do. */
+export function capabilitySummary(state: CapabilityState): { title: string; subtitle?: string; icon: Image.ImageLike } {
+  const title = capabilityLabel(state.capability);
+  if (state.available) {
+    return { title, icon: { source: Icon.CheckCircle, tintColor: Color.Green } };
+  }
+  return {
+    title,
+    subtitle: state.reason,
+    // Not an error icon: a tool that is not installed is not a fault. The
+    // Sources section is informational, and colouring it red would make an
+    // ordinary machine look broken.
+    icon: { source: Icon.Circle, tintColor: Color.SecondaryText },
+  };
+}
+
+/** Bytes -> "1.2 MB", for the "this session is too big to preview" message. */
+export function humanBytes(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let v = n;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v < 10 && i > 0 ? v.toFixed(1) : Math.round(v)} ${units[i]}`;
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/format.tsx (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:37:01Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```tsx
+/**
+ * Failures and gaps, as data.
+ *
+ * Two shapes, and the difference between them is the design:
+ *
+ *   CapabilityState  a tool is NOT INSTALLED. Not a failure. Renders as a
+ *                    disabled row with an install hint, inside a working app.
+ *   ErrorDescriptor  a tool IS installed and IS broken, or the query was
+ *                    rejected. Renders as a screen with a fix.
+ *
+ * `structural` then decides how far an ErrorDescriptor takes over: a rejected
+ * search string is a hint above an otherwise fine list; a dead herdr with
+ * cached data is a banner; a dead herdr with nothing cached is the whole view.
+ * Raycast's failure toast is one line at the bottom that scrolls away, which is
+ * the wrong weight for all three.
+ */
+
+import { Action, ActionPanel, Color, Icon, List, open } from "@raycast/api";
+
+import { AgentDeckError } from "./agents/errors";
+import { capabilityLabel } from "./agents/capabilities";
+import type { CapabilityState } from "./agents/types";
+import { FTS5_HELP } from "./specstory/fts";
+
+/** An action rendered by whichever surface is showing the error. */
+export interface ErrorAction {
+  id: string;
+  title: string;
+  icon?: Icon;
+  /** Exactly one of these. */
+  copy?: string;
+  url?: string;
+  run?: () => void | Promise<void>;
+}
+
+export interface ErrorDescriptor {
+  title: string;
+  description: string;
+  icon: Icon;
+  /**
+   * True when the data on screen cannot be trusted.
+   *
+   * A structural failure means what you are looking at is stale or absent —
+   * the daemon is gone, the schema changed. A non-structural one means the
+   * request was wrong but the world is fine.
+   */
+  structural: boolean;
+  actions: ErrorAction[];
+}
+
+export function describeError(error: unknown): ErrorDescriptor {
+  if (!(error instanceof AgentDeckError)) {
+    return {
+      title: "Something went wrong",
+      description: String(error),
+      icon: Icon.ExclamationMark,
+      structural: true,
+      actions: [],
+    };
+  }
+
+  switch (error.kind) {
+    case "bad-query":
+      return {
+        title: "That is not a search this index understands",
+        // Reachable by typing normally — `-x`, `col:x`, a lone `"`. The list
+        // stays on screen and the grammar is offered, because the user is
+        // mid-thought, not in trouble.
+        description: `${error.detail}\n\n${FTS5_HELP}`,
+        icon: Icon.MagnifyingGlass,
+        structural: false,
+        actions: [],
+      };
+
+    case "source-unreachable":
+      return {
+        title: sourceTitle(error),
+        description: error.detail,
+        icon: Icon.Plug,
+        structural: true,
+        actions:
+          error.source === "live.herdr" || error.source === "act.herdr"
+            ? [
+                { id: "start", title: "Copy the Command to Start herdr", icon: Icon.Clipboard, copy: "herdr server start" },
+                { id: "docs", title: "Open herdr on GitHub", icon: Icon.Globe, url: "https://github.com/ogulcancelik/herdr" },
+              ]
+            : [],
+      };
+
+    case "schema-mismatch":
+      return {
+        title: "The session index changed shape",
+        description: error.detail,
+        icon: Icon.Warning,
+        structural: true,
+        actions: [
+          { id: "reindex", title: "Copy the Reindex Command", icon: Icon.Clipboard, copy: "specstory reindex" },
+        ],
+      };
+
+    case "timeout":
+      return {
+        title: "That took too long",
+        description: error.detail,
+        icon: Icon.Clock,
+        structural: false,
+        actions: [],
+      };
+
+    case "bad-output":
+    case "command-failed":
+    default:
+      return {
+        title: error.message,
+        description: error.detail,
+        icon: Icon.ExclamationMark,
+        structural: true,
+        actions: [],
+      };
+  }
+}
+
+function sourceTitle(error: AgentDeckError): string {
+  if (error.source === "live.herdr" || error.source === "act.herdr") return "herdr is not answering";
+  if (error.source === "index.specstory") return "The session index cannot be read";
+  return "A source is unavailable";
+}
+
+function ErrorActions({ actions }: { actions: readonly ErrorAction[] }) {
+  if (actions.length === 0) return null;
+  return (
+    <ActionPanel>
+      {actions.map((a) =>
+        a.copy !== undefined ? (
+          <Action.CopyToClipboard key={a.id} title={a.title} icon={a.icon} content={a.copy} />
+        ) : a.url !== undefined ? (
+          <Action.OpenInBrowser key={a.id} title={a.title} icon={a.icon} url={a.url} />
+        ) : (
+          <Action key={a.id} title={a.title} icon={a.icon} onAction={() => void a.run?.()} />
+        ),
+      )}
+    </ActionPanel>
+  );
+}
+
+/** The whole screen. Used when a first read failed and there is nothing cached. */
+export function ErrorEmptyView({ descriptor }: { descriptor: ErrorDescriptor }) {
+  return (
+    <List.EmptyView
+      icon={{ source: descriptor.icon, tintColor: descriptor.structural ? Color.Red : Color.SecondaryText }}
+      title={descriptor.title}
+      description={descriptor.description}
+      actions={<ErrorActions actions={descriptor.actions} />}
+    />
+  );
+}
+
+/**
+ * A row above the list, when there IS data but it may be stale.
+ *
+ * The case this exists for: a source dies while its last successful read is
+ * still cached. Serving stale data is the right default — a blank screen on one
+ * failed refresh is worse — but a dead source rendering as a live one is not,
+ * so the list says so at the top and keeps working.
+ */
+export function StaleBannerItem({ descriptor }: { descriptor: ErrorDescriptor }) {
+  return (
+    <List.Item
+      icon={{ source: descriptor.icon, tintColor: Color.Orange }}
+      title={descriptor.title}
+      subtitle={descriptor.description.split("\n")[0]}
+      accessories={[{ tag: { value: "stale", color: Color.Orange } }]}
+      actions={<ErrorActions actions={descriptor.actions} />}
+    />
+  );
+}
+
+/**
+ * The Sources section: what this machine can and cannot do.
+ *
+ * Rendered plainly, not as a warning. A user with no herdr and no SpecStory has
+ * a working extension with a smaller reach, and the honest way to say that is a
+ * list of what is on and what is off — not a nag.
+ */
+export function SourcesSection({ states }: { states: readonly CapabilityState[] }) {
+  if (states.length === 0) return null;
+  return (
+    <List.Section title="Sources" subtitle={`${states.filter((s) => s.available).length} of ${states.length} available`}>
+      {states.map((s) => (
+        <List.Item
+          key={s.capability}
+          icon={{
+            source: s.available ? Icon.CheckCircle : Icon.Circle,
+            tintColor: s.available ? Color.Green : Color.SecondaryText,
+          }}
+          title={capabilityLabel(s.capability)}
+          subtitle={s.available ? s.resolvedPath : s.reason}
+          accessories={
+            s.degradedTo ? [{ tag: { value: `using ${capabilityLabel(s.degradedTo)}`, color: Color.Blue } }] : undefined
+          }
+          actions={
+            s.install ? (
+              <ActionPanel>
+                {s.install.command ? (
+                  <Action.CopyToClipboard title={s.install.label} icon={Icon.Clipboard} content={s.install.command} />
+                ) : null}
+                {s.install.url ? (
+                  <Action
+                    title="Open the Project Page"
+                    icon={Icon.Globe}
+                    onAction={() => void open(s.install!.url!)}
+                  />
+                ) : null}
+              </ActionPanel>
+            ) : undefined
+          }
+        />
+      ))}
+    </List.Section>
+  );
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/error-states.tsx (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:37:58Z)**_
+
+Now the search view — the vertical slice that proves the join.
+
+_**Agent (claude-opus-5 2026-07-26 21:37:58Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```tsx
+/**
+ * Search Agent Sessions.
+ *
+ * The thesis of the extension, in one view: a search result and a running
+ * process are the same object. Every live agent's session id resolves in the
+ * SpecStory index and in ~/.claude/projects/ — verified 52 of 52 — so a row you
+ * found by remembering what you said can be focused, not just re-read.
+ *
+ * The latency budget this is built to, all measured:
+ *
+ *   keystroke -> list      ~282 ms   FTS rank query, including the sqlite3 spawn
+ *   empty text -> list      ~20 ms   the recent query
+ *   selection -> preview   0.2-1.1 s snippet(), which is why it is off by default
+ *   first query, cold        3.5 s   faulting in a 290 MB b-tree, warmed at mount
+ */
+
+import { useEffect, useRef, useState } from "react";
+import {
+  Action,
+  ActionPanel,
+  Color,
+  Icon,
+  List,
+  getPreferenceValues,
+  launchCommand,
+  LaunchType,
+  open,
+  showToast,
+  Toast,
+} from "@raycast/api";
+import { useCachedPromise } from "@raycast/utils";
+
+import {
+  act,
+  capabilities,
+  liveAgents,
+  probeHerdr,
+  resolveSnippet,
+  resumeCommandIn,
+  searchSessions,
+} from "./lib/agents";
+import { actionableGaps, canSearch } from "./lib/agents/capabilities";
+import { keyString } from "./lib/agents/normalize";
+import type { AgentSession, LiveAgent, SessionHit } from "./lib/agents/types";
+import { ErrorEmptyView, SourcesSection, StaleBannerItem, describeError } from "./lib/error-states";
+import {
+  agentColor,
+  agentLabel,
+  agentTag,
+  projectLabel,
+  relativeTime,
+  statusIcon,
+  statusLabel,
+} from "./lib/format";
+
+interface Args {
+  arguments: { query?: string };
+}
+
+export default function SearchSessions(props: Args) {
+  const prefs = getPreferenceValues<Preferences.Sessions>();
+  const limit = clampInt(prefs.maxResults, 30);
+
+  const [text, setText] = useState(props.arguments?.query ?? "");
+  const [selected, setSelected] = useState<string | undefined>(undefined);
+  const [showSources, setShowSources] = useState(false);
+
+  // One AbortController per independent read, so a superseded search does not
+  // cancel the live-agent poll that is feeding the LIVE tags.
+  const searchAbort = useRef<AbortController>(new AbortController());
+  const liveAbort = useRef<AbortController>(new AbortController());
+
+  // herdr's server health is a subprocess question, not a filesystem one, and
+  // it is what separates "herdr is not installed" from "herdr is installed and
+  // its server is down". Probed once, before anything reads the capability map.
+  const [probed, setProbed] = useState(false);
+  useEffect(() => {
+    void probeHerdr().finally(() => setProbed(true));
+  }, []);
+
+  const live = useCachedPromise(
+    async (ready: boolean) => (ready ? (await liveAgents({ signal: liveAbort.current?.signal })).data : []),
+    [probed],
+    { keepPreviousData: true, abortable: liveAbort, initialData: [] as LiveAgent[] },
+  );
+
+  // Every dependency is an argument, never a closure capture: the argument
+  // array IS the cache key, and a captured variable produces a stale read that
+  // looks like a caching bug.
+  const results = useCachedPromise(
+    async (query: string, max: number, agents: LiveAgent[], ready: boolean) => {
+      if (!ready) return undefined;
+      return searchSessions(query, max, agents, { signal: searchAbort.current?.signal });
+    },
+    [text, limit, live.data ?? [], probed],
+    { keepPreviousData: true, abortable: searchAbort },
+  );
+
+  const caps = probed ? capabilities() : undefined;
+  const hits = results.data?.data ?? [];
+  const selectedHit = hits.find((h) => keyString(h.session.key) === selected);
+
+  // Snippets are per-selection and never on the typeahead path. Measured:
+  // snippet() took 1144 ms on a 7.36 MB body against 20 ms for the same query
+  // without it, and the largest body in the index is 10.5 MB.
+  const snippet = useCachedPromise(
+    async (enabled: boolean, query: string, session: AgentSession | undefined) => {
+      if (!enabled || !session || !query.trim()) return undefined;
+      return resolveSnippet(session, query);
+    },
+    [prefs.showSnippets === true, text, selectedHit?.session],
+    { keepPreviousData: false, execute: prefs.showSnippets === true && selectedHit !== undefined },
+  );
+
+  const failure = results.error ?? (results.data?.failed.length ? results.data.failed[0].error : undefined);
+  const badQuery = results.data?.badQuery;
+  const descriptor = badQuery ? describeError(badQuery) : failure ? describeError(failure) : undefined;
+
+  // Nothing cached AND a structural failure means the screen is the error.
+  // Anything else keeps the list and puts the problem above it.
+  const isEmptyAndBroken = hits.length === 0 && descriptor?.structural === true;
+  const nothingToSearch = probed && caps !== undefined && !canSearch(caps);
+
+  return (
+    <List
+      isLoading={!probed || results.isLoading}
+      searchText={text}
+      onSearchTextChange={setText}
+      onSelectionChange={setSelected}
+      searchBarPlaceholder="Search what you said in any past session"
+      throttle
+      isShowingDetail={prefs.showSnippets === true && hits.length > 0}
+      actions={
+        <ActionPanel>
+          <Action
+            title={showSources ? "Hide Sources" : "Show Sources"}
+            icon={Icon.Info}
+            onAction={() => setShowSources((v) => !v)}
+          />
+        </ActionPanel>
+      }
+    >
+      {nothingToSearch ? (
+        <List.EmptyView
+          icon={{ source: Icon.MagnifyingGlass, tintColor: Color.SecondaryText }}
+          title="No sessions to search yet"
+          description={
+            "Agent Deck reads Claude Code, Codex and OpenCode where they already keep their " +
+            "sessions. None of those directories exist on this machine yet — run a coding " +
+            "agent once and they will appear here."
+          }
+        />
+      ) : isEmptyAndBroken && descriptor ? (
+        <ErrorEmptyView descriptor={descriptor} />
+      ) : (
+        <>
+          {descriptor && !isEmptyAndBroken ? <StaleBannerItem descriptor={descriptor} /> : null}
+
+          <List.Section
+            title={text.trim() ? "Matches" : "Recent"}
+            subtitle={hits.length > 0 ? `${hits.length}` : undefined}
+          >
+            {hits.map((hit) => (
+              <SessionRow
+                key={keyString(hit.session.key)}
+                hit={hit}
+                query={text}
+                showDetail={prefs.showSnippets === true}
+                snippet={selected === keyString(hit.session.key) ? snippet.data : undefined}
+                snippetLoading={selected === keyString(hit.session.key) && snippet.isLoading}
+                onRevalidate={() => void results.revalidate()}
+              />
+            ))}
+          </List.Section>
+
+          {showSources && caps ? (
+            <SourcesSection states={(Object.keys(caps) as (keyof typeof caps)[]).map((k) => caps[k])} />
+          ) : null}
+
+          {hits.length === 0 && !results.isLoading && text.trim() ? (
+            <List.EmptyView
+              icon={{ source: Icon.MagnifyingGlass, tintColor: Color.SecondaryText }}
+              title="Nothing matched"
+              description={
+                caps && actionableGaps(caps).length > 0
+                  ? "Some sources are not installed on this machine, so the search is narrower " +
+                    "than it could be. Press ⌘S to see which."
+                  : "Try fewer words, or start with / to write a raw FTS5 expression."
+              }
+            />
+          ) : null}
+        </>
+      )}
+    </List>
+  );
+}
+
+function SessionRow({
+  hit,
+  query,
+  showDetail,
+  snippet,
+  snippetLoading,
+  onRevalidate,
+}: {
+  hit: SessionHit;
+  query: string;
+  showDetail: boolean;
+  snippet?: string;
+  snippetLoading: boolean;
+  onRevalidate: () => void;
+}) {
+  const { session, live } = hit;
+  const resume = resumeCommandIn(session.key, session.cwd);
+  // The one that can actually be focused: only herdr knows a pane id, and
+  // `herdr agent focus` accepts nothing else.
+  const focusable = live.find((a) => a.paneId !== undefined);
+
+  const accessories: List.Item.Accessory[] = [];
+  if (live.length > 0) {
+    accessories.push({
+      tag: { value: live.length > 1 ? `live ×${live.length}` : "live", color: Color.Green },
+      tooltip: live.map((a) => `${statusLabel(a.status)} — ${a.cwd}`).join("\n"),
+    });
+  }
+  accessories.push({ tag: { value: agentTag(session.key.agent), color: agentColor(session.key.agent) } });
+  accessories.push({ text: projectLabel(session) });
+  accessories.push({ text: relativeTime(session.updatedAt) });
+
+  return (
+    <List.Item
+      id={keyString(session.key)}
+      icon={live.length > 0 ? statusIcon(live[0].status) : { source: Icon.Document, tintColor: Color.SecondaryText }}
+      title={session.title}
+      subtitle={showDetail ? undefined : session.cwd}
+      accessories={showDetail ? undefined : accessories}
+      detail={showDetail ? <SessionDetail hit={hit} snippet={snippet} loading={snippetLoading} /> : undefined}
+      actions={
+        <ActionPanel>
+          <ActionPanel.Section>
+            {focusable ? (
+              <Action
+                title="Focus the Running Agent"
+                icon={Icon.Terminal}
+                onAction={() => void focusAgent(focusable)}
+              />
+            ) : null}
+            {resume ? (
+              <Action.CopyToClipboard
+                title="Copy the Resume Command"
+                icon={Icon.Clipboard}
+                content={resume}
+                shortcut={{ modifiers: ["cmd"], key: "r" }}
+              />
+            ) : null}
+            {session.transcriptPath ? (
+              <Action.Open
+                title="Open the Transcript"
+                icon={Icon.Document}
+                target={session.transcriptPath}
+                shortcut={{ modifiers: ["cmd"], key: "o" }}
+              />
+            ) : null}
+            {session.cwd ? (
+              <Action.ShowInFinder
+                title="Open the Folder"
+                path={session.cwd}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "f" }}
+              />
+            ) : null}
+          </ActionPanel.Section>
+
+          <ActionPanel.Section>
+            <Action.CopyToClipboard title="Copy the Session ID" content={session.key.sessionId} />
+            {session.cwd ? <Action.CopyToClipboard title="Copy the Folder Path" content={session.cwd} /> : null}
+            {session.markdownPath ? (
+              <Action.Open title="Open the Markdown Transcript" target={session.markdownPath} />
+            ) : null}
+            <Action
+              title="Show Live Agents"
+              icon={Icon.Dot}
+              shortcut={{ modifiers: ["cmd"], key: "l" }}
+              onAction={() => void launchCommand({ name: "agents", type: LaunchType.UserInitiated })}
+            />
+            <Action title="Refresh" icon={Icon.ArrowClockwise} onAction={onRevalidate} />
+          </ActionPanel.Section>
+
+          {!resume && !focusable ? (
+            <ActionPanel.Section title="No resume command for this agent">
+              <Action.CopyToClipboard title="Copy the Session ID" content={session.key.sessionId} />
+            </ActionPanel.Section>
+          ) : null}
+        </ActionPanel>
+      }
+    />
+  );
+}
+
+function SessionDetail({ hit, snippet, loading }: { hit: SessionHit; snippet?: string; loading: boolean }) {
+  const { session, live } = hit;
+
+  const body = loading
+    ? "_Finding the match…_"
+    : snippet
+      ? snippet
+      : // Not an apology: this index cannot highlight, and saying so is more
+        // useful than a spinner that never resolves.
+        "_No preview for this session._";
+
+  return (
+    <List.Item.Detail
+      markdown={`# ${session.title}\n\n${body}`}
+      metadata={
+        <List.Item.Detail.Metadata>
+          <List.Item.Detail.Metadata.Label title="Agent" text={agentLabel(session.key.agent)} />
+          <List.Item.Detail.Metadata.Label title="Folder" text={session.cwd ?? "unknown"} />
+          <List.Item.Detail.Metadata.Label title="Last activity" text={relativeTime(session.updatedAt)} />
+          {session.userTurns !== undefined ? (
+            <List.Item.Detail.Metadata.Label title="Your turns" text={String(session.userTurns)} />
+          ) : null}
+          {live.length > 0 ? (
+            <List.Item.Detail.Metadata.TagList title="Running">
+              {live.map((a) => (
+                <List.Item.Detail.Metadata.TagList.Item
+                  key={a.handle}
+                  text={`${statusLabel(a.status)}${a.paneId ? ` · ${a.paneId}` : ""}`}
+                  color={a.status === "blocked" ? Color.Red : Color.Green}
+                />
+              ))}
+            </List.Item.Detail.Metadata.TagList>
+          ) : null}
+          <List.Item.Detail.Metadata.Separator />
+          <List.Item.Detail.Metadata.Label title="Session" text={session.key.sessionId} />
+        </List.Item.Detail.Metadata>
+      }
+    />
+  );
+}
+
+/**
+ * Focus, then raise.
+ *
+ * Two steps, because `herdr agent focus` moves focus INSIDE herdr's own session
+ * and cannot raise the window that session is running in. Skipping the second
+ * step looks like nothing happened.
+ */
+async function focusAgent(agent: LiveAgent): Promise<void> {
+  try {
+    await act({ op: "focus", agent });
+    const app = getPreferenceValues<Preferences>().terminalApp;
+    if (app?.path) await open(app.path);
+  } catch (e) {
+    const d = describeError(e);
+    await showToast({ style: Toast.Style.Failure, title: d.title, message: d.description.split("\n")[0] });
+  }
+}
+
+/** Preferences are text fields; a typo must clamp rather than break a query. */
+function clampInt(raw: string | undefined, fallback: number): number {
+  const v = Math.trunc(Number(raw));
+  return Number.isFinite(v) && v > 0 ? Math.min(v, 200) : fallback;
+}
+
+```
+
+```text
+<tool_use_error>File has not been read yet. Read it first before writing to it.</tool_use_error>
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:38:03Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Remove placeholder sessions.tsx
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && head -5 src/sessions.tsx && rm -f src/sessions.tsx && echo "removed placeholder"`
+
+```text
+import { ActionPanel, Action, List } from "@raycast/api";
+
+export default function Command() {
+  return (
+    <List searchBarPlaceholder="Search…">
+removed placeholder
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:38:51Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```tsx
+/**
+ * Search Agent Sessions.
+ *
+ * The thesis of the extension, in one view: a search result and a running
+ * process are the same object. Every live agent's session id resolves in the
+ * SpecStory index and in ~/.claude/projects/ — verified 52 of 52 — so a row you
+ * found by remembering what you said can be focused, not merely re-read.
+ *
+ * The latency budget this is built to, all measured:
+ *
+ *   keystroke -> list      ~282 ms   FTS rank query, including the sqlite3 spawn
+ *   empty text -> list      ~20 ms   the recent query
+ *   selection -> preview   0.2-1.1 s snippet(), which is why it is off by default
+ *   first query, cold        3.5 s   faulting in a 290 MB b-tree, warmed at mount
+ */
+
+import { useEffect, useRef, useState } from "react";
+import {
+  Action,
+  ActionPanel,
+  Color,
+  Icon,
+  LaunchType,
+  List,
+  Toast,
+  getPreferenceValues,
+  launchCommand,
+  open,
+  showToast,
+} from "@raycast/api";
+import { useCachedPromise } from "@raycast/utils";
+
+import {
+  act,
+  capabilities,
+  liveAgents,
+  probeHerdr,
+  resolveSnippet,
+  resumeCommandIn,
+  searchSessions,
+} from "./lib/agents";
+import { actionableGaps, canSearch } from "./lib/agents/capabilities";
+import { keyString } from "./lib/agents/normalize";
+import type { AgentSession, Capability, LiveAgent, SessionHit } from "./lib/agents/types";
+import { ErrorEmptyView, SourcesSection, StaleBannerItem, describeError } from "./lib/error-states";
+import {
+  agentColor,
+  agentLabel,
+  agentTag,
+  projectLabel,
+  relativeTime,
+  statusIcon,
+  statusLabel,
+} from "./lib/format";
+
+interface Args {
+  arguments: { query?: string };
+}
+
+export default function SearchSessions(props: Args) {
+  const prefs = getPreferenceValues<Preferences.Sessions>();
+  const limit = clampInt(prefs.maxResults, 30);
+  const wantsDetail = prefs.showSnippets === true;
+
+  const [text, setText] = useState(props.arguments?.query ?? "");
+  const [selected, setSelected] = useState<string | undefined>(undefined);
+  const [showSources, setShowSources] = useState(false);
+
+  // One AbortController per independent read, so a superseded search does not
+  // cancel the live-agent poll that is feeding the LIVE tags.
+  const searchAbort = useRef<AbortController>(new AbortController());
+  const liveAbort = useRef<AbortController>(new AbortController());
+
+  // herdr's server health is a subprocess question, not a filesystem one, and
+  // it is what separates "herdr is not installed" from "herdr is installed but
+  // its server is down". Probed once, before anything reads the capability map.
+  const [probed, setProbed] = useState(false);
+  useEffect(() => {
+    void probeHerdr().finally(() => setProbed(true));
+  }, []);
+
+  const live = useCachedPromise(
+    async (ready: boolean) => (ready ? (await liveAgents({ signal: liveAbort.current?.signal })).data : []),
+    [probed],
+    { keepPreviousData: true, abortable: liveAbort, initialData: [] as LiveAgent[] },
+  );
+
+  // Every dependency is an argument, never a closure capture: the argument
+  // array IS the cache key, and a captured variable produces a stale read that
+  // looks like a caching bug.
+  const results = useCachedPromise(
+    async (query: string, max: number, agents: LiveAgent[], ready: boolean) => {
+      if (!ready) return undefined;
+      return searchSessions(query, max, agents, { signal: searchAbort.current?.signal });
+    },
+    [text, limit, live.data ?? [], probed],
+    { keepPreviousData: true, abortable: searchAbort },
+  );
+
+  const caps = probed ? capabilities() : undefined;
+  const hits = results.data?.data ?? [];
+  const selectedHit = hits.find((h) => keyString(h.session.key) === selected);
+
+  // Snippets are per-selection and never on the typeahead path. Measured:
+  // snippet() took 1144 ms on a 7.36 MB body against 20 ms for the same query
+  // without it, and the largest body in the index is 10.5 MB.
+  const snippet = useCachedPromise(
+    async (enabled: boolean, query: string, session: AgentSession | undefined) => {
+      if (!enabled || !session || !query.trim()) return undefined;
+      return resolveSnippet(session, query);
+    },
+    [wantsDetail, text, selectedHit?.session],
+    { keepPreviousData: false, execute: wantsDetail && selectedHit !== undefined },
+  );
+
+  const failure = results.error ?? results.data?.failed?.[0]?.error;
+  const badQuery = results.data?.badQuery;
+  const descriptor = badQuery ? describeError(badQuery) : failure ? describeError(failure) : undefined;
+
+  // Nothing cached AND a structural failure means the screen becomes the error.
+  // Anything else keeps the list and puts the problem above it.
+  const isEmptyAndBroken = hits.length === 0 && descriptor?.structural === true;
+  const nothingToSearch = probed && caps !== undefined && !canSearch(caps);
+
+  return (
+    <List
+      isLoading={!probed || results.isLoading}
+      searchText={text}
+      onSearchTextChange={setText}
+      onSelectionChange={setSelected}
+      searchBarPlaceholder="Search what you said in any past session"
+      throttle
+      isShowingDetail={wantsDetail && hits.length > 0}
+      actions={
+        <ActionPanel>
+          <Action
+            title={showSources ? "Hide Sources" : "Show Sources"}
+            icon={Icon.Info}
+            shortcut={{ modifiers: ["cmd"], key: "s" }}
+            onAction={() => setShowSources((v) => !v)}
+          />
+        </ActionPanel>
+      }
+    >
+      {nothingToSearch ? (
+        <List.EmptyView
+          icon={{ source: Icon.MagnifyingGlass, tintColor: Color.SecondaryText }}
+          title="No sessions to search yet"
+          description={
+            "Agent Deck reads Claude Code, Codex and OpenCode where they already keep their " +
+            "sessions. None of those directories exist on this machine yet — run a coding " +
+            "agent once and they will appear here."
+          }
+        />
+      ) : isEmptyAndBroken && descriptor ? (
+        <ErrorEmptyView descriptor={descriptor} />
+      ) : (
+        <>
+          {descriptor && !isEmptyAndBroken ? <StaleBannerItem descriptor={descriptor} /> : null}
+
+          <List.Section
+            title={text.trim() ? "Matches" : "Recent"}
+            subtitle={hits.length > 0 ? String(hits.length) : undefined}
+          >
+            {hits.map((hit) => (
+              <SessionRow
+                key={keyString(hit.session.key)}
+                hit={hit}
+                showDetail={wantsDetail}
+                snippet={selected === keyString(hit.session.key) ? snippet.data : undefined}
+                snippetLoading={selected === keyString(hit.session.key) && snippet.isLoading}
+                onRevalidate={() => void results.revalidate()}
+              />
+            ))}
+          </List.Section>
+
+          {showSources && caps ? (
+            <SourcesSection states={(Object.keys(caps) as Capability[]).map((k) => caps[k])} />
+          ) : null}
+
+          {hits.length === 0 && !results.isLoading && text.trim() ? (
+            <List.EmptyView
+              icon={{ source: Icon.MagnifyingGlass, tintColor: Color.SecondaryText }}
+              title="Nothing matched"
+              description={
+                caps && actionableGaps(caps).length > 0
+                  ? "Some sources are not installed on this machine, so the search is narrower " +
+                    "than it could be. Press ⌘S to see which."
+                  : "Try fewer words, or start with / to write a raw FTS5 expression."
+              }
+            />
+          ) : null}
+        </>
+      )}
+    </List>
+  );
+}
+
+function SessionRow({
+  hit,
+  showDetail,
+  snippet,
+  snippetLoading,
+  onRevalidate,
+}: {
+  hit: SessionHit;
+  showDetail: boolean;
+  snippet?: string;
+  snippetLoading: boolean;
+  onRevalidate: () => void;
+}) {
+  const { session, live } = hit;
+  const resume = resumeCommandIn(session.key, session.cwd);
+  // The one that can actually be focused: only herdr knows a pane id, and
+  // `herdr agent focus` accepts nothing else.
+  const focusable = live.find((a) => a.paneId !== undefined);
+
+  const accessories: List.Item.Accessory[] = [];
+  if (live.length > 0) {
+    accessories.push({
+      tag: { value: live.length > 1 ? `live ×${live.length}` : "live", color: Color.Green },
+      tooltip: live.map((a) => `${statusLabel(a.status)} — ${a.cwd}`).join("\n"),
+    });
+  }
+  accessories.push({ tag: { value: agentTag(session.key.agent), color: agentColor(session.key.agent) } });
+  accessories.push({ text: projectLabel(session) });
+  accessories.push({ text: relativeTime(session.updatedAt) });
+
+  return (
+    <List.Item
+      id={keyString(session.key)}
+      icon={live.length > 0 ? statusIcon(live[0].status) : { source: Icon.Document, tintColor: Color.SecondaryText }}
+      title={session.title}
+      subtitle={showDetail ? undefined : session.cwd}
+      accessories={showDetail ? undefined : accessories}
+      detail={showDetail ? <SessionDetail hit={hit} snippet={snippet} loading={snippetLoading} /> : undefined}
+      actions={
+        <ActionPanel>
+          <ActionPanel.Section>
+            {focusable ? (
+              <Action title="Focus the Running Agent" icon={Icon.Terminal} onAction={() => void focusAgent(focusable)} />
+            ) : null}
+            {resume ? (
+              <Action.CopyToClipboard
+                title="Copy the Resume Command"
+                icon={Icon.Clipboard}
+                content={resume}
+                shortcut={{ modifiers: ["cmd"], key: "r" }}
+              />
+            ) : null}
+            {session.transcriptPath ? (
+              <Action.Open
+                title="Open the Transcript"
+                icon={Icon.Document}
+                target={session.transcriptPath}
+                shortcut={{ modifiers: ["cmd"], key: "o" }}
+              />
+            ) : null}
+            {session.cwd ? (
+              <Action.ShowInFinder
+                title="Open the Folder"
+                path={session.cwd}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "f" }}
+              />
+            ) : null}
+          </ActionPanel.Section>
+
+          <ActionPanel.Section>
+            <Action.CopyToClipboard title="Copy the Session Id" content={session.key.sessionId} />
+            {session.cwd ? <Action.CopyToClipboard title="Copy the Folder Path" content={session.cwd} /> : null}
+            {session.markdownPath ? (
+              <Action.Open title="Open the Markdown Transcript" target={session.markdownPath} />
+            ) : null}
+            <Action
+              title="Show Live Agents"
+              icon={Icon.Dot}
+              shortcut={{ modifiers: ["cmd"], key: "l" }}
+              onAction={() => void launchCommand({ name: "agents", type: LaunchType.UserInitiated })}
+            />
+            <Action title="Refresh" icon={Icon.ArrowClockwise} onAction={onRevalidate} />
+          </ActionPanel.Section>
+        </ActionPanel>
+      }
+    />
+  );
+}
+
+function SessionDetail({ hit, snippet, loading }: { hit: SessionHit; snippet?: string; loading: boolean }) {
+  const { session, live } = hit;
+
+  const body = loading
+    ? "_Finding the match…_"
+    : snippet
+      ? snippet
+      : // Not an apology. Only SpecStory can highlight a match, and only for a
+        // session it indexed; saying so beats a spinner that never resolves.
+        "_No preview for this session._";
+
+  return (
+    <List.Item.Detail
+      markdown={`# ${session.title}\n\n${body}`}
+      metadata={
+        <List.Item.Detail.Metadata>
+          <List.Item.Detail.Metadata.Label title="Agent" text={agentLabel(session.key.agent)} />
+          <List.Item.Detail.Metadata.Label title="Folder" text={session.cwd ?? "unknown"} />
+          <List.Item.Detail.Metadata.Label title="Last Activity" text={relativeTime(session.updatedAt)} />
+          {session.userTurns !== undefined ? (
+            <List.Item.Detail.Metadata.Label title="Your Turns" text={String(session.userTurns)} />
+          ) : null}
+          {live.length > 0 ? (
+            <List.Item.Detail.Metadata.TagList title="Running">
+              {live.map((a) => (
+                <List.Item.Detail.Metadata.TagList.Item
+                  key={a.handle}
+                  text={`${statusLabel(a.status)}${a.paneId ? ` · ${a.paneId}` : ""}`}
+                  color={a.status === "blocked" ? Color.Red : Color.Green}
+                />
+              ))}
+            </List.Item.Detail.Metadata.TagList>
+          ) : null}
+          <List.Item.Detail.Metadata.Separator />
+          <List.Item.Detail.Metadata.Label title="Session" text={session.key.sessionId} />
+        </List.Item.Detail.Metadata>
+      }
+    />
+  );
+}
+
+/**
+ * Focus, then raise.
+ *
+ * Two steps, because `herdr agent focus` moves focus INSIDE herdr's own session
+ * and cannot raise the window that session is running in. Skipping the second
+ * step looks exactly like nothing happened.
+ */
+async function focusAgent(agent: LiveAgent): Promise<void> {
+  try {
+    await act({ op: "focus", agent });
+    const app = getPreferenceValues<Preferences>().terminalApp;
+    if (app?.path) await open(app.path);
+  } catch (e) {
+    const d = describeError(e);
+    await showToast({ style: Toast.Style.Failure, title: d.title, message: d.description.split("\n")[0] });
+  }
+}
+
+/** Preferences are text fields; a typo must clamp rather than break a query. */
+function clampInt(raw: string | undefined, fallback: number): number {
+  const v = Math.trunc(Number(raw));
+  return Number.isFinite(v) && v > 0 ? Math.min(v, 200) : fallback;
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/sessions.tsx (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:39:02Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Typecheck the search view
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && npx tsc --noEmit 2>&1 | head -25; echo "=== done ==="`
+
+```text
+src/sessions.tsx(130,7): error TS2322: Type 'Dispatch<SetStateAction<string | undefined>>' is not assignable to type '(id: string | null) => void'.
+  Types of parameters 'value' and 'id' are incompatible.
+    Type 'string | null' is not assignable to type 'SetStateAction<string | undefined>'.
+      Type 'null' is not assignable to type 'SetStateAction<string | undefined>'.
+=== done ===
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:39:08Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/sessions.tsx has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:39:26Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Typecheck and lint
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && npx tsc --noEmit 2>&1 | head -20; echo "=== typecheck done ==="; npx ray lint 2>&1 | tail -25`
+
+```text
+=== typecheck done ===
+/Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/fixtures/herdr-schema-excerpt.json
+  error  Code style issues found. Please run Prettier 3.9.6 (ray lint --fix).
+/Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/fixtures/opencode-sessions.json
+  error  Code style issues found. Please run Prettier 3.9.6 (ray lint --fix).
+/Users/david/Documents/Program/Agent-Deck-Raycast-Extension/[error] No parser could be inferred for file "/Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/fixtures/peon-status.txt".
+  error  Code style issues found. Please run Prettier 3.9.6 (ray lint --fix).
+/Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/fixtures/specstory-rows.json
+  error  Code style issues found. Please run Prettier 3.9.6 (ray lint --fix).
+/Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/fixtures/specstory-shape.json
+  error  Code style issues found. Please run Prettier 3.9.6 (ray lint --fix).
+/Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/format.tsx
+  error  Code style issues found. Please run Prettier 3.9.6 (ray lint --fix).
+/Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/herdr/cli.ts
+  error  Code style issues found. Please run Prettier 3.9.6 (ray lint --fix).
+/Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/herdr/wire.ts
+  error  Code style issues found. Please run Prettier 3.9.6 (ray lint --fix).
+/Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/opencode/cli.ts
+  error  Code style issues found. Please run Prettier 3.9.6 (ray lint --fix).
+/Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/specstory/cli.ts
+  error  Code style issues found. Please run Prettier 3.9.6 (ray lint --fix).
+/Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/specstory/wire.ts
+  error  Code style issues found. Please run Prettier 3.9.6 (ray lint --fix).
+/Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/sessions.tsx
+  error  Code style issues found. Please run Prettier 3.9.6 (ray lint --fix).
+ ›   Error: linting issues found (tip: try re-running with '--fix')
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:39:36Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm dealing with Prettier formatting issues in the fixtures directory. Since these are captured data rather than source code, I should add a .prettierignore file to exclude them — that way the linting won't fail every time the fixtures are regenerated. Let me set that up and run the formatter with the fix flag.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:39:36Z)**_
+
+Prettier. The fixtures are captured data, not source — they should be ignored rather than reformatted on every capture.
+
+_**Agent (claude-opus-5 2026-07-26 21:39:51Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Add prettierignore and fix formatting
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && cat > .prettierignore <<'EOF'
+# Captured data, not source. `just fixtures` rewrites these from the live tools,
+# so reformatting them here would make every capture a lint failure — and a
+# reformatted fixture no longer matches the bytes the tool actually emitted.
+src/lib/fixtures/
+EOF
+npx ray lint --fix 2>&1 | tail -5; echo "=== lint ==="; npx ray lint 2>&1 | tail -5
+```
+
+```text
+✖ 4 problems (4 errors, 0 warnings)
+
+ready  - run Prettier 3.9.6
+ ›   Error: linting issues found (tip: try re-running with '--fix')
+=== lint ===
+
+✖ 4 problems (4 errors, 0 warnings)
+
+ready  - run Prettier 3.9.6
+ ›   Error: linting issues found (tip: try re-running with '--fix')
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+[This command modified 22 files you've previously read: ../Agent-Deck-Raycast-Extension/src/sessions.tsx, ../Agent-Deck-Raycast-Extension/src/lib/agents/capabilities.ts, ../Agent-Deck-Raycast-Extension/src/lib/herdr/wire.ts, ../Agent-Deck-Raycast-Extension/src/lib/herdr/cli.ts, ../Agent-Deck-Raycast-Extension/src/lib/dev-check.ts and 17 more. Call Read before editing.]
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:39:58Z)**_
+
+<think><details><summary>Thought Process</summary>
+Prettier and the eslint autofix changed my `⌘S` shortcut to `Keyboard.Shortcut.Common.Save`, which is semantically misleading even though it maps to the right key. Let me check what the remaining 4 lint errors are.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:40:06Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Show remaining lint errors
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && npx ray lint 2>&1 | grep -B3 -A3 "error" | head -40`
+
+```text
+ready  - validate package.json file
+ready  - validate extension icons
+ready  - validate extension metadata
+error  - run ESLint
+
+/Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/claude/index-fs.ts
+   98:7   error  '_opts' is defined but never used  @typescript-eslint/no-unused-vars
+  157:33  error  '_opts' is defined but never used  @typescript-eslint/no-unused-vars
+
+/Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/dev-check.ts
+  1036:34  error  Unexpected control character(s) in regular expression: \x1b  no-control-regex
+
+/Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/specstory/cli.ts
+  159:9  error  'warmed' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+✖ 4 problems (4 errors, 0 warnings)
+
+ready  - run Prettier 3.9.6
+ ›   Error: linting issues found (tip: try re-running with '--fix')
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:40:18Z)**_
+
+Four real lint errors. Let me fix them properly rather than suppress.
+
+_**Agent (claude-opus-5 2026-07-26 21:40:19Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Remove unused params and dead variable
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PY'
+import pathlib, re
+
+# 1. index-fs.ts: the unused _opts params. These indexes are synchronous file
+#    reads with nothing to abort mid-flight, so drop the parameter entirely
+#    rather than name it with an underscore and leave a lie in the signature.
+p = pathlib.Path("src/lib/claude/index-fs.ts")
+t = p.read_text()
+t = t.replace(
+  "    async search(\n      text: string,\n      limit: number,\n      _opts?: ReadOptions,\n    ): Promise<IndexHit[]> {",
+  "    // No ReadOptions: these are synchronous file reads with no subprocess to\n"
+  "    // abort. Accepting a signal we cannot honour would be a lie in the type.\n"
+  "    async search(text: string, limit: number): Promise<IndexHit[]> {"
+)
+t = t.replace(
+  "    async recent(limit: number, _opts?: ReadOptions): Promise<AgentSession[]> {",
+  "    async recent(limit: number): Promise<AgentSession[]> {"
+)
+t = t.replace(
+  'import type { IndexHit, ReadOptions, SessionIndex } from "../agents/transport";',
+  'import type { IndexHit, SessionIndex } from "../agents/transport";'
+)
+p.write_text(t)
+
+# 2. specstory/cli.ts: `warmed` was left over from an earlier design where the
+#    index warmed itself lazily. Warming now happens once at wiring time.
+p = pathlib.Path("src/lib/specstory/cli.ts")
+t = p.read_text()
+t = t.replace("  const uri = dbUri(dbPath);\n  let warmed = false;\n", "  const uri = dbUri(dbPath);\n")
+p.write_text(t)
+print("patched")
+PY
+grep -n "warmed" src/lib/specstory/cli.ts || echo "warmed: gone"
+grep -n "_opts" src/lib/claude/index-fs.ts || echo "_opts: gone"
+```
+
+```text
+patched
+159:  const warmed = false;
+_opts: gone
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:40:29Z)**_
+
+<think><details><summary>Thought Process</summary>
+Prettier already converted that to `const`, so I need to use the correct string. For the dev-check control regex on line 1036 in the `cleanStderr` ANSI test, the eslint rule `no-control-regex` is flagging `\x1b`, so I'll add an eslint-disable comment with a reason since we're testing ANSI stripping behavior. I was looking at the errors.ts file and...
+
+Adding eslint-disable comment...
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:40:29Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Remove warmed and inspect the control regex line
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && sed -i '' 's/^  const warmed = false;$//' src/lib/specstory/cli.ts && sed -n '1030,1040p' src/lib/dev-check.ts | cat -v`
+
+```text
+check(
+  "ENOENT after a successful probe is unreachable, not a missing install",
+  fromExecError({ code: "ENOENT" }, "live.herdr", ["herdr"]).kind,
+  "source-unreachable",
+);
+
+ok("ANSI escapes are stripped", !/^[?\[3[0-9]m/.test(cleanStderr("^[[31mred^[[0m")));
+check("cleanStderr drops blank lines", cleanStderr("\n\na\n\n\nb\n\n"), "a\nb");
+
+// ---------------------------------------------------------------------------
+section("herdr wire (against the captured fixture)");
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:40:56Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Fix control regex and re-lint
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PY'
+import pathlib
+p = pathlib.Path("src/lib/dev-check.ts")
+t = p.read_text()
+ESC = "\x1b"
+old = f'ok("ANSI escapes are stripped", !/{ESC}?\\[3[0-9]m/.test(cleanStderr("{ESC}[31mred{ESC}[0m")));'
+new = (
+  "// The literal ESC below is the point: color_eyre emits SGR sequences even\n"
+  "// when stdout is a pipe, and an unstripped one renders in a Raycast toast as\n"
+  "// a literal [31m. Writing it as \\u001b would test a different string.\n"
+  "// eslint-disable-next-line no-control-regex\n"
+  f'const ANSI_LEFTOVER = /{ESC}|\\[3[0-9]m/;\n'
+  f'ok("ANSI escapes are stripped", !ANSI_LEFTOVER.test(cleanStderr("{ESC}[31mred{ESC}[0m")));\n'
+  f'check("and the text survives", cleanStderr("{ESC}[31mred{ESC}[0m"), "red");'
+)
+assert old in t, "anchor not found"
+t = t.replace(old, new)
+p.write_text(t)
+print("patched")
+PY
+npx ray lint --fix 2>&1 | tail -3; echo "=== lint ==="; npx ray lint 2>&1 | tail -6
+```
+
+```text
+patched
+ready  - validate extension metadata
+ready  - run ESLint
+ready  - run Prettier 3.9.6
+=== lint ===
+ready  - validate package.json file
+ready  - validate extension icons
+ready  - validate extension metadata
+ready  - run ESLint
+ready  - run Prettier 3.9.6
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+[This command modified 2 files you've previously read: ../Agent-Deck-Raycast-Extension/src/lib/dev-check.ts, ../Agent-Deck-Raycast-Extension/src/lib/specstory/cli.ts. Call Read before editing.]
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:41:15Z)**_
+
+<think><details><summary>Thought Process</summary>
+The linter passed, but I'm noticing the autofix changed my ⌘S shortcut to `Keyboard.Shortcut.Common.Save`, which doesn't match the semantic meaning of "Show Sources" in my app. The eslint rule prefers using Common shortcuts, so while it's technically correct by the rule's standards, it feels semantically off. I should probably pick a different shortcut that better represents what the action actually does.
+
+Let me switch to ⌘⇧I for Info instead, which should be semantically appropriate and likely won't trigger the Common shortcut rule. I'll also need to update the EmptyView text that currently says "Press ⌘S" to match the new shortcut.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:41:15Z)**_
+
+Lint clean. One semantic wart to fix — the autofixer rewrote my ⌘S into `Common.Save`, which reads wrong for "Show Sources".
+
+_**Agent (claude-opus-5 2026-07-26 21:41:28Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Fix shortcut semantics and run the gate
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PY'
+import pathlib
+p = pathlib.Path("src/sessions.tsx")
+t = p.read_text()
+# ray lint's autofixer rewrites { cmd, "s" } into Keyboard.Shortcut.Common.Save,
+# which is the right KEY but the wrong WORD — nothing is being saved. Move to a
+# shortcut the Common set does not claim, so the code says what it means.
+t = t.replace("shortcut={Keyboard.Shortcut.Common.Save}", 'shortcut={{ modifiers: ["cmd", "shift"], key: "i" }}')
+t = t.replace("Press ⌘S to see which.", "Press ⌘⇧I to see which.")
+t = t.replace("  Keyboard,\n", "")
+p.write_text(t)
+print("patched")
+PY
+npx ray lint 2>&1 | tail -4 && npx tsc --noEmit 2>&1 | head -5; echo "=== gate ==="; just verify 2>&1 | tail -3
+```
+
+```text
+patched
+ready  - validate extension icons
+ready  - validate extension metadata
+ready  - run ESLint
+ready  - run Prettier 3.9.6
+src/sessions.tsx(316,27): error TS2304: Cannot find name 'Keyboard'.
+src/sessions.tsx(324,27): error TS2304: Cannot find name 'Keyboard'.
+=== gate ===
+— fixtures are redacted
+
+318/318 checks passed
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:41:35Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to restore the import for those keyboard shortcuts since the autofixer converted them to `Keyboard.Shortcut.Common.*` — those conversions look semantically correct like `Common.Open` and `Common.Refresh`, so I should verify and add the import back.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:41:35Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Inspect the other Keyboard usages
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && sed -n '310,330p' src/sessions.tsx`
+
+```text
+            ) : null}
+            {resume ? (
+              <Action.CopyToClipboard
+                title="Copy the Resume Command"
+                icon={Icon.Clipboard}
+                content={resume}
+                shortcut={Keyboard.Shortcut.Common.Refresh}
+              />
+            ) : null}
+            {session.transcriptPath ? (
+              <Action.Open
+                title="Open the Transcript"
+                icon={Icon.Document}
+                target={session.transcriptPath}
+                shortcut={Keyboard.Shortcut.Common.Open}
+              />
+            ) : null}
+            {session.cwd ? (
+              <Action.ShowInFinder
+                title="Open the Folder"
+                path={session.cwd}
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:41:48Z)**_
+
+<think><details><summary>Thought Process</summary>
+I see the issue — `Common.Refresh` doesn't make sense for copying the resume command since ⌘R is semantically tied to refreshing, not copying. I should keep `Common.Open` for the transcript but switch the resume copy to a different shortcut like ⌘⇧C that doesn't create this collision, and make sure the Keyboard import is restored.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:41:48Z)**_
+
+`Common.Open` is right, but `Common.Refresh` for "Copy the Resume Command" is a semantic collision I caused by picking ⌘R. Fixing.
+
+_**Agent (claude-opus-5 2026-07-26 21:42:06Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Restore import and fix shortcut semantics
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PY'
+import pathlib
+p = pathlib.Path("src/sessions.tsx")
+t = p.read_text()
+
+# Restore the import: two of the autofixed shortcuts are genuinely the Common
+# ones and should stay named that way.
+t = t.replace('  showToast,\n} from "@raycast/api";', '  showToast,\n  Keyboard,\n} from "@raycast/api";')
+
+# ⌘R is Common.Refresh, and copying a command is not refreshing anything. The
+# autofixer was right that the key was claimed and wrong about what to call it;
+# the fix is to stop claiming it.
+t = t.replace(
+  'content={resume}\n                shortcut={Keyboard.Shortcut.Common.Refresh}',
+  'content={resume}\n                shortcut={Keyboard.Shortcut.Common.Copy}'
+)
+# And give Refresh to the action that actually refreshes.
+t = t.replace(
+  '<Action\n              title="Refresh"\n              icon={Icon.ArrowClockwise}\n              onAction={onRevalidate}\n            />',
+  '<Action\n              title="Refresh"\n              icon={Icon.ArrowClockwise}\n              shortcut={Keyboard.Shortcut.Common.Refresh}\n              onAction={onRevalidate}\n            />'
+)
+p.write_text(t)
+print("patched")
+PY
+npx tsc --noEmit 2>&1 | head -5; echo "tsc ok"; npx ray lint 2>&1 | tail -3
+```
+
+```text
+patched
+tsc ok
+ready  - validate extension metadata
+ready  - run ESLint
+ready  - run Prettier 3.9.6
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:42:45Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Verify shortcuts and run the full gate
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && grep -n "Common.Refresh\|Common.Copy\|Common.Open" src/sessions.tsx && echo "--- full gate ---" && just check 2>&1 | tail -12`
+
+```text
+317:                shortcut={Keyboard.Shortcut.Common.Copy}
+325:                shortcut={Keyboard.Shortcut.Common.Open}
+368:              shortcut={Keyboard.Shortcut.Common.Refresh}
+--- full gate ---
+ready  - validate extension metadata
+ready  - run ESLint
+ready  - run Prettier 3.9.6
+([ -d node_modules ] || npm install) && npm run build
+
+> build
+> ray build
+
+info  - entry points ["src/agent-menu.tsx","src/sessions.tsx","src/agents.tsx","src/focus-agent.tsx"]
+info  - compiled entry points
+info  - generated extension's TypeScript definitions
+ready  - built extension successfully
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:43:04Z)**_
+
+Full gate green — typecheck, 318 checks, lint, build. Let me commit this slice.
+
+_**Agent (claude-opus-5 2026-07-26 21:43:06Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit the search slice
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && git add -A && git -c user.name="Da-Wei Lee" commit -q -F - <<'MSG'
+Make a search result and a running process the same object
+
+Four session indexes, the facade that hides which of them exist, and the
+search view. `just check` is green: typecheck, 318 checks, lint, build.
+
+The join is the product. A row you found by remembering what you said
+carries the agent that is running it right now, so ⏎ focuses a terminal
+instead of copying a uuid you then have to paste somewhere.
+
+OpenCode needed its own reader, and the reason is worth recording:
+SpecStory does not index it. Its providers are antigravity, claude, codex,
+cursor, cursoride, deepseek, droid and gemini — no opencode — so of 470
+indexed sessions here, zero were OpenCode's while opencode.db held 93. And
+that database has no FTS table, so it does metadata well and does not
+pretend to full text. It is the only source with real per-session cost and
+token columns, which is where v0.3's usage view will start.
+
+The Claude filesystem reader is the floor: no binary, no third-party
+database, and it still finds things SpecStory cannot, because
+history.jsonl predates any SpecStory install and carries the real
+unmangled cwd. What it cannot do is search what the assistant said —
+687 MB across 1455 files is not a keystroke — and the UI says so rather
+than showing an empty list.
+
+~/.claude/projects/<dir> is never turned back into a path. `/`, `.` and
+`_` all map to `-`, so `-Users-dev-a-b` could be four different
+directories. Reading cwd from inside the file is the only correct answer;
+un-mangling produces a path that usually exists and is sometimes someone
+else's project.
+
+Titles come from the LAST ai-title, not the first, and never from a
+summary record — there is no summary record on CLI 2.1.220. Since
+transcripts reach 31 MB, that means a bounded head read for the cwd and
+opening prompt and a bounded tail read for the current title, never the
+middle.
+
+Two things the linter got half right. It rewrote ⌘S into
+Keyboard.Shortcut.Common.Save for a "Show Sources" action, and ⌘R into
+Common.Refresh for "Copy the Resume Command" — correct that the keys were
+claimed, wrong about what to call them. Both moved to keys that mean what
+they do. And fixtures are now in .prettierignore: they are captured bytes,
+so reformatting them would make every `just fixtures` a lint failure and
+stop them matching what the tool emitted.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+MSG
+git log --oneline | head -4
+```
+
+```text
+8906e3f Make a search result and a running process the same object
+a86df3f Read the tools instead of the docs, and redact what they say
+c7f1552 Make every external tool optional, and prove it
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:43:13Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #4 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:43:13Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #6 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:43:18Z)**_
+
+Now the remaining three commands. Live agents view first.
+
+_**Agent (claude-opus-5 2026-07-26 21:43:19Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Remove remaining placeholders
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && rm -f src/agents.tsx src/focus-agent.tsx src/agent-menu.tsx && echo "placeholders removed"`
+
+```text
+placeholders removed
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:44:11Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```tsx
+/**
+ * Live Agents.
+ *
+ * Which agents are running, which are waiting on you, and one keystroke into
+ * the right terminal pane.
+ *
+ * The framing that runs through this file: herdr's status is DETECTED, not
+ * known. It infers state by scraping rendered terminal text — `herdr agent
+ * explain` answers with `rule: live_prompt_box (region=prompt_box_body
+ * priority=950), evidence: "❯\n"` — so it is a good guess that lags a real
+ * change. The Explain action is offered precisely so a wrong guess is
+ * debuggable rather than mysterious.
+ */
+
+import { useEffect, useRef, useState } from "react";
+import {
+  Action,
+  ActionPanel,
+  Color,
+  Icon,
+  Keyboard,
+  LaunchType,
+  List,
+  Toast,
+  getPreferenceValues,
+  launchCommand,
+  open,
+  showToast,
+} from "@raycast/api";
+import { useCachedPromise } from "@raycast/utils";
+
+import {
+  act,
+  capabilities,
+  explainDetection,
+  liveAgents,
+  probeHerdr,
+  readTerminal,
+  resumeCommandIn,
+} from "./lib/agents";
+import { canSeeLive } from "./lib/agents/capabilities";
+import { normalizeCwd } from "./lib/agents/normalize";
+import type { AgentStatus, Capability, LiveAgent } from "./lib/agents/types";
+import { ErrorEmptyView, SourcesSection, StaleBannerItem, describeError } from "./lib/error-states";
+import { agentColor, agentLabel, agentTag, relativeTime, statusIcon, statusLabel } from "./lib/format";
+
+const ALL = "all";
+/** How much scrollback the detail pane asks herdr for. */
+const TAIL_LINES = 60;
+
+export default function LiveAgents() {
+  const [filter, setFilter] = useState<string>(ALL);
+  const [selected, setSelected] = useState<string | undefined>(undefined);
+  const [showSources, setShowSources] = useState(false);
+
+  const listAbort = useRef<AbortController>(new AbortController());
+  const tailAbort = useRef<AbortController>(new AbortController());
+
+  const [probed, setProbed] = useState(false);
+  useEffect(() => {
+    void probeHerdr().finally(() => setProbed(true));
+  }, []);
+
+  const agents = useCachedPromise(
+    async (ready: boolean) => (ready ? liveAgents({ signal: listAbort.current?.signal }) : undefined),
+    [probed],
+    { keepPreviousData: true, abortable: listAbort },
+  );
+
+  const caps = probed ? capabilities() : undefined;
+  const all = agents.data?.data ?? [];
+  const shown = filter === ALL ? all : all.filter((a) => a.status === filter);
+  const selectedAgent = all.find((a) => a.handle === selected);
+
+  // Only fetched for the selected row, and only when we have something that can
+  // read a terminal at all. `execute` is what keeps this off the list path.
+  const tail = useCachedPromise(
+    async (handle: string | undefined, agent: LiveAgent | undefined) => {
+      if (!handle || !agent?.paneId) return undefined;
+      return readTerminal(agent, TAIL_LINES, { signal: tailAbort.current?.signal });
+    },
+    [selected, selectedAgent],
+    {
+      keepPreviousData: false,
+      abortable: tailAbort,
+      execute: selectedAgent?.paneId !== undefined,
+    },
+  );
+
+  const failure = agents.error ?? agents.data?.failed?.[0]?.error;
+  const descriptor = failure ? describeError(failure) : undefined;
+  const isEmptyAndBroken = all.length === 0 && descriptor?.structural === true;
+  const nothingToSee = probed && caps !== undefined && !canSeeLive(caps);
+
+  const counts = countByStatus(all);
+
+  return (
+    <List
+      isLoading={!probed || agents.isLoading}
+      onSelectionChange={(id) => setSelected(id ?? undefined)}
+      searchBarPlaceholder="Filter running agents"
+      isShowingDetail={shown.length > 0}
+      searchBarAccessory={
+        <List.Dropdown tooltip="Status" value={filter} onChange={setFilter}>
+          <List.Dropdown.Item title={`All (${all.length})`} value={ALL} />
+          <List.Dropdown.Item title={`Waiting on you (${counts.blocked})`} value="blocked" />
+          <List.Dropdown.Item title={`Working (${counts.working})`} value="working" />
+          <List.Dropdown.Item title={`Idle (${counts.idle})`} value="idle" />
+        </List.Dropdown>
+      }
+      actions={
+        <ActionPanel>
+          <Action
+            title={showSources ? "Hide Sources" : "Show Sources"}
+            icon={Icon.Info}
+            shortcut={{ modifiers: ["cmd", "shift"], key: "i" }}
+            onAction={() => setShowSources((v) => !v)}
+          />
+        </ActionPanel>
+      }
+    >
+      {nothingToSee ? (
+        <List.EmptyView
+          icon={{ source: Icon.Dot, tintColor: Color.SecondaryText }}
+          title="Nothing to watch"
+          description={
+            "Agent Deck reads running agents from herdr, or from Claude Code's own " +
+            "session registry at ~/.claude/sessions. Neither is present on this machine. " +
+            "Press ⌘⇧I to see what it looked for."
+          }
+        />
+      ) : isEmptyAndBroken && descriptor ? (
+        <ErrorEmptyView descriptor={descriptor} />
+      ) : (
+        <>
+          {descriptor && !isEmptyAndBroken ? <StaleBannerItem descriptor={descriptor} /> : null}
+
+          {(["blocked", "working", "idle", "done", "unknown"] as AgentStatus[]).map((status) => {
+            const rows = shown.filter((a) => a.status === status);
+            if (rows.length === 0) return null;
+            return (
+              <List.Section key={status} title={statusLabel(status)} subtitle={String(rows.length)}>
+                {rows.map((agent) => (
+                  <AgentRow
+                    key={agent.handle}
+                    agent={agent}
+                    tail={selected === agent.handle ? tail.data : undefined}
+                    tailLoading={selected === agent.handle && tail.isLoading}
+                    onRefresh={() => void agents.revalidate()}
+                  />
+                ))}
+              </List.Section>
+            );
+          })}
+
+          {showSources && caps ? (
+            <SourcesSection states={(Object.keys(caps) as Capability[]).map((k) => caps[k])} />
+          ) : null}
+
+          {all.length === 0 && !agents.isLoading ? (
+            <List.EmptyView
+              icon={{ source: Icon.Dot, tintColor: Color.SecondaryText }}
+              title="No agents running"
+              description="Start a coding agent and it will appear here within a minute."
+            />
+          ) : null}
+        </>
+      )}
+    </List>
+  );
+}
+
+function AgentRow({
+  agent,
+  tail,
+  tailLoading,
+  onRefresh,
+}: {
+  agent: LiveAgent;
+  tail?: string;
+  tailLoading: boolean;
+  onRefresh: () => void;
+}) {
+  const resume = agent.session ? resumeCommandIn(agent.session, agent.cwd) : undefined;
+  const folder = normalizeCwd(agent.cwd)?.split("/").filter(Boolean).pop();
+
+  return (
+    <List.Item
+      id={agent.handle}
+      icon={statusIcon(agent.status)}
+      title={agent.title ?? folder ?? agent.handle}
+      subtitle={folder && agent.title ? folder : undefined}
+      detail={<AgentDetail agent={agent} tail={tail} loading={tailLoading} />}
+      actions={
+        <ActionPanel>
+          <ActionPanel.Section>
+            {agent.paneId ? (
+              <Action title="Focus This Agent" icon={Icon.Terminal} onAction={() => void focusAgent(agent)} />
+            ) : (
+              // No pane id means no way to focus: `herdr agent focus` accepts
+              // nothing else, and the Claude registry does not know which pane a
+              // process is in. Offering a button that always fails is worse than
+              // not offering one.
+              <Action.CopyToClipboard
+                title="Copy the Resume Command"
+                icon={Icon.Clipboard}
+                content={resume ?? agent.session?.sessionId ?? agent.handle}
+              />
+            )}
+            {agent.paneId && resume ? (
+              <Action.CopyToClipboard
+                title="Copy the Resume Command"
+                icon={Icon.Clipboard}
+                content={resume}
+                shortcut={Keyboard.Shortcut.Common.Copy}
+              />
+            ) : null}
+            {agent.cwd ? (
+              <Action.ShowInFinder
+                title="Open the Folder"
+                path={agent.cwd}
+                shortcut={{ modifiers: ["cmd", "shift"], key: "f" }}
+              />
+            ) : null}
+          </ActionPanel.Section>
+
+          <ActionPanel.Section>
+            {agent.paneId ? (
+              <Action
+                title="Explain This Status"
+                icon={Icon.QuestionMark}
+                onAction={() => void explain(agent)}
+              />
+            ) : null}
+            {agent.session ? (
+              <Action.CopyToClipboard title="Copy the Session Id" content={agent.session.sessionId} />
+            ) : null}
+            {agent.paneId ? <Action.CopyToClipboard title="Copy the Pane Id" content={agent.paneId} /> : null}
+            <Action
+              title="Search Sessions"
+              icon={Icon.MagnifyingGlass}
+              shortcut={{ modifiers: ["cmd"], key: "l" }}
+              onAction={() =>
+                void launchCommand({
+                  name: "sessions",
+                  type: LaunchType.UserInitiated,
+                  arguments: { query: agent.title ?? "" },
+                })
+              }
+            />
+            <Action
+              title="Refresh"
+              icon={Icon.ArrowClockwise}
+              shortcut={Keyboard.Shortcut.Common.Refresh}
+              onAction={onRefresh}
+            />
+          </ActionPanel.Section>
+        </ActionPanel>
+      }
+    />
+  );
+}
+
+function AgentDetail({ agent, tail, loading }: { agent: LiveAgent; tail?: string; loading: boolean }) {
+  const body = !agent.paneId
+    ? "_Terminal output is only available for agents herdr can see._"
+    : loading
+      ? "_Reading the terminal…_"
+      : tail?.trim()
+        ? // Fenced so the terminal's own alignment survives. herdr is asked for
+          // --format text, so there are no escape sequences to leak in here.
+          `\`\`\`\n${tail.trimEnd()}\n\`\`\``
+        : "_Nothing on screen._";
+
+  return (
+    <List.Item.Detail
+      markdown={body}
+      metadata={
+        <List.Item.Detail.Metadata>
+          <List.Item.Detail.Metadata.TagList title="Status">
+            <List.Item.Detail.Metadata.TagList.Item
+              text={statusLabel(agent.status)}
+              color={agent.status === "blocked" ? Color.Red : agent.status === "working" ? Color.Green : Color.SecondaryText}
+            />
+            <List.Item.Detail.Metadata.TagList.Item
+              text={agentTag(agent.agent)}
+              color={agentColor(agent.agent)}
+            />
+          </List.Item.Detail.Metadata.TagList>
+          <List.Item.Detail.Metadata.Label title="Agent" text={agentLabel(agent.agent)} />
+          <List.Item.Detail.Metadata.Label title="Folder" text={agent.cwd || "unknown"} />
+          {agent.startedAt ? (
+            <List.Item.Detail.Metadata.Label title="Started" text={relativeTime(agent.startedAt)} />
+          ) : null}
+          <List.Item.Detail.Metadata.Separator />
+          <List.Item.Detail.Metadata.Label
+            title="Seen by"
+            // Named plainly, because the two sources can disagree and knowing
+            // which one produced a row is the first question when they do.
+            text={agent.source === "herdr" ? "herdr" : "Claude session registry"}
+          />
+          {agent.paneId ? <List.Item.Detail.Metadata.Label title="Pane" text={agent.paneId} /> : null}
+          {agent.pid !== undefined ? (
+            <List.Item.Detail.Metadata.Label title="Process" text={String(agent.pid)} />
+          ) : null}
+          {agent.session ? (
+            <List.Item.Detail.Metadata.Label title="Session" text={agent.session.sessionId} />
+          ) : null}
+        </List.Item.Detail.Metadata>
+      }
+    />
+  );
+}
+
+async function focusAgent(agent: LiveAgent): Promise<void> {
+  try {
+    await act({ op: "focus", agent });
+    // Two steps: `herdr agent focus` moves focus INSIDE herdr's session and
+    // cannot raise the window that session runs in. Without this, a successful
+    // focus looks exactly like nothing happened.
+    const app = getPreferenceValues<Preferences>().terminalApp;
+    if (app?.path) await open(app.path);
+  } catch (e) {
+    const d = describeError(e);
+    await showToast({ style: Toast.Style.Failure, title: d.title, message: d.description.split("\n")[0] });
+  }
+}
+
+/**
+ * Ask herdr why it thinks this agent is in this state.
+ *
+ * The antidote to a screen-scraped status being wrong: instead of the user
+ * doubting the whole list, they can see the rule and the evidence.
+ */
+async function explain(agent: LiveAgent): Promise<void> {
+  const detail = await explainDetection(agent);
+  await showToast({
+    style: Toast.Style.Success,
+    title: `Detected as ${statusLabel(agent.status)}`,
+    message: detail?.split("\n").slice(0, 3).join(" ") ?? "herdr did not say why.",
+  });
+}
+
+function countByStatus(agents: readonly LiveAgent[]): Record<AgentStatus, number> {
+  const counts: Record<AgentStatus, number> = { idle: 0, working: 0, blocked: 0, done: 0, unknown: 0 };
+  for (const a of agents) counts[a.status]++;
+  return counts;
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/agents.tsx (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:44:59Z)**_
+
+Now the menu bar — the headline surface, with its own set of constraints.
+
+_**Agent (claude-opus-5 2026-07-26 21:45:00Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```tsx
+/**
+ * Agents Menu Bar.
+ *
+ * The headline surface, and the one with the most constraints that are not
+ * obvious until you hit them:
+ *
+ *  1. There is no badge API. The count IS the title, and `undefined` removes it
+ *     entirely — which is what makes "quiet until an agent needs you" possible.
+ *  2. `isLoading` is a contract, not a hint. Never setting it makes Raycast
+ *     render once and immediately unload; leaving it true forever makes the
+ *     whole tree re-run every tick.
+ *  3. Raycast restores this item from a database on restart rather than
+ *     re-running the command, so a stale render outlives a restart with no way
+ *     to tell. Hence one cache entry carrying both the data and when it was
+ *     read, and a disabled "Updated HH:MM" row that says so.
+ *  4. There is no confirmAlert here. It presents in the Raycast window, which
+ *     is closed while a menu is open, so it never appears and the action
+ *     silently does nothing.
+ *  5. Every item title is prefixed with something unique. Identical sibling
+ *     titles get their onAction handlers crossed.
+ *
+ * Scale is the real problem: 50 of 52 agents were idle on the machine this was
+ * built against. A macOS menu does not scroll, so idle agents are off by
+ * default and every section collapses past a limit.
+ */
+
+import { useEffect, useState } from "react";
+import {
+  Color,
+  Icon,
+  LaunchType,
+  MenuBarExtra,
+  getPreferenceValues,
+  launchCommand,
+  open,
+  showHUD,
+  updateCommandMetadata,
+} from "@raycast/api";
+import { useCachedPromise } from "@raycast/utils";
+
+import { act, capabilities, liveAgents, probeHerdr, resumeCommandIn } from "./lib/agents";
+import { actionableGaps, canSeeLive, capabilityLabel } from "./lib/agents/capabilities";
+import { normalizeCwd } from "./lib/agents/normalize";
+import type { AgentStatus, LiveAgent } from "./lib/agents/types";
+import { describeError } from "./lib/error-states";
+import { agentLabel, relativeTime, statusIcon, statusLabel } from "./lib/format";
+
+export default function AgentMenu() {
+  const prefs = getPreferenceValues<Preferences.AgentMenu>();
+  const perSection = clampInt(prefs.maxItemsPerSection, 7);
+
+  const [probed, setProbed] = useState(false);
+  useEffect(() => {
+    void probeHerdr().finally(() => setProbed(true));
+  }, []);
+
+  const snapshot = useCachedPromise(
+    async (ready: boolean) => (ready ? liveAgents() : undefined),
+    [probed],
+    {
+      keepPreviousData: true,
+      onData: (data) => {
+        if (!data) return;
+        const c = countByStatus(data.data);
+        // The subtitle in Raycast's root search, so the state is visible even
+        // without opening the menu.
+        void updateCommandMetadata({
+          subtitle: `${c.blocked} waiting · ${c.working} working · ${c.idle} idle`,
+        });
+      },
+    },
+  );
+
+  const agents = snapshot.data?.data ?? [];
+  const fetchedAt = snapshot.data?.fetchedAt;
+  const counts = countByStatus(agents);
+  const caps = probed ? capabilities() : undefined;
+
+  const failure = snapshot.error ?? snapshot.data?.failed?.[0]?.error;
+
+  // Never return null on failure. A menu bar item that vanishes when something
+  // breaks is indistinguishable from one the user disabled, and there is then
+  // no way back in. The error menu carries the same escape routes as the
+  // working one.
+  const blocked = agents.filter((a) => a.status === "blocked");
+  const working = agents.filter((a) => a.status === "working");
+  const idle = agents.filter((a) => a.status === "idle");
+
+  return (
+    <MenuBarExtra
+      // The contract: unset means "render once then unload", stuck-true means
+      // "re-run the whole tree every tick".
+      isLoading={!probed || snapshot.isLoading}
+      icon={menuIcon(counts, failure !== undefined)}
+      title={menuTitle(counts, prefs.titleCounts)}
+      tooltip={`${counts.blocked} waiting on you, ${counts.working} working, ${counts.idle} idle`}
+    >
+      {failure ? (
+        <MenuBarExtra.Section title="Problem">
+          <MenuBarExtra.Item
+            icon={{ source: Icon.ExclamationMark, tintColor: Color.Red }}
+            title={describeError(failure).title}
+            subtitle={describeError(failure).description.split("\n")[0]}
+            onAction={() => void launchCommand({ name: "agents", type: LaunchType.UserInitiated })}
+          />
+        </MenuBarExtra.Section>
+      ) : null}
+
+      <AgentSection title="Waiting on you" agents={blocked} limit={perSection} />
+      <AgentSection title="Working" agents={working} limit={perSection} />
+      {prefs.showIdle ? <AgentSection title="Idle" agents={idle} limit={perSection} /> : null}
+
+      {agents.length === 0 && !failure ? (
+        <MenuBarExtra.Section>
+          <MenuBarExtra.Item
+            icon={{ source: Icon.Dot, tintColor: Color.SecondaryText }}
+            title={
+              caps && !canSeeLive(caps) ? "No way to see running agents" : "No agents running"
+            }
+            subtitle={caps && !canSeeLive(caps) ? "Open Live Agents for details" : undefined}
+            onAction={() => void launchCommand({ name: "agents", type: LaunchType.UserInitiated })}
+          />
+        </MenuBarExtra.Section>
+      ) : null}
+
+      <MenuBarExtra.Section>
+        {!prefs.showIdle && idle.length > 0 ? (
+          <MenuBarExtra.Item
+            icon={{ source: Icon.Circle, tintColor: Color.SecondaryText }}
+            title={`${idle.length} idle — open the full list`}
+            onAction={() => void launchCommand({ name: "agents", type: LaunchType.UserInitiated })}
+          />
+        ) : null}
+        <MenuBarExtra.Item
+          icon={Icon.MagnifyingGlass}
+          title="Search Agent Sessions…"
+          shortcut={{ modifiers: ["cmd"], key: "f" }}
+          onAction={() => void launchCommand({ name: "sessions", type: LaunchType.UserInitiated })}
+        />
+        <MenuBarExtra.Item
+          icon={Icon.Dot}
+          title="Live Agents…"
+          shortcut={{ modifiers: ["cmd"], key: "l" }}
+          onAction={() => void launchCommand({ name: "agents", type: LaunchType.UserInitiated })}
+        />
+      </MenuBarExtra.Section>
+
+      {caps && actionableGaps(caps).length > 0 ? (
+        <MenuBarExtra.Section title="Not installed">
+          {actionableGaps(caps).map((gap) => (
+            <MenuBarExtra.Item
+              key={gap.capability}
+              icon={{ source: Icon.Circle, tintColor: Color.SecondaryText }}
+              title={capabilityLabel(gap.capability)}
+              subtitle={gap.install?.command ? "copy the install command" : "open the project page"}
+              onAction={() => {
+                if (gap.install?.url) void open(gap.install.url);
+                else if (gap.install?.command) void showHUD(gap.install.command);
+              }}
+            />
+          ))}
+        </MenuBarExtra.Section>
+      ) : null}
+
+      <MenuBarExtra.Section>
+        {/*
+         * Disabled on purpose: it is a fact, not a button. Raycast restores this
+         * menu from a database on restart without re-running the command, so
+         * without this a two-hour-old reading looks current.
+         */}
+        <MenuBarExtra.Item
+          title={fetchedAt ? `Updated ${timeOfDay(fetchedAt)}` : "Never updated"}
+          onAction={undefined}
+        />
+      </MenuBarExtra.Section>
+    </MenuBarExtra>
+  );
+}
+
+function AgentSection({ title, agents, limit }: { title: string; agents: LiveAgent[]; limit: number }) {
+  if (agents.length === 0) return null;
+  const shown = agents.slice(0, limit);
+  const hidden = agents.length - shown.length;
+
+  return (
+    <MenuBarExtra.Section title={`${title} (${agents.length})`}>
+      {shown.map((agent) => (
+        <MenuBarExtra.Item
+          key={agent.handle}
+          icon={statusIcon(agent.status)}
+          // Prefixed with the pane or pid, because two agents in the same
+          // folder produce identical titles and Raycast then crosses their
+          // onAction handlers.
+          title={`${shortHandle(agent)} ${agent.title ?? folderOf(agent) ?? agentLabel(agent.agent)}`}
+          subtitle={agent.title ? folderOf(agent) : undefined}
+          tooltip={`${statusLabel(agent.status)} — ${agent.cwd || "unknown folder"}`}
+          onAction={() => void focusFromMenu(agent)}
+          alternate={
+            <MenuBarExtra.Item
+              icon={Icon.Clipboard}
+              title={`${shortHandle(agent)} copy the resume command`}
+              onAction={() => void copyResume(agent)}
+            />
+          }
+        />
+      ))}
+      {hidden > 0 ? (
+        <MenuBarExtra.Item
+          icon={Icon.Ellipsis}
+          title={`…and ${hidden} more`}
+          onAction={() => void launchCommand({ name: "agents", type: LaunchType.UserInitiated })}
+        />
+      ) : null}
+    </MenuBarExtra.Section>
+  );
+}
+
+/**
+ * The icon, tinted.
+ *
+ * The shape never moves in the menu bar, only its colour: red when something is
+ * waiting on you, orange when a source is broken, otherwise the default text
+ * colour so it disappears into the bar.
+ */
+function menuIcon(counts: Record<AgentStatus, number>, failed: boolean) {
+  if (counts.blocked > 0) return { source: Icon.Dot, tintColor: Color.Red };
+  if (failed) return { source: Icon.Dot, tintColor: Color.Orange };
+  if (counts.working > 0) return { source: Icon.Dot, tintColor: Color.Green };
+  return { source: Icon.Dot, tintColor: Color.PrimaryText };
+}
+
+/**
+ * The title, or undefined.
+ *
+ * undefined REMOVES the title rather than rendering a zero, which is the whole
+ * point of defaulting to "agents waiting on you": the menu bar stays a bare
+ * icon until one actually does.
+ */
+function menuTitle(counts: Record<AgentStatus, number>, mode: string | undefined): string | undefined {
+  const n =
+    mode === "none"
+      ? 0
+      : mode === "working"
+        ? counts.working
+        : mode === "blocked-working"
+          ? counts.blocked + counts.working
+          : counts.blocked;
+  return n > 0 ? String(n) : undefined;
+}
+
+async function focusFromMenu(agent: LiveAgent): Promise<void> {
+  if (!agent.paneId) {
+    // showHUD, not showToast: a toast presents in the Raycast window, which is
+    // closed while the menu is open, so it is never seen.
+    await showHUD("That agent is not in a herdr pane, so it cannot be focused");
+    return;
+  }
+  try {
+    await act({ op: "focus", agent });
+    const app = getPreferenceValues<Preferences>().terminalApp;
+    if (app?.path) await open(app.path);
+  } catch (e) {
+    await showHUD(describeError(e).title);
+  }
+}
+
+async function copyResume(agent: LiveAgent): Promise<void> {
+  const cmd = agent.session ? resumeCommandIn(agent.session, agent.cwd) : undefined;
+  if (!cmd) {
+    await showHUD("No resume command for this agent");
+    return;
+  }
+  const { Clipboard } = await import("@raycast/api");
+  await Clipboard.copy(cmd);
+  await showHUD("Resume command copied");
+}
+
+function shortHandle(agent: LiveAgent): string {
+  return agent.paneId ?? (agent.pid !== undefined ? `${agent.pid}` : agent.handle);
+}
+
+function folderOf(agent: LiveAgent): string | undefined {
+  return normalizeCwd(agent.cwd)?.split("/").filter(Boolean).pop();
+}
+
+function timeOfDay(when: Date): string {
+  return `${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`;
+}
+
+function countByStatus(agents: readonly LiveAgent[]): Record<AgentStatus, number> {
+  const counts: Record<AgentStatus, number> = { idle: 0, working: 0, blocked: 0, done: 0, unknown: 0 };
+  for (const a of agents) counts[a.status]++;
+  return counts;
+}
+
+function clampInt(raw: string | undefined, fallback: number): number {
+  const v = Math.trunc(Number(raw));
+  return Number.isFinite(v) && v > 0 ? Math.min(v, 50) : fallback;
+}
+
+/** Unused here but kept honest: relativeTime is the list's formatter, not this one. */
+void relativeTime;
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/agent-menu.tsx (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:45:10Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to clean up those imports — the unused relativeTime variable and the unnecessary dynamic import of Clipboard. Let me fix both of those and then move on to writing focus-agent.tsx.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:45:10Z)**_
+
+Two warts in that file to fix rather than paper over.
+
+_**Agent (claude-opus-5 2026-07-26 21:45:11Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Remove unused import and dynamic import
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PY'
+import pathlib
+p = pathlib.Path("src/agent-menu.tsx")
+t = p.read_text()
+t = t.replace('import { agentLabel, relativeTime, statusIcon, statusLabel } from "./lib/format";',
+              'import { agentLabel, statusIcon, statusLabel } from "./lib/format";')
+t = t.replace('\n/** Unused here but kept honest: relativeTime is the list\'s formatter, not this one. */\nvoid relativeTime;\n', '')
+t = t.replace('import {\n  Color,', 'import {\n  Clipboard,\n  Color,')
+t = t.replace('  const { Clipboard } = await import("@raycast/api");\n  await Clipboard.copy(cmd);', '  await Clipboard.copy(cmd);')
+p.write_text(t)
+print("patched")
+PY
+grep -c "relativeTime" src/agent-menu.tsx; grep -n "await import" src/agent-menu.tsx || echo "no dynamic import"
+```
+
+```text
+patched
+0
+no dynamic import
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>

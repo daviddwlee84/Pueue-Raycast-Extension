@@ -28,7 +28,7 @@ type Input = {
 };
 
 export default async function tool(input: Input) {
-  const connection = resolveConnectionStrict(input.connection);
+  const connection = await resolveConnectionStrict(input.connection);
   const snap = await snapshot({ connection });
   const raw = snap.state.tasks[String(input.taskId)];
 

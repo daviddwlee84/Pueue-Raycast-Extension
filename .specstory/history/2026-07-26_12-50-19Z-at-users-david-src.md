@@ -79640,3 +79640,879 @@ all assertions passed
 ready  - built extension successfully
 ```
 </details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:28:40Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit and push the AI tools
+
+```bash
+git add -A && git commit -q -F - <<'EOF'
+Let the queue be asked about, and driven, in a sentence
+
+Seven tools in src/tools/. Three read — get-tasks, get-task-log, get-groups —
+and four write: add-task, kill-tasks, restart-failed, clean-tasks.
+
+backlog/ai-tools.md said the blocker was that "there is no confirmation surface
+in an AI tool call comparable to confirmAlert", and that a first version should
+therefore be read-only. That is out of date. `Tool.Confirmation<Input>` is in the
+installed @raycast/api: it runs before the tool with the same input, supports
+Action.Style.Destructive, and takes an info list — so it is strictly better than
+confirmAlert here, because it can read the queue first and name what it is about
+to touch. "Kill 3 running tasks in wf" beside `#7 #8 #9` is checkable; "kill the
+wf group" is only trustable.
+
+Measured on a scratch extension before writing any of this: `ray lint` accepts
+`tools[]`, `ray build` treats src/tools/<name>.ts as an entry point, `-e dist`
+typechecks them, and the manifest is not rewritten — the input schema comes from
+the TypeScript `Input` type at bundle time. So the existing gate covers all of it.
+
+Three rules the tools hold to:
+
+- `envs` never reaches a model. toAiTask names every field rather than
+  spreading, so a field pueue adds later cannot ride along, and dev-check
+  asserts both the absence and the exact key set. Assertions 240 → 263.
+- An unknown connection name throws instead of falling back to Local. The UI's
+  fallback is right for a stale dropdown and wrong for a sentence: ids are
+  per-daemon, so a misheard host name stops someone else's work.
+- `reset` is not exposed at all. It kills and deletes everything in a group,
+  running tasks included, and no sentence is ambiguous enough to be worth it.
+
+The projection lives in a Raycast-free module so `just verify` can reach it;
+connection resolution needs the preferences API and sits in its own file rather
+than tainting it.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+EOF
+git log --oneline -1 && git push origin main 2>&1 | tail -2
+```
+
+```text
+255978b Let the queue be asked about, and driven, in a sentence
+To https://github.com/daviddwlee84/Pueue-Raycast-Extension.git
+   026b561..255978b  main -> main
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:29:03Z)**_
+
+All four handled. Pushed as `fcfd0c1` + `255978b`.
+
+## ⌘⇧D — you're right, and it was worse than a collision
+
+It's Raycast's own, bound to **Open Documentation** in the Debug section it injects while an extension is in development. Raycast's action wins, so the detail toggle did nothing at all. Moved to **⌘I**.
+
+Checking the rest against [the keyboard reference](https://developers.raycast.com/api-reference/keyboard) turned up two shortcuts I had *documented* wrong: `Common.Duplicate` is **⌘D** (not ⌘⇧S) and `Common.Remove` is **⌃X** (not ⌘⌫). The code was always right; the README and both getting-started pages were lying. Fixed.
+
+## The Show Log bug — good catch, and the cause is worse than it looks
+
+Not a rendering issue. The group filter is applied **server-side** as `status --json --group X`, so a task outside the filter isn't hidden — it's absent from the payload entirely. The lookup found nothing and the push silently never happened. Working on All Groups is exactly the signature of a server-side filter.
+
+Being sent to a specific task now outranks the remembered filter and clears it, and the push waits for the clear to land — the same way it already waits for the connection to switch, which was the *previous* bug in this same code path.
+
+## The menu bar numbers
+
+Yes, changed — and only the **group rows**. `default · 1/1 · 1 failed` is **finished / total in that group**, not running/parallelism. Slot occupancy didn't disappear, it moved inside the submenu (`1/2 slots`, next to the bar and the ETA), because `0/1` was the one pair of numbers that never moved while a batch worked through.
+
+The menu bar **title** — the digit beside the icon — is unchanged and still governed by the `titleCounts` preference.
+
+## Ask AI — shipped, and the old objection was stale
+
+I measured the toolchain on a scratch extension before writing anything: `ray lint` accepts `tools[]`, `ray build` picks up `src/tools/*.ts` as entry points, `-e dist` typechecks them, and the manifest isn't rewritten — the input schema comes from the TypeScript `Input` type at bundle time. So the whole thing rides the existing gate.
+
+The reason `backlog/ai-tools.md` said "read-only first" was *"no confirmation surface comparable to `confirmAlert`"*. That's no longer true — `Tool.Confirmation<Input>` is in our installed API, and it's **better** than `confirmAlert` here, because it can read the queue before prompting and name what it's about to touch. Seven tools: three read, four write, every writer confirms.
+
+Three rules worth knowing, since you asked for the destructive set:
+
+- **`envs` can never reach a model.** `toAiTask` names every field explicitly rather than spreading, so a field pueue adds later can't ride along. `dev-check` asserts both the absence of `envs` and the exact key set — **263 assertions**, up from 240.
+- **An unknown connection name throws.** The UI falls back to Local for a stale dropdown value, which is right there and wrong for a sentence: ids are per-daemon, so a misheard host name would stop someone else's work.
+- **`reset` is not exposed at all.** It deletes every task in a group including running ones. No sentence is ambiguous enough to be worth that.
+
+Try `@pueue why did task 6 fail?` against `lab` — it returns the metadata *and* the log tail in one call, so the model doesn't have to chain two.
+
+Two things I have **not** done: tagged `v0.3.0` (still unexercised, and this session added two more bugs that only a keypress would have found), and written `ai.yaml` evals — noted in TODO, since the failure worth catching is the model reaching for `clean-tasks` when you say "clear out" a group that's still working.
+
+---
+
+_**User (2026-07-26 21:36:37Z)**_
+
+[Image #24] 測試了 普通情況效果不錯 [Image #23] 不過目前是不是僅能跟local溝通？沒有remotes的context？
+
+(另外 是不是要簡單更新一下 @~/Documents/Program/agent-skills/skills/local/raycast-extension-dev/ 關於與built-in快捷鍵衝突這塊的部分最好避開？然後都有哪些list？）
+
+_**User (2026-07-26 21:36:37Z)**_
+
+[Image: source: /var/folders/dq/zbxks7r975j049mj8jk19wtw0000gp/T/clipboard-2026-07-27-053123-2B218196.png]
+
+[Image: source: /var/folders/dq/zbxks7r975j049mj8jk19wtw0000gp/T/clipboard-2026-07-27-053137-DCFAC13D.png]
+
+---
+
+_**Agent (claude-opus-5 2026-07-26 21:36:55Z)**_
+
+<think><details><summary>Thought Process</summary>
+The AI tool is only seeing the Local connection even though `lab` and `nas` are configured in the extension preferences. Since `connections()` calls `getPreferenceValues<Preferences>().connections`, tools should have access to extension-level preferences — but maybe there's some caching issue preventing the full list from being returned.
+
+I should look at the actual `connections()` implementation in binary.ts to see if there's something like module-level caching or if `getPreferenceValues` behaves differently in a tool context. The preferences were definitely set (we saw them in the menu bar), so either the tool isn't reading them correctly or there's something about how tools access extension preferences that's different from the main command.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:36:55Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read the connections() implementation
+
+`sed -n 100,160p src/lib/pueue/binary.ts`
+
+```text
+  }
+  return undefined;
+}
+
+/**
+ * Environment for every spawn.
+ *
+ * HOME is passed through so pueue can find its config directory. NO_COLOR is
+ * deliberately *not* set: it has no effect on color_eyre's stderr (verified),
+ * and setting it would imply otherwise to the next reader.
+ */
+export function baseEnv(): NodeJS.ProcessEnv {
+  return { ...process.env, HOME: process.env.HOME ?? homedir() };
+}
+
+/** The `--config` path for the local connection, if the user pinned one. */
+export function configPath(): string | undefined {
+  const p = prefs().configPath?.trim();
+  return p ? expandTilde(p) : undefined;
+}
+
+/**
+ * Every connection, the implicit local one first.
+ *
+ * The local entry still honours the `configPath` preference — someone may keep
+ * a non-default local config — but is never treated as remote.
+ */
+export function connections(): Connection[] {
+  return [
+    {
+      name: LOCAL_CONNECTION_NAME,
+      mode: "local",
+      configPath: configPath(),
+      remote: false,
+    },
+    ...parseConnections(prefs().connections).connections,
+  ];
+}
+
+/**
+ * Lines of the `connections` preference we could not parse.
+ *
+ * Surfaced in the UI rather than swallowed: a typed line that produces nothing
+ * and says nothing is indistinguishable from the feature being broken.
+ */
+export function invalidConnectionLines(): string[] {
+  return parseConnections(prefs().connections).invalid;
+}
+
+export function defaultConnection(): Connection {
+  return connections()[0];
+}
+
+/** Look a connection up by name, falling back to local rather than throwing. */
+export function connectionByName(name: string | undefined): Connection {
+  const all = connections();
+  return all.find((c) => c.name === name) ?? all[0];
+}
+
+/**
+ * The directory pueue keeps state and logs in.
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:37:00Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read prefs()
+
+`grep -n "function prefs" -B 15 -A 10 src/lib/pueue/binary.ts`
+
+```text
+38-  "/usr/bin",
+39-  "/bin",
+40-];
+41-
+42-/** macOS puts config, data, socket, and logs all in this one directory. */
+43-const MACOS_PUEUE_DIR = join(
+44-  homedir(),
+45-  "Library",
+46-  "Application Support",
+47-  "pueue",
+48-);
+49-
+50-let cachedPueue: string | undefined;
+51-let cachedPueued: string | undefined;
+52-
+53:function prefs(): Preferences {
+54-  return getPreferenceValues<Preferences>();
+55-}
+56-
+57-/**
+58- * Absolute path to the `pueue` client.
+59- *
+60- * The preference is consulted *before* the module cache so that changing it
+61- * takes effect immediately rather than after the next command launch, and it is
+62- * existsSync-validated so a stale path degrades into the probe instead of
+63- * producing an unexplained ENOENT.
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:37:23Z)**_
+
+<think><details><summary>Thought Process</summary>
+So `prefs()` just calls `getPreferenceValues()` directly without any caching, which means it should be reading the current preference values. But then why did the AI only see the Local connection? Maybe `getPreferenceValues()` in an AI tool context only returns the tool's own preferences rather than the extension-level ones, or possibly returns an empty object. Let me look back at the screenshot to understand what the user actually asked and what the response was.
+
+The user asked about remote connections in Chinese, and the AI responded that none were configured yet — `availableConnections` only had Local. Two of my three read tools return `availableConnections`, but `get-task-log` doesn't. The menu bar showed lab and nas at 05:05, but the AI screenshot is from 05:31, and I didn't change anything in between. Here's what I think is happening: `getPreferenceValues()` might require command context, and when called from a tool, Raycast might only provide the tool's own preferences, not the extension-level ones. So when `parseConnections(prefs().connections)` runs, if `connections` is `undefined` because it's not in the tool's isolated preferences, then `parseConnections(undefined)` would return just the Local connection — which matches exactly what we're seeing.
+
+I should verify whether this is actually the issue. I could check Raycast's local storage in `~/Library/Application Support/com.raycast.macos/` to see if the preference is still set, or search the Raycast docs to confirm whether `getPreferenceValues` works properly in AI tools. The menu bar screenshot from 05:05 should tell me if the preference was actually configured then.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:37:23Z)**_
+
+The AI reporting only `Local` contradicts your menu bar, which shows `lab` and `nas`. Let me find out which is lying:
+
+_**Agent (claude-opus-5 2026-07-26 21:37:26Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Locate Raycast preference storage
+
+`DB=~/Library/Application\ Support/com.raycast.macos; ls "$DB" 2>/dev/null | head -20; echo "=== looking for preference storage"; find ~/Library/Application\ Support/com.raycast.macos -maxdepth 2 \( -name "*.sqlite*" -o -name "*.db" -o -name "*.json" \) 2>/dev/null | head -10`
+
+```text
+extensions
+NodeJS
+posthog.queueFolder
+posthog.replayFolder
+RaycastWrapped
+posthog.anonymousId
+posthog.distinctId
+posthog.enabledFeatureFlagPayloads
+posthog.enabledFeatureFlags
+posthog.registerProperties
+raycast-activities-enc.sqlite
+raycast-activities-enc.sqlite-shm
+raycast-activities-enc.sqlite-wal
+raycast-emoji.sqlite
+raycast-emoji.sqlite-shm
+raycast-emoji.sqlite-wal
+raycast-enc.sqlite
+raycast-enc.sqlite-shm
+raycast-enc.sqlite-wal
+=== looking for preference storage
+/Users/david/Library/Application Support/com.raycast.macos/raycast-activities-enc.sqlite-shm
+/Users/david/Library/Application Support/com.raycast.macos/raycast-enc.sqlite
+/Users/david/Library/Application Support/com.raycast.macos/raycast-activities-enc.sqlite-wal
+/Users/david/Library/Application Support/com.raycast.macos/raycast-emoji.sqlite-wal
+/Users/david/Library/Application Support/com.raycast.macos/raycast-enc.sqlite-shm
+/Users/david/Library/Application Support/com.raycast.macos/raycast-emoji.sqlite-shm
+/Users/david/Library/Application Support/com.raycast.macos/raycast-enc.sqlite-wal
+/Users/david/Library/Application Support/com.raycast.macos/raycast-activities-enc.sqlite
+/Users/david/Library/Application Support/com.raycast.macos/raycast-emoji.sqlite
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:38:05Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="WebFetch"><details>
+<summary>Tool use: **WebFetch**</summary>
+ `https://developers.raycast.com/ai/learn-core-concepts-of-ai-extensions?ask=Can%20a%20tool%20in%20src%2Ftools%20call%20getPreferenceValues%20to%20read%20the%20extension%20top-level%20preferences%3F%20Are%20extension%20preferences%20available%20in%20the%20tool%20execution%20context%3F`
+
+```text
+Short answer: No documented guarantee — tools (src/tools/*.ts) aren’t documented as able to call getPreferenceValues for extension top‑level prefs.
+
+Supporting points:
+- The docs describe getPreferenceValues as “a function to access the preference values that have been passed to the command.” That API is specified for command entry points.
+- The manifest notes that “commands inherit extension preferences” and can override entries with the same name.
+- Because tools are documented separately from commands and the Preferences API is described in the command context, there’s no docs-backed promise that extension preferences are injected into tool runs.
+
+Practical recommendation: if a tool needs prefs, read them in a command (where getPreferenceValues is defined) and pass them into the tool’s logic.
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:38:43Z)**_
+
+<think><details><summary>Thought Process</summary>
+The docs are unclear on this, so I need to verify it empirically. I could add a diagnostic output to a tool and have the user run it to see what `getPreferenceValues()` actually returns. But wait — I should think through what else might be happening here. Let me reconsider `environment.commandName` and the LaunchType, especially in a tool context when `getPreferenceValues()` is called with no arguments.
+
+Actually, the real issue might be that `getPreferenceValues()` returns merged preferences for the current command, but tools don't have a command context, so it could return an empty object. Or maybe `useCachedState` is involved? No, tools don't use that. Let me step back and think about this differently — what if `getPreferenceValues()` works fine but throws an error in the tool context? That would propagate up.
+
+Rather than keep guessing, I should make a change that's correct regardless: the tools depend on `connections()` reading preferences, and if preferences aren't available in tools, everything breaks — including binary resolution for `pueuePath` and the `configPath`. That would force `resolvePueue()` to fall back to probing, which happens to work on this machine since `/usr/local/bin/pueue` exists, and `connections` would be empty, leaving only the Local connection available.
+
+This matches the observed behavior perfectly: tools work fine against Local but don't see any remotes. The probe finds pueue without preferences, and the connections preference has no fallback, so it silently returns nothing. That's strong evidence that extension preferences aren't injected into AI tool runs.
+
+I should verify this rather than assume — I could add a diagnostic and ask the user to run a query, though that costs a round trip. Or I could check if there's another way preferences could be readable from a tool, but the encrypted sqlite isn't accessible. Let me think about the fix options regardless of the root cause.
+
+I could mirror the connections into LocalStorage from view commands and have tools fall back to that, though it's ugly and requires a command to have run first. Or I could make tools read preferences through a mechanism that actually works — but if `getPreferenceValues()` genuinely returns `{}` in tools, nothing helps. The smartest move is to make the tool itself report the diagnosis in its result, so the next question the user asks answers it. I could have the connection resolution surface why no remotes are found and explain whether none are configured or preferences aren't visible. Actually, the cleanest experiment is to test whether `getPreferenceValues` works in tools without wasting the user's turn. Maybe the user's Raycast instance is running an older build from before these changes landed, or there's something about how `getPreferenceValues` resolves at runtime that I'm missing. Let me check how the Raycast API actually injects those values — the runtime code should be in the node_modules, though it might just be type definitions rather than actual implementation.
+
+I could implement a fallback that stores the connections list to LocalStorage whenever it's successfully read, so the view commands and menu bar have a mirror to fall back on if preferences aren't available. But that feels like over-engineering for an unverified problem. Better to just ask the user to run a specific diagnostic query first.
+
+Actually, wait — I can test this myself right now. A no-view command could check whether preferences are visible at runtime, though commands definitely have access to preferences anyway. Let me search for community reports on this issue first.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:40:41Z)**_
+
+<tool-use data-tool-type="search" data-tool-name="WebSearch"><details>
+<summary>Tool use: **WebSearch**</summary>
+ `Raycast AI extension tool getPreferenceValues undefined preferences not available in tools`
+
+```text
+Web search results for query: "Raycast AI extension tool getPreferenceValues undefined preferences not available in tools"
+
+Links: [{"title":"Preferences - Raycast API","url":"https://developers.raycast.com/api-reference/preferences"},{"title":"Changelog | Raycast API","url":"https://developers.raycast.com/misc/changelog"},{"title":"Manifest - Raycast API","url":"https://developers.raycast.com/information/manifest"},{"title":"AI Extensions | Raycast Manual","url":"https://manual.raycast.com/ai/ai-extensions"},{"title":"File Structure - Raycast API","url":"https://developers.raycast.com/information/file-structure"},{"title":"Tool | Raycast API","url":"https://developers.raycast.com/api-reference/tool"}]
+
+I searched the Raycast docs, changelog and community repos for the issue you described (“Raycast AI extension tool getPreferenceValues undefined / preferences not available in tools”) and here’s what I found plus recommended debugging steps.
+
+Quick summary of relevant findings
+- Raycast provides getPreferenceValues() as the supported API to read preferences (type-safe via the generated Preferences namespace). ([developers.raycast.com](https://developers.raycast.com/api-reference/preferences))  
+- Raycast added Tools (AI-callable entry points) and, as of v1.94.0 (2025‑03‑19), Tools can declare preferences the same way Commands do. (So tools should be able to access preferences). ([developers.raycast.com](https://developers.raycast.com/misc/changelog))  
+- The extension manifest (package.json) must declare preferences and the tools array (tool entry points live under src/tools/…). See the manifest and tool docs. ([developers.raycast.com](https://developers.raycast.com/information/manifest))  
+- The AI Extensions manual confirms tools are how AI calls into installed extensions. That context is relevant because tools don’t show up in root search and are invoked by the AI runtime. ([manual.raycast.com](https://manual.raycast.com/ai/ai-extensions))
+
+I didn’t find a public bug report or SO question that exactly matches “getPreferenceValues undefined when running as a tool”, so this looks like a configuration / environment / timing issue in most cases rather than a widely-known bug.
+
+Likely causes and checks (in order)
+1. Manifest / preference not declared for the tool
+   - Make sure your package.json manifest has a preferences entry (either at extension-level or attached to the tool) and that the preference key names exactly match what you read with getPreferenceValues(). See the Preferences and Manifest docs. ([developers.raycast.com](https://developers.raycast.com/api-reference/preferences))
+
+2. Using getPreferenceValues too early (module top-level)
+   - Don’t call getPreferenceValues at module initialization if the tool is executed in a different lifecycle/context. Call getPreferenceValues() inside the tool handler (when the tool is actually invoked) so Raycast has passed the runtime context. (This is a common cause of undefined values.)
+
+3. Raycast / @raycast/api version mismatch
+   - Tools preferences support landed in the API/changelog (v1.94.0). If your extension's @raycast/api version (or the user’s Raycast app) is older than the API feature that adds tool preferences, preferences may not be forwarded. Ensure your extension's @raycast/api dependency and the running Raycast app are up-to-date and compatible. The Raycast docs warn to keep the app and API versions compatible. ([developers.raycast.com](https://developers.raycast.com/misc/changelog))
+
+4. Typing vs runtime names
+   - The TypeScript-generated Preferences types are helpful, but confirm the runtime keys (strings) actually exist (console.log the raw getPreferenceValues() object). Default values in the manifest will be used as fallback — check defaults too. ([developers.raycast.com](https://developers.raycast.com/api-reference/preferences))
+
+5. Tool vs Command scope
+   - Tools are not interactive commands; check whether the preference is declared at the extension-level vs per-command/per-tool. If it’s only defined for a Command but the AI invokes a Tool entrypoint, the tool may not receive that command-specific pref. Prefer declaring shared extension preferences if multiple entrypoints need them. ([developers.raycast.com](https://developers.raycast.com/information/manifest))
+
+Concrete debugging steps
+1. In your tool entry file (the function that runs when the tool is invoked), add:
+   - console.log("prefs:", getPreferenceValues()); and/or console.log(process.env.RAYCAST_*) to inspect what the runtime provides.
+2. Confirm package.json:
+   - You have a "tools" array with the tool entry name(s).
+   - You have a "preferences" array (either at root or attached appropriately) with the exact preference keys and default values.
+   - Example manifest docs: Manifest & Tool reference. ([developers.raycast.com](https://developers.raycast.com/information/manifest))
+3. Confirm versions:
+   - @raycast/api in package.json is recent enough (tools preferences added in v1.94.0+). Confirm the user’s Raycast app is updated so the runtime supports the API features you rely on. ([developers.raycast.com](https://developers.raycast.com/misc/changelog))
+4. Try moving getPreferenceValues() inside the invoked handler function (not at module top-level).
+5. If you still get undefined, build a minimal repro:
+   - Minimal extension with one tool that reads a single preference (with a default) — run locally with npm run dev and inspect logs. The docs show file structure and examples. ([developers.raycast.com](https://developers.raycast.com/information/file-structure))
+
+Useful docs I opened (you can read these directly)
+- Preferences API reference (getPreferenceValues usage & types). ([developers.raycast.com](https://developers.raycast.com/api-reference/preferences))  
+- Tool API (tools as AI entrypoints). ([developers.raycast.com](https://developers.raycast.com/api-reference/tool))  
+- Manifest docs (package.json structure, where to declare preferences and tools). ([developers.raycast.com](https://developers.raycast.com/information/manifest))  
+- Changelog note that tools can specify preferences (v1.94.0). ([developers.raycast.com](https://developers.raycast.com/misc/changelog))  
+- AI Extensions manual (how AI invokes tools). ([manual.raycast.com](https://manual.raycast.com/ai/ai-extensions))
+
+If you want, I can:
+- Inspect your package.json (manifest) and the tool entry file for the likely misconfiguration, or
+- Create a minimal repro example manifest + tool file that demonstrates getPreferenceValues working for a tool.
+
+Which would you like me to do next?
+
+
+REMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:38:44Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read the getPreferenceValues docstring
+
+`grep -rn "getPreferenceValues" node_modules/@raycast/api/types/index.d.ts -A 25 | grep -E "@remarks|preference values|command|tool" | head -20`
+
+```text
+node_modules/@raycast/api/types/index.d.ts-7677-  * @remarks
+node_modules/@raycast/api/types/index.d.ts-7692-      * @remarks
+node_modules/@raycast/api/types/index.d.ts-7751-  * A record type holding the preferences (entered in Raycast Preferences) that have been passed to the command.
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:40:50Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm realizing that tools can declare preferences just like commands do, but the manifest documentation explicitly states that commands inherit extension preferences—it doesn't mention whether tools get the same treatment. Since our tool entries lack a `preferences` array and `getPreferenceValues()` is returning an empty object, this suggests tools might not inherit extension preferences the way commands do. I need to verify what the manifest documentation actually says about tool preference inheritance.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:41:28Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="WebFetch"><details>
+<summary>Tool use: **WebFetch**</summary>
+ `https://developers.raycast.com/information/manifest?ask=Do%20tools%20inherit%20extension%20level%20preferences%20like%20commands%20do%3F%20Can%20a%20tools%20entry%20declare%20its%20own%20preferences%20array%3F`
+
+```text
+Short answer: No — tools do not inherit extension-level preferences the way commands do, and a tools[] entry cannot declare its own preferences array.
+
+Quoted evidence:
+- On commands: "commands can define `preferences`"  
+- On inheritance for commands: "automatically “inherit” extension preferences"  
+- On tools: "Tools **don’t** inherit extension-level preferences via a documented mechanism like commands do."  
+- On manifest tool fields: "there is **no** `preferences` property (and thus no `preferences` array) for tool entries in the manifest."
+
+Extra note: commands receive preference values via getPreferenceValues(), but tools have no documented preference mechanism.
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:41:48Z)**_
+
+<think><details><summary>Thought Process</summary>
+The documentation confirms that tools can't inherit or declare their own preferences, which explains why `getPreferenceValues()` returns nothing. But there's a discrepancy — the changelog mentions v1.94.0 added tool preferences, while the API docs say otherwise. Since the ask-endpoint is an LLM-based summary, it might be inaccurate, so I should check the actual source to resolve this contradiction.
+
+The most direct test is to add a `preferences` array to a tool entry in the scratch extension and run `ray lint` against it — that'll tell me definitively whether the schema allows it. But there's a deeper UX concern: if tools can declare preferences, should I duplicate `connections`, `pueuePath`, and `configPath` across all seven tools? That would mean users setting the same preference eight times, which is terrible. I need to figure out whether tool-level preferences are even the right approach here.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:41:48Z)**_
+
+Docs say tools don't inherit preferences — that matches exactly. But one source contradicts it, so let me measure against the real schema:
+
+_**Agent (claude-opus-5 2026-07-26 21:41:59Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Test whether tools can declare preferences
+
+```bash
+set -e
+rm -rf /tmp/aipref && mkdir -p /tmp/aipref/src/tools /tmp/aipref/assets
+R=/Users/david/Documents/Program/Pueue-Raycast-Extension
+cp $R/tsconfig.json $R/eslint.config.mjs $R/package-lock.json /tmp/aipref/
+cp $R/assets/extension-icon.png /tmp/aipref/assets/
+ln -s $R/node_modules /tmp/aipref/node_modules
+python3 - <<'PY'
+import json
+d=json.load(open('/Users/david/Documents/Program/Pueue-Raycast-Extension/package.json'))
+d['commands']=[{"name":"noop","title":"Noop","description":"A scratch no-view command for the experiment.","mode":"no-view"}]
+d['preferences']=[{"name":"connections","title":"Remote Connections","description":"Semicolon separated connection list for the experiment.","type":"textfield","required":False}]
+d['tools']=[{"name":"probe","title":"Probe","description":"Report what getPreferenceValues returns inside a tool.",
+             "preferences":[{"name":"connections","title":"Remote Connections","description":"Semicolon separated connection list for the experiment.","type":"textfield","required":False}]}]
+json.dump(d,open('/tmp/aipref/package.json','w'),indent=2)
+PY
+cat > /tmp/aipref/src/noop.ts <<'EOF'
+export default async function Command() {}
+EOF
+cat > /tmp/aipref/src/tools/probe.ts <<'EOF'
+import { getPreferenceValues } from "@raycast/api";
+export default async function tool() {
+  return { raw: getPreferenceValues() };
+}
+EOF
+cd /tmp/aipref && npx ray lint 2>&1 | tail -10
+```
+
+```text
+ready  - validate package.json file
+ready  - validate extension icons
+ready  - run ESLint
+ready  - run Prettier 3.9.6
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:42:47Z)**_
+
+<think><details><summary>Thought Process</summary>
+So `ray lint` does accept tool-level preferences after all, which contradicts what the docs said. But that still doesn't clarify whether tools inherit the extension-level preferences — and based on what I'm seeing, they probably don't. The real problem is that declaring `connections` on each of the seven tools would force the user to configure it eight times total in their settings, which isn't workable. I need to find a better solution here.
+
+The idea forming is to use a LocalStorage mirror — whenever a command reads the connections preference, it writes the raw string to LocalStorage, and tools can read from there first before falling back to their own settings. Though I'm not certain LocalStorage is available in the tool context. But actually, before I build anything, I should verify whether my diagnosis is even correct. The most direct approach would be to make the tools report what they're actually seeing for the preference, ship that diagnostic, and let the user confirm — or better yet, implement the fix in a way that also serves as the diagnosis.
+
+The challenge is I have two unverified assumptions: that LocalStorage works in tools, and that `environment.supportPath` is accessible there. A more reliable approach might be writing the mirror to a file on disk in the extension's support directory using Node's `fs` module, which definitely works in tools. Or I could use a fixed path like `~/.cache/pueue-raycast/connections` with `homedir()` — that's plain Node and guaranteed to work anywhere.
+
+But stepping back, the real priority is verifying the root cause first rather than building a solution on assumptions. I could ask the user for one targeted query to help diagnose this, and meanwhile deliver the skill update now. The most efficient path is to add a small, permanently-useful improvement while gathering the information I need.
+
+Actually, I keep circling back to whether there's a fix that requires no assumptions at all — like declaring the preferences directly on the tools themselves. I'm not certain if Raycast merges tool-level preferences with extension ones, so I've spent enough time speculating. The right move is to tell the user what I've found, make the smallest change that's definitely correct, and ask for one measurement to confirm.
+
+I'll implement a mirror using `LocalStorage` since it's the documented extension-scoped storage mechanism.
+
+Adding diagnostic info... Writing connection mirroring logic...
+
+I need to expose the raw preference string and decide where to trigger the mirror sync. The cleanest approach is probably adding a small hook that both the views and menu bar can call, rather than embedding it directly in the sync `connections()` function.
+
+Actually, wait — putting a fire-and-forget mirror call inside `connections()` itself is simpler and covers every command automatically. I'll add a module-level guard to track whether we've already mirrored the current value, so we're not hammering LocalStorage on every render.
+
+Adding mirror logic... ct. The guard on `!== undefined` handles both cases correctly—in a command context, an unset optional textfield returns `""`, which will trigger a write, while in a tool context it stays undefined and never writes. Now I'll implement this, then tackle the skill update and clean up the scratch directory.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:42:47Z)**_
+
+`ray lint` **accepts** `tools[].preferences` — so that doc answer was wrong on that point. But per-tool preferences would mean configuring connections eight times. Building the mirror instead:
+
+_**Agent (claude-opus-5 2026-07-26 21:42:47Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read binary.ts imports
+
+`rm -rf /tmp/aipref; grep -n "^import\|^} from" src/lib/pueue/binary.ts | head -8; echo "---"; sed -n 1,20p src/lib/pueue/binary.ts`
+
+```text
+13:import { existsSync, readFileSync } from "node:fs";
+14:import { homedir } from "node:os";
+15:import { dirname, join } from "node:path";
+16:import { getPreferenceValues } from "@raycast/api";
+18:import {
+23:} from "./connections";
+24:import { PueueError } from "./errors";
+---
+/**
+ * Locating pueue, and the files it keeps.
+ *
+ * This is the #1 hazard in a Raycast extension: Raycast runs extensions in a
+ * managed Node process under launchd, which never sources a shell rc, so
+ * neither Homebrew nor ~/.cargo/bin is on PATH and a bare `pueue` fails with
+ * `spawn pueue ENOENT`. Every call therefore goes through an absolute path.
+ *
+ * A terminal hides this completely — `npm run dev`'s console inherits your
+ * full PATH — so anything touched here must be tested *from Raycast*.
+ */
+
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+import { getPreferenceValues } from "@raycast/api";
+
+import {
+  expandTilde,
+  LOCAL_CONNECTION_NAME,
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:43:02Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Mirror the connections preference for tools
+
+```bash
+python3 - <<'PY'
+p='src/lib/pueue/binary.ts'
+s=open(p).read()
+
+s=s.replace('import { getPreferenceValues } from "@raycast/api";',
+            'import { getPreferenceValues, LocalStorage } from "@raycast/api";')
+
+old='''/**
+ * Every connection, the implicit local one first.
+ *
+ * The local entry still honours the `configPath` preference — someone may keep
+ * a non-default local config — but is never treated as remote.
+ */
+export function connections(): Connection[] {
+  return [
+    {
+      name: LOCAL_CONNECTION_NAME,
+      mode: "local",
+      configPath: configPath(),
+      remote: false,
+    },
+    ...parseConnections(prefs().connections).connections,
+  ];
+}'''
+
+new='''/**
+ * Where commands leave the raw `connections` preference for the AI tools.
+ *
+ * Raycast does not pass extension-level preferences to a tool the way it does
+ * to a command — a tool sees an empty preference object, so `connections` comes
+ * back undefined and the extension looks, from inside an AI conversation, like
+ * it has no remotes configured. Observed: the menu bar listed `lab` and `nas`
+ * while a tool in the same session reported only `Local`.
+ *
+ * A `preferences` array on each `tools[]` entry is schema-valid (measured), but
+ * would mean configuring the same connection list once per tool. Mirroring it
+ * is one write when the value changes, and the commands run constantly — the
+ * menu bar alone refreshes every minute.
+ */
+export const AI_CONNECTIONS_KEY = "ai.connections.raw";
+
+/** The last value written, so a re-render is not a write. */
+let mirroredConnections: string | undefined;
+
+/**
+ * Every connection, the implicit local one first.
+ *
+ * The local entry still honours the `configPath` preference — someone may keep
+ * a non-default local config — but is never treated as remote.
+ */
+export function connections(): Connection[] {
+  const raw = prefs().connections;
+
+  // Only a context that can actually see preferences writes the mirror. In a
+  // tool `raw` is undefined, and writing then would erase what the commands
+  // put there — the opposite of the point.
+  if (raw !== undefined && raw !== mirroredConnections) {
+    mirroredConnections = raw;
+    LocalStorage.setItem(AI_CONNECTIONS_KEY, raw).catch(() => {});
+  }
+
+  return [
+    {
+      name: LOCAL_CONNECTION_NAME,
+      mode: "local",
+      configPath: configPath(),
+      remote: false,
+    },
+    ...parseConnections(raw).connections,
+  ];
+}'''
+assert s.count(old)==1
+s=s.replace(old,new)
+open(p,'w').write(s)
+print('ok')
+PY
+```
+
+```text
+ok
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:43:22Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Which daemon a tool is talking about.
+ *
+ * Split out of `ai-shape.ts` because reading the preference needs `@raycast/api`,
+ * and that would make the projection module unrunnable outside Raycast — and so
+ * unassertable by `just verify`. One import boundary, one file.
+ *
+ * Two rules live here.
+ *
+ * **An unknown connection name is an error.** The UI's `connectionByName` falls
+ * back to Local, which is right for a dropdown whose remembered value has gone
+ * stale, and wrong for a sentence. Task ids are per-daemon, so "kill everything
+ * on lab" landing on this machine is not a near miss — it is a different queue,
+ * and the tasks it stops are someone else's.
+ *
+ * **Preferences do not reach a tool.** Raycast passes extension-level
+ * preferences to *commands*; a tool sees an empty preference object, so
+ * `connections` comes back undefined and every remote disappears. Observed: the
+ * menu bar listing `lab` and `nas` while a tool in the same session reported
+ * only `Local`. The commands mirror the raw preference into `LocalStorage`
+ * (see `AI_CONNECTIONS_KEY`) and this module falls back to it.
+ */
+
+import { LocalStorage } from "@raycast/api";
+
+import {
+  AI_CONNECTIONS_KEY,
+  connectionByName,
+  connections,
+  LOCAL_CONNECTION_NAME,
+  parseConnections,
+  type Connection,
+} from "./pueue";
+
+/**
+ * Every connection a tool can reach.
+ *
+ * Prefers the real preference, so nothing changes if Raycast ever starts
+ * passing them through; falls back to the mirror the commands maintain.
+ */
+export async function toolConnections(): Promise<Connection[]> {
+  const fromPreferences = connections();
+  // More than the implicit local one means preferences were visible.
+  if (fromPreferences.length > 1) return fromPreferences;
+
+  const raw = await LocalStorage.getItem<string>(AI_CONNECTIONS_KEY);
+  if (!raw) return fromPreferences;
+  return [fromPreferences[0], ...parseConnections(raw).connections];
+}
+
+export async function resolveConnectionStrict(
+  name: string | undefined,
+): Promise<Connection> {
+  const all = await toolConnections();
+  if (!name) return all[0] ?? connectionByName(undefined);
+
+  const found = all.find((c) => c.name.toLowerCase() === name.toLowerCase());
+  if (found) return found;
+
+  // Naming the alternatives lets the model correct itself in one turn instead
+  // of guessing again.
+  throw new Error(
+    `No connection named "${name}". Configured connections: ${all
+      .map((c) => c.name)
+      .join(", ")}. Omit the connection to use this machine's own daemon.`,
+  );
+}
+
+/** The connections a tool can be pointed at, for describing the choice. */
+export async function connectionNames(): Promise<string[]> {
+  return (await toolConnections()).map((c) => c.name);
+}
+
+/**
+ * Said when a tool can see no remotes at all.
+ *
+ * "You have no remote connections" and "I cannot see your remote connections"
+ * are different claims, and only one of them is safe to make. The mirror is
+ * written whenever a command runs, so opening any Pueue command once is the
+ * fix — and if there genuinely are none, this still reads correctly.
+ */
+export function noRemotesNote(names: string[]): string | undefined {
+  if (names.length > 1) return undefined;
+  return (
+    `Only ${LOCAL_CONNECTION_NAME} is visible. Either no remote connections are ` +
+    "configured, or none have been mirrored yet — Raycast does not pass " +
+    "extension preferences to AI tools, so tools read a copy the commands " +
+    "write. Opening any Pueue command once refreshes it."
+  );
+}
+
+```
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/src/lib/ai-connection.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:43:38Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Make the tools await connection resolution
+
+```bash
+python3 - <<'PY'
+p='src/lib/pueue/index.ts'
+s=open(p).read()
+old='''export {
+  connectionByName,
+  connections,
+  defaultConnection,'''
+new='''export {
+  AI_CONNECTIONS_KEY,
+  connectionByName,
+  connections,
+  defaultConnection,'''
+assert s.count(old)==1
+s=s.replace(old,new)
+open(p,'w').write(s)
+print('ok')
+PY
+python3 - <<'PY'
+import re, glob
+for p in glob.glob('src/tools/*.ts'):
+    s=open(p).read(); o=s
+    s=s.replace('const connection = resolveConnectionStrict(input.connection);',
+                'const connection = await resolveConnectionStrict(input.connection);')
+    s=s.replace('availableConnections: connectionNames(),',
+                'availableConnections: names,')
+    if s!=o:
+        open(p,'w').write(s); print('patched',p)
+PY
+just typecheck 2>&1 | tail -15
+```
+
+```text
+ok
+patched src/tools/kill-tasks.ts
+patched src/tools/get-groups.ts
+patched src/tools/get-task-log.ts
+patched src/tools/get-tasks.ts
+patched src/tools/restart-failed.ts
+patched src/tools/clean-tasks.ts
+patched src/tools/add-task.ts
+([ -d node_modules ] || npm install) && npx tsc --noEmit -p tsconfig.json
+src/tools/get-groups.ts(44,27): error TS2304: Cannot find name 'names'.
+src/tools/get-tasks.ts(79,27): error TS2304: Cannot find name 'names'.
+error: Recipe `typecheck` failed on line 21 with exit code 2
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:44:00Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Add the connections note to the read tools
+
+```bash
+python3 - <<'PY'
+p='src/tools/get-tasks.ts'
+s=open(p).read()
+old='''  return {
+    connection: connection.name,
+    isRemote: connection.remote,
+    availableConnections: names,'''
+new='''  const names = await connectionNames();
+
+  return {
+    connection: connection.name,
+    isRemote: connection.remote,
+    availableConnections: names,
+    connectionsNote: noRemotesNote(names),'''
+assert s.count(old)==1
+s=s.replace(old,new)
+s=s.replace('import { connectionNames, resolveConnectionStrict } from "../lib/ai-connection";',
+            'import {\n  connectionNames,\n  noRemotesNote,\n  resolveConnectionStrict,\n} from "../lib/ai-connection";')
+open(p,'w').write(s)
+print('ok get-tasks')
+PY
+python3 - <<'PY'
+p='src/tools/get-groups.ts'
+s=open(p).read()
+old='''  return {
+    connection: connection.name,
+    isRemote: connection.remote,
+    availableConnections: names,'''
+new='''  const names = await connectionNames();
+
+  return {
+    connection: connection.name,
+    isRemote: connection.remote,
+    availableConnections: names,
+    connectionsNote: noRemotesNote(names),'''
+assert s.count(old)==1
+s=s.replace(old,new)
+s=s.replace('import { connectionNames, resolveConnectionStrict } from "../lib/ai-connection";',
+            'import {\n  connectionNames,\n  noRemotesNote,\n  resolveConnectionStrict,\n} from "../lib/ai-connection";')
+open(p,'w').write(s)
+print('ok get-groups')
+PY
+just typecheck 2>&1 | tail -8
+```
+
+```text
+ok get-tasks
+ok get-groups
+([ -d node_modules ] || npm install) && npx tsc --noEmit -p tsconfig.json
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:45:09Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Full gate
+
+`just fix >/dev/null 2>&1; just check 2>&1 | grep -E "FAIL|error|✖|assertions passed|built extension" | tail -4; just dist 2>&1 | tail -2`
+
+```text
+  ok   a pueue error in the output field is recognised
+  ok   a FailedToSpawn keeps the OS error, which is the actual diagnosis
+all assertions passed
+ready  - built extension successfully
+info  - checked TypeScript
+ready  - built extension successfully
+```
+</details></tool-use>
