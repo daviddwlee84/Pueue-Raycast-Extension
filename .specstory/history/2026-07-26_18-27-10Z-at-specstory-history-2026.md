@@ -36321,3 +36321,1355 @@ Nothing pushed. Two follow-ups when you want them:
 
 - **Push agent-skills**, then `npx skills@latest add daviddwlee84/agent-skills/skills --skill raycast-extension-dev` here — that's what turns `just preflight` from exit 3 into a real check.
 - **`just shots`** is ready whenever you want to do the screenshot pass; `just preflight` will confirm the count and dimensions afterwards.
+
+---
+
+_**User (2026-07-26 19:37:16Z)**_
+
+<bash-input>npx skills@latest add daviddwlee84/agent-skills/skills --skill raycast-extension-dev</bash-input>
+
+_**User (2026-07-26 19:37:25Z)**_
+
+<bash-stdout>│
+●   claude-code_2-1-220_agent  Agent detected — installing non-interactively
+[?25l│
+◇  Source: https://github.com/daviddwlee84/agent-skills.git (skills)
+[?25h[?25l│
+◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…..[1G[J◐  Cloning repository…..[1G[J◓  Cloning repository…..[1G[J◑  Cloning repository…..[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…...[1G[J◓  Cloning repository…...[1G[J◑  Cloning repository…...[1G[J◒  Cloning repository…...[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository…[1G[J◓  Cloning repository…[1G[J◑  Cloning repository…[1G[J◒  Cloning repository…[1G[J◐  Cloning repository….[1G[J◓  Cloning repository….[1G[J◑  Cloning repository….[1G[J◒  Cloning repository….[1G[J◐  Cloning repository….[1G[J◇  Repository cloned
+[?25h[?25l│
+[1G[J◒  Discovering skills…[1G[J◇  Found 61 skills
+[?25h│
+●  Selected 1 skill: raycast-extension-dev
+[?25l│
+[1G[J◇  75 agents
+[?25h│
+●  Installing to: Antigravity CLI, Claude Code, Codex, Cursor, Gemini CLI, GitHub Copilot, OpenCode, Warp
+
+│
+◇  Installation Summary ───────────────────────────────────────────────────────╮
+│                                                                              │
+│                                                                              │
+│  Desktop Extensions                                                          │
+│                                                                              │
+│  ~/Documents/Program/Pueue-Raycast-Extension/.agents/skills/raycast-extensi  │
+│  on-dev                                                                      │
+│    universal: Antigravity CLI, Codex, Cursor, Gemini CLI, GitHub Copilot     │
+│  +12 more                                                                    │
+│    symlink → Claude Code                                                     │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────╯
+[?25l│
+[1G[J◒  Installing skills…[1G[J◐  Installing skills…[1G[J◓  Installing skills…[1G[J◇  Installation complete
+[?25h
+│
+◇  Installed 1 skill ──────────────────────────────────────────────────────────╮
+│                                                                              │
+│                                                                              │
+│  Desktop Extensions                                                          │
+│  ✓ ~/Documents/Program/Pueue-Raycast-Extension/.agents/skills/raycast-exten  │
+│  sion-dev                                                                    │
+│    universal: Antigravity CLI, Codex, Cursor, Gemini CLI, GitHub Copilot     │
+│  +12 more                                                                    │
+│    symlinked: Claude Code                                                    │
+│                                                                              │
+├──────────────────────────────────────────────────────────────────────────────╯
+
+│
+└  Done!  Review skills before use; they run with full agent permissions.</bash-stdout><bash-stderr></bash-stderr>
+
+---
+
+_**Agent (claude-opus-5 2026-07-26 19:37:34Z)**_
+
+<think><details><summary>Thought Process</summary>
+The skill was vendored, so agent-skills must have already been pushed—the cloning output shows 61 skills found including raycast-extension-dev under Desktop Extensions, which matches what the marketplace validator reported. Either the push already happened or the user did it themselves.
+
+Now I'll verify that `just preflight` runs successfully.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 19:37:34Z)**_
+
+Vendored. Let's see `just preflight` do its job now.
+
+_**Agent (claude-opus-5 2026-07-26 19:37:38Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Run preflight with the vendored skill
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+just preflight; echo "exit=$?"
+```
+
+```text
+[
+  {"id":"author-set","status":"warn","detail":"author is \"da-wei_lee\" — registration cannot be verified locally","fix":"Confirm this username exists at raycast.com"},
+  {"id":"license-field","status":"pass","detail":"license is MIT","fix":""},
+  {"id":"license-file","status":"pass","detail":"a LICENSE file is present","fix":""},
+  {"id":"categories-nonempty","status":"pass","detail":"2 categor(y|ies) declared","fix":""},
+  {"id":"description-present","status":"pass","detail":"description is set","fix":""},
+  {"id":"no-version-field","status":"pass","detail":"no version field, as the store expects","fix":""},
+  {"id":"platforms-macos-when-menu-bar","status":"pass","detail":"platforms is consistent with the command modes","fix":""},
+  {"id":"command-src-files","status":"pass","detail":"every commands[].name has a matching src file","fix":""},
+  {"id":"lockfile-present","status":"pass","detail":"package-lock.json is present","fix":""},
+  {"id":"readme-present","status":"pass","detail":"README.md is present","fix":""},
+  {"id":"env-dts-present","status":"pass","detail":"raycast-env.d.ts is present","fix":""},
+  {"id":"no-handwritten-preferences","status":"pass","detail":"no hand-written Preferences interface","fix":""},
+  {"id":"changelog-initial-version","status":"pass","detail":"CHANGELOG has the Initial Version placeholder","fix":""},
+  {"id":"icon-present","status":"pass","detail":"icon found at assets/extension-icon.png","fix":""},
+  {"id":"icon-512","status":"pass","detail":"icon is 512x512","fix":""},
+  {"id":"icon-not-placeholder","status":"pass","detail":"the icon is not the scaffolder placeholder","fix":""},
+  {"id":"metadata-count","status":"fail","detail":"metadata/ has no PNGs — and ray lint exits 0 anyway","fix":"Capture 3-6 with Raycast Window Capture + \"Save to Metadata\""},
+  {"id":"metadata-dimensions","status":"skip","detail":"no screenshots to measure","fix":"See metadata-count"}
+]
+1 check(s) failed, 1 warning(s), 1 skipped
+error: Recipe `preflight` failed with exit code 4
+exit=4
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 19:37:50Z)**_
+
+<think><details><summary>Thought Process</summary>
+The vendored skill is running through `just preflight` and the CHANGELOG fix converted that warning into a pass. Most checks are passing now—16 pass, 1 warn on author registration that can't be verified locally, 1 fail on screenshots, and 1 skipped dimension check. The `changelog-initial-version` is now passing since I folded those two sections together, which confirms the fix is working. Now moving on to `skills-lock`...
+
+The install modified the JSON and skills directory, so I need to check the git status and commit these changes. The skill is loaded into the current session and showing as available in the system reminder. Since this is the Pueue repo where the skill is actually relevant, symlinking it into agent-skills is the right approach here, even though downstream-only skills normally shouldn't be symlinked. Let me review what changed and get this committed.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 19:37:50Z)**_
+
+The loop closes. 16 pass, and note `changelog-initial-version` is now **pass** — the fold worked. The only failure left is the one that genuinely needs your hands.
+
+_**Agent (claude-opus-5 2026-07-26 19:37:50Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check what the vendoring changed
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+git status --short | head -20
+echo "=== skills-lock entry ==="
+node -p "JSON.stringify(require('./skills-lock.json').skills['raycast-extension-dev'], null, 2)"
+echo "=== is .agents/skills/raycast-extension-dev tracked content or symlink? ==="
+ls -la .agents/skills/ | grep raycast
+ls -la .claude/skills/ 2>/dev/null | grep raycast
+```
+
+```text
+ M .specstory/history/2026-07-26_12-50-19Z-at-users-david-src.md
+ M .specstory/history/2026-07-26_18-27-10Z-at-specstory-history-2026.md
+ M skills-lock.json
+ M src/queue-menu.tsx
+?? .agents/skills/raycast-extension-dev/
+?? .claude/skills/raycast-extension-dev
+=== skills-lock entry ===
+{
+  "source": "daviddwlee84/agent-skills",
+  "sourceType": "github",
+  "skillPath": "skills/local/raycast-extension-dev/SKILL.md",
+  "computedHash": "8d7c3f1fe0a329ee325d40ca670ea9c2dc65f46297225700c08c6e1339ad0ae1"
+}
+=== is .agents/skills/raycast-extension-dev tracked content or symlink? ===
+drwxr-xr-x@ - david 27 Jul 03:37 raycast-extension-dev
+lrwxr-xr-x@ - david 27 Jul 03:37 raycast-extension-dev -> ../../.agents/skills/raycast-extension-dev
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 19:37:56Z)**_
+
+<think><details><summary>Thought Process</summary>
+Something unexpected happened — `src/queue-menu.tsx` shows as modified, but I didn't change it. The `npx skills` install shouldn't have touched that file, so I need to check the diff to understand what's going on.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 19:37:56Z)**_
+
+`src/queue-menu.tsx` is modified and I never touched it. Checking before anything else.
+
+_**Agent (claude-opus-5 2026-07-26 19:37:58Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Inspect the unexpected source change
+
+`git diff src/queue-menu.tsx`
+
+```text
+diff --git a/src/queue-menu.tsx b/src/queue-menu.tsx
+index 5d7790a..61ad7c5 100644
+--- a/src/queue-menu.tsx
++++ b/src/queue-menu.tsx
+@@ -31,6 +31,7 @@ import {
+   getPreferenceValues,
+   launchCommand,
+   open,
++  openExtensionPreferences,
+   showHUD,
+   updateCommandMetadata,
+   type Image,
+@@ -135,7 +136,13 @@ export default function Command() {
+         isLoading
+       />
+     ) : (
+-      <ErrorMenu error={error} onRetry={revalidate} connection={connection} />
++      <ErrorMenu
++        error={error}
++        onRetry={revalidate}
++        connection={connection}
++        all={allConnections}
++        onSelect={setConnectionName}
++      />
+     );
+   }
+ 
+@@ -304,20 +311,11 @@ export default function Command() {
+         </MenuBarExtra.Section>
+       ) : null}
+ 
+-      {allConnections.length > 1 ? (
+-        <MenuBarExtra.Section title="Connection">
+-          {allConnections.map((c) => (
+-            <MenuBarExtra.Item
+-              key={c.name}
+-              title={c.sshHost ? `${c.name} (${c.sshHost})` : c.name}
+-              icon={
+-                c.name === connection.name ? Icon.Checkmark : connectionIcon(c)
+-              }
+-              onAction={() => setConnectionName(c.name)}
+-            />
+-          ))}
+-        </MenuBarExtra.Section>
+-      ) : null}
++      <ConnectionSection
++        all={allConnections}
++        current={connection}
++        onSelect={setConnectionName}
++      />
+ 
+       <MenuBarExtra.Section>
+         <MenuBarExtra.Item
+@@ -381,6 +379,14 @@ export default function Command() {
+           icon={Icon.ArrowClockwise}
+           onAction={() => revalidate()}
+         />
++        {/* Reachable while things work, not only after a failure — adding or
++            correcting a connection is a thing you do deliberately, not just
++            in response to an error. */}
++        <MenuBarExtra.Item
++          title="Extension Preferences…"
++          icon={Icon.Gear}
++          onAction={openExtensionPreferences}
++        />
+       </MenuBarExtra.Section>
+     </MenuBarExtra>
+   );
+@@ -478,14 +484,51 @@ function TaskSection(props: {
+   );
+ }
+ 
++/**
++ * The connection switcher, shared by the normal menu and the error menu.
++ *
++ * It has to exist in BOTH. Selecting a remote that turns out to be
++ * unreachable renders the error menu, and if the switcher only lived in the
++ * normal menu there would be no way back to Local — the menu bar would be
++ * permanently stuck on a daemon it cannot reach. Escape routes have to live
++ * in the broken state, not only in the working one.
++ */
++function ConnectionSection({
++  all,
++  current,
++  onSelect,
++}: {
++  all: Connection[];
++  current: Connection;
++  onSelect: (name: string) => void;
++}) {
++  if (all.length < 2) return null;
++  return (
++    <MenuBarExtra.Section title="Connection">
++      {all.map((c) => (
++        <MenuBarExtra.Item
++          key={c.name}
++          title={c.sshHost ? `${c.name} (${c.sshHost})` : c.name}
++          icon={c.name === current.name ? Icon.Checkmark : connectionIcon(c)}
++          onAction={() => onSelect(c.name)}
++        />
++      ))}
++    </MenuBarExtra.Section>
++  );
++}
++
+ function ErrorMenu({
+   error,
+   onRetry,
+   connection,
++  all,
++  onSelect,
+ }: {
+   error: unknown;
+   onRetry: () => void;
+   connection: Connection;
++  all: Connection[];
++  onSelect: (name: string) => void;
+ }) {
+   const d = describeError(error, connection);
+   return (
+@@ -513,6 +556,9 @@ function ErrorMenu({
+           />
+         ))}
+       </MenuBarExtra.Section>
++
++      {/* The way out. Without it a broken remote is a one-way door. */}
++      <ConnectionSection all={all} current={connection} onSelect={onSelect} />
+     </MenuBarExtra>
+   );
+ }
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 19:38:14Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm noticing that `src/queue-menu.tsx` has been modified with additions like `openExtensionPreferences` and a shared `ConnectionSection` component, but this wasn't showing as uncommitted when I checked git status earlier — so either the user was editing in parallel or these changes came from an earlier uncommitted state.
+
+Looking back at the git status outputs, `src/queue-menu.tsx` definitely wasn't listed as modified before my commits, which means the user must have made this edit themselves just now during or after the `npx skills` run. Since this is their work in progress, I shouldn't touch it, but I should flag it to them. That said, the change itself is genuinely solid — the reasoning about the broken remote being a one-way door fits the repo's voice perfectly. I should run the type checker to verify their edit is sound before suggesting anything.
+
+Now I need to figure out what to actually commit: `skills-lock.json`, `.agents/skills/raycast-extension-dev/`, and `.claude/skills/raycast-extension-dev`. But first I should check whether the existing vendored skills are already tracked in git, since that'll tell me whether these new ones should be committed too.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 19:38:14Z)**_
+
+That's not my edit — it appeared after my last commit. It's yours, and it's a good one (the "one-way door" escape hatch). I'll leave it alone. Let me check it still passes the gate, and see how the other vendored skills are tracked.
+
+_**Agent (claude-opus-5 2026-07-26 19:38:15Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check how vendored skills are tracked
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+echo "=== are existing vendored skills tracked? ==="
+git ls-files .agents/skills/ | head -3
+echo "  tracked files under .agents/skills: $(git ls-files .agents/skills/ | wc -l | tr -d ' ')"
+git ls-files .claude/skills/ | head -3
+echo "  tracked under .claude/skills: $(git ls-files .claude/skills/ | wc -l | tr -d ' ')"
+echo "=== .gitignore ==="
+cat .gitignore
+```
+
+```text
+=== are existing vendored skills tracked? ===
+.agents/skills/agent-history-hygiene/SKILL.md
+.agents/skills/agent-history-hygiene/assets/artifact-dirs.txt
+.agents/skills/agent-history-hygiene/assets/gitleaks.toml.template
+  tracked files under .agents/skills: 87
+.claude/skills/agent-history-hygiene
+.claude/skills/mkdocs-site-bootstrap
+.claude/skills/project-knowledge-harness
+  tracked under .claude/skills: 4
+=== .gitignore ===
+node_modules/
+.build/
+.raycast-swift-build/
+dist/
+*.log
+.DS_Store
+
+# mkdocs build output (regenerated every build)
+/site/
+
+# uv virtualenv for the docs toolchain
+.venv/
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 19:38:39Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Verify the gate still passes with the new edit
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+just check >/dev/null 2>&1; echo "just check (with your queue-menu edit) exit=$?"
+```
+
+```text
+just check (with your queue-menu edit) exit=0
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 19:38:58Z)**_
+
+<think><details><summary>Thought Process</summary>
+The queue-menu edit is ready to go. I'm committing just the vendoring changes — the lock file and the raycast extension skills directory — while leaving out the uncommitted source file and the specstory files since they're still evolving.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 19:38:58Z)**_
+
+Your edit passes the gate cleanly. Committing just the vendoring — leaving `src/queue-menu.tsx` for you.
+
+_**Agent (claude-opus-5 2026-07-26 19:39:00Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit the vendored skill
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+git add skills-lock.json .agents/skills/raycast-extension-dev .claude/skills/raycast-extension-dev
+bash .agents/skills/agent-history-hygiene/scripts/scan-staged.sh --redact >/dev/null 2>&1; echo "gitleaks scan exit=$?"
+git commit -q -F - <<'EOF'
+Vendor raycast-extension-dev, and let preflight actually run
+
+`just preflight` has been exiting 3 with an install line since it was
+added. This is that install, so it now runs for real:
+
+    16 pass, 1 warn, 1 fail, 1 skip                    exit 4
+
+The one failure is metadata-count — the screenshots, which is the only
+store requirement left and the only one that cannot be automated. The
+warning is author-set, which is unverifiable locally by construction.
+
+Two checks confirm work committed earlier in this branch:
+changelog-initial-version now passes because [Remote Daemons] was folded
+into [Initial Version], and icon-not-placeholder passes because the icon
+is genuinely ours rather than the scaffolder's tripwire PNG.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+EOF
+git log --oneline -3
+echo "--- left uncommitted, deliberately ---"
+git status --short
+```
+
+```text
+gitleaks scan exit=0
+2731662 Vendor raycast-extension-dev, and let preflight actually run
+d645586 Back up the session transcript and plan
+956c751 Evaluate a launchd sibling, and collect the prior art
+--- left uncommitted, deliberately ---
+ M .specstory/history/2026-07-26_12-50-19Z-at-users-david-src.md
+ M .specstory/history/2026-07-26_18-27-10Z-at-specstory-history-2026.md
+ M src/queue-menu.tsx
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 19:39:09Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm noticing the commit hash changed from `edf6060` to `d645586` for the same commit message, which suggests the history might have been rewritten or amended.  I should check the reflog to see what happened rather than ignore this discrepancy.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 19:39:09Z)**_
+
+The hash for "Back up the session transcript" changed (`edf6060` → `d645586`). Checking why.
+
+_**Agent (claude-opus-5 2026-07-26 19:39:09Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Investigate the changed commit hash
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+git reflog -12
+echo "=== is edf6060 still reachable? ==="
+git cat-file -t edf6060 2>&1
+echo "=== diff between the two ==="
+git diff --stat edf6060 d645586 2>&1 | tail -5
+```
+
+```text
+2731662 HEAD@{0}: commit: Vendor raycast-extension-dev, and let preflight actually run
+d645586 HEAD@{1}: commit (amend): Back up the session transcript and plan
+edf6060 HEAD@{2}: commit: Back up the session transcript and plan
+956c751 HEAD@{3}: commit: Evaluate a launchd sibling, and collect the prior art
+ba2cf3f HEAD@{4}: commit: Automate the half of publishing that can be automated
+3fcbbef HEAD@{5}: commit: Sharpen the ray build claim: -e dist does typecheck
+36b99a2 HEAD@{6}: reset: moving to HEAD
+36b99a2 HEAD@{7}: commit: Apply Prettier formatting
+4a34eda HEAD@{8}: commit: Stop an unreachable host from hanging the menu bar
+dff489a HEAD@{9}: commit: Separate connections with ';' — a newline cannot be typed
+25e4ebd HEAD@{10}: commit: Dedupe TODO sections
+3705e07 HEAD@{11}: commit: Link the docs site, and note how to keep it honest
+=== is edf6060 still reachable? ===
+commit
+=== diff between the two ===
+ ...26-07-26_18-27-10Z-at-specstory-history-2026.md | 269 +++++++++++++++++++++
+ 1 file changed, 269 insertions(+)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 19:39:19Z)**_
+
+<think><details><summary>Thought Process</summary>
+The reflog shows I amended that transcript commit to add 269 more lines—nothing was lost, just consolidated into one unpushed change. So the full picture is clear: Pueue has 5 new commits on main, and agent-skills has 1 commit that's already been pushed.
+
+Uncommitted changes are sitting in the Pueue repo: two specstory transcripts that are still being appended to, and the queue-menu.tsx file you edited. None of this has been pushed yet, so I should verify the push status to wrap this up.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 19:39:19Z)**_
+
+Reflog explains it: you amended that commit to fold in 269 more lines of the still-growing transcript. Nothing lost.
+
+_**Agent (claude-opus-5 2026-07-26 19:39:19Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check push status of both repos
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+echo "=== Pueue vs origin ==="; git status -sb | head -1
+echo "=== agent-skills vs origin ==="; git -C /Users/david/Documents/Program/agent-skills status -sb | head -1
+```
+
+```text
+=== Pueue vs origin ===
+## main...origin/main [ahead 6]
+=== agent-skills vs origin ===
+## main...origin/main
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 19:39:30Z)**_
+
+The loop is closed end to end.
+
+**`just preflight` now runs for real:** 16 pass, 1 warn, 1 fail, 1 skip → exit 4. The single failure is `metadata-count` — the screenshots, which is both the last store requirement and the one thing that genuinely can't be automated. Two checks independently confirmed earlier work in this branch: `changelog-initial-version` passes because of the `[Remote Daemons]` fold, and `icon-not-placeholder` passes because your icon is real rather than the scaffolder's tripwire.
+
+Three things worth flagging:
+
+**`src/queue-menu.tsx` is modified and it isn't mine.** It adds a shared `ConnectionSection` used by both the normal and error menus, plus `openExtensionPreferences` — with the reasoning that a broken remote would otherwise be a one-way door out of the menu bar. I left it uncommitted; it's yours to describe. It does pass `just check`.
+
+**You amended the transcript commit** (`edf6060` → `d645586`, +269 lines) — reflog confirms it, nothing was lost. Worth knowing only because that commit is now a different object than the one I reported earlier.
+
+**agent-skills is pushed and in sync; the Pueue repo is 6 ahead of origin.** I haven't pushed it.
+
+Two transcripts remain modified — SpecStory appends as we go, so they'll always trail slightly behind.
+
+---
+
+_**User (2026-07-26 19:42:21Z)**_
+
+另外我看我們local測試extensions是直接copy到 @~/.config/raycast/extensions/  就能讀到？
+這種情況是否適合直接做到 chezmoi dotfiles 中？（還是說最好還是用just deply一下 或是publish從store下載之類的？）
+
+---
+
+_**Agent (claude-opus-5 2026-07-26 19:42:42Z)**_
+
+<think><details><summary>Thought Process</summary>
+So when I ran `ray build` in those temporary directories, the extensions got registered into my Raycast config folder — that's why I'm seeing those `trial` and `tc` directories there now. The build command must be persisting them as installed extensions.
+
+I need to figure out whether simply copying a directory into `~/.config/raycast/extensions/` is enough for Raycast to recognize it, or if there's a database entry required. And I should clean up those test extensions I left behind since they're just clutter on the user's machine. Let me check what's actually in those directories and whether they're built bundles or source symlinks, then determine if this approach would work for dotfiles management.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 19:42:42Z)**_
+
+Two things there — one of which is my mess. Let me look.
+
+_**Agent (claude-opus-5 2026-07-26 19:42:43Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Inspect the named extension directories
+
+```bash
+cd ~/.config/raycast/extensions
+echo "=== named (non-uuid) dirs ==="
+for d in trial tc pueue translate; do
+  [ -e "$d" ] || continue
+  printf '\n--- %s ---\n' "$d"
+  ls -la "$d" | head -8
+done
+```
+
+```text
+=== named (non-uuid) dirs ===
+
+--- trial ---
+drwxr-xr-x@    - david 27 Jul 03:09 assets
+.rw-r--r--@ 1.3k david 27 Jul 03:09 package.json
+.rw-r--r--@ 3.0k david 27 Jul 03:09 queue-menu.js
+.rw-r--r--@ 1.8k david 27 Jul 03:09 quick.js
+.rw-r--r--@ 2.6k david 27 Jul 03:09 tasks.js
+
+--- tc ---
+drwxr-xr-x@   - david 27 Jul 03:18 assets
+.rw-r--r--@ 966 david 27 Jul 03:18 package.json
+.rw-r--r--@ 676 david 27 Jul 03:19 tasks.js
+.rw-r--r--@ 757 david 27 Jul 03:19 tasks.js.map
+
+--- pueue ---
+drwxr-xr-x@    - david 27 Jul 03:38 assets
+.rw-r--r--@ 570k david 27 Jul 03:38 add-task.js
+.rw-r--r--@ 378k david 27 Jul 03:27 add-task.js.map
+.rw-r--r--@    4 david 27 Jul 00:31 cli.pid
+.rw-r--r--@    0 david 27 Jul 00:31 dev.log
+.rw-r--r--@ 617k david 27 Jul 03:38 groups.js
+.rw-r--r--@ 407k david 27 Jul 03:27 groups.js.map
+.rw-r--r--@ 7.2k david 27 Jul 03:38 package.json
+
+--- translate ---
+drwxr-xr-x@    - david 26 Jul 20:34 assets
+.rw-r--r--@ 396k david 26 Jul 20:34 define.js
+.rw-r--r--@ 387k david 26 Jul 20:34 history.js
+.rw-r--r--@ 447k david 26 Jul 20:34 look-up-word.js
+.rw-r--r--@ 8.0k david 26 Jul 20:34 package.json
+.rw-r--r--@ 3.9k david 26 Jul 20:34 translate-selection.js
+.rw-r--r--@ 432k david 26 Jul 20:34 translate-text.js
+.rw-r--r--@ 432k david 26 Jul 20:34 translate.js
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 19:42:54Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to clean up the `trial` and `tc` test scaffolds that `ray build` created in the extensions directory, since they'd clutter the user's command palette. The real question is whether Raycast treats the filesystem as the source of truth or if it maintains a separate database — I should check Raycast's support directory to figure out how it actually discovers and loads extensions.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 19:42:54Z)**_
+
+`trial` and `tc` are my test scaffolds — `ray build` installs into that directory, so my throwaways landed in your Raycast. Let me check whether the filesystem is the whole story before cleaning up.
+
+_**Agent (claude-opus-5 2026-07-26 19:42:54Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check whether Raycast tracks extensions in a database
+
+```bash
+ls ~/Library/Application\ Support/com.raycast.macos/ 2>/dev/null | head -20
+echo "=== does a db mention the extension names? ==="
+DB=~/Library/Application\ Support/com.raycast.macos/raycast.sqlite
+[ -f "$DB" ] && echo "sqlite db present: $(ls -la "$DB" | awk '{print $5}') bytes" || echo "no raycast.sqlite at that path"
+echo "=== grep the support dir for 'trial' ==="
+grep -rls "trial" ~/Library/Application\ Support/com.raycast.macos/ 2>/dev/null | head -5
+```
+
+```text
+extensions
+NodeJS
+posthog.queueFolder
+posthog.replayFolder
+RaycastWrapped
+posthog.anonymousId
+posthog.distinctId
+posthog.enabledFeatureFlagPayloads
+posthog.enabledFeatureFlags
+posthog.registerProperties
+raycast-activities-enc.sqlite
+raycast-activities-enc.sqlite-shm
+raycast-activities-enc.sqlite-wal
+raycast-emoji.sqlite
+raycast-emoji.sqlite-shm
+raycast-emoji.sqlite-wal
+raycast-enc.sqlite
+raycast-enc.sqlite-shm
+raycast-enc.sqlite-wal
+=== does a db mention the extension names? ===
+no raycast.sqlite at that path
+=== grep the support dir for 'trial' ===
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 19:43:04Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check the support extensions dir and db format
+
+```bash
+ls -la ~/Library/Application\ Support/com.raycast.macos/extensions/ 2>/dev/null | head -15
+echo "=== is raycast-enc.sqlite readable (encrypted?) ==="
+file ~/Library/Application\ Support/com.raycast.macos/raycast-enc.sqlite
+head -c 16 ~/Library/Application\ Support/com.raycast.macos/raycast-enc.sqlite | xxd | head -2
+```
+
+```text
+drwxr-xr-x@    - david  6 Mar 12:09 40ebc708-964f-473b-8d19-d4e9cbd27ae9
+drwxr-xr-x@    - david 30 Apr  2025 606e26d8-b3c5-4760-8001-dccce1b872c4
+drwxr-xr-x@    - david 18 Jul 19:41 c0c9423a-7014-481e-8bb9-44c4c6df53be
+drwxr-xr-x@    - david 29 Mar 20:48 dcb6bd69-97fe-4e0d-8d0a-811f5b6efbf0
+drwxr-xr-x@    - david 27 Jul 01:25 pueue
+drwxr-xr-x@    - david 22 Jul 15:38 translate
+.rw-r--r--@ 8.2k david 27 Jul 01:25 .DS_Store
+=== is raycast-enc.sqlite readable (encrypted?) ===
+/Users/david/Library/Application Support/com.raycast.macos/raycast-enc.sqlite: data
+00000000: de0d 686f 0f8e 8fce 1cc7 a8ac a488 3528  ..ho..........5(
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 19:43:16Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm noticing there are two different Raycast extension directories — one at `~/Library/Application Support/com.raycast.macos/extensions/` that contains `pueue`, `translate`, and several UUIDs, and another at `~/.config/raycast/extensions/` that has more UUIDs plus `trial` and `tc`. Let me look more closely at what's in each location to understand the difference.
+
+The real issue here is that Raycast stores extension metadata in an encrypted SQLCipher database (`raycast-enc.sqlite`), not just on the filesystem — so you can't simply drop a directory in place and expect Raycast to recognize it. I need to verify whether these two directories are linked or completely separate.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 19:43:16Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Compare the two extension directories
+
+```bash
+ls -ld ~/.config/raycast ~/.config/raycast/extensions ~/Library/Application\ Support/com.raycast.macos/extensions 2>&1
+echo "=== compare the two listings ==="
+diff <(ls ~/.config/raycast/extensions | sort) <(ls ~/Library/Application\ Support/com.raycast.macos/extensions | sort) && echo "identical" || echo "^ differ"
+```
+
+```text
+drwxr-xr-x@ - david 27 Jul 03:18 /Users/david/.config/raycast/extensions
+drwxr-xr-x@ - david 27 Jul 01:25 '/Users/david/Library/Application Support/com.raycast.macos'/extensions
+drwxr-xr-x@ - david 26 Jul 16:21 /Users/david/.config/raycast
+=== compare the two listings ===
+1,2d0
+< 0e43920f-bbf6-4582-bc3f-5f63092c915f
+< 320f40ef-a633-415a-ab0e-1e99515478f7
+5,6d2
+< 9349c6b9-c442-4895-98e3-b3a926e74ed7
+< a9696c4c-a4e8-4ff1-bf49-c9015f796200
+9d4
+< node_modules -> /Applications/Raycast.app/Contents/Resources/RaycastNodeExtensions_RaycastNodeExtensions.bundle/Contents/Resources/api/node_modules
+11d5
+< tc
+13d6
+< trial
+^ differ
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 19:43:46Z)**_
+
+<think><details><summary>Thought Process</summary>
+There are two separate extension directories—one in `.config/raycast/extensions/` where the CLI tools write during development, and another in `~/Library/Application Support/` that Raycast manages itself. The `.config` directory has extra UUIDs that are likely leftover from previous builds or experiments.
+
+The `node_modules` symlink points into the Raycast.app bundle itself, which is how extensions resolve the `@raycast/api` at runtime. This means the directory isn't truly portable—it depends on Raycast being installed at `/Applications` with that specific internal structure. For the chezmoi question, this symlink would be a problem since it's a machine-local absolute path that won't work when copied elsewhere.
+
+To actually test whether copying a directory makes Raycast recognize it, I'd need to interact with Raycast directly, which I can't do headlessly. What I can determine is that the registration database is encrypted with SQLCipher, so I can't inspect the registration state directly. The `tc` and `trial` extensions are stored in `.config/ray`
+
+cast/extensions but not in Application Support, whereas `pueue` and `translate` appear in both directories. This suggests a key distinction: `ray build` writes to `~/.config/raycast/extensions/`, but `ray develop` actually registers the extension with Raycast through an Application Support entry and database entry. So copying to `.config` alone isn't sufficient—Raycast needs that registration step, which lives in an encrypted database that I can't directly inspect.
+
+Now I need to verify whether the `trial` and `tc` extensions I built actually show up in Raycast's search, though I can't test that headlessly. I should also decide what to do about cleaning up these test scaffolds I created tonight—they're clearly my own junk from testing, so removing them is just cleanup of my own mess.
+
+Before I do anything, let me check those four orphan UUIDs to understand if they're stale, but I won't touch them since they're not mine. Then I'll focus on answering the chezmoi question directly—the core answer is "no, this shouldn't go in chezmoi" based on how Raycast works, but I should verify their chezmoi setup conventions to give a complete picture.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 19:43:46Z)**_
+
+Two separate real directories, and that difference answers your question. Let me confirm the pattern, then clean up my mess.
+
+_**Agent (claude-opus-5 2026-07-26 19:43:47Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Correlate presence with which ray command was run
+
+```bash
+echo "=== which extensions are in BOTH vs only in .config ==="
+for d in trial tc pueue translate; do
+  a=$([ -e ~/.config/raycast/extensions/"$d" ] && echo yes || echo no)
+  b=$([ -e ~/Library/Application\ Support/com.raycast.macos/extensions/"$d" ] && echo yes || echo no)
+  printf '%-10s .config=%-4s AppSupport=%s\n' "$d" "$a" "$b"
+done
+echo
+echo "=== what I ran on each ==="
+echo "trial, tc  -> ray build only  (my test scaffolds, 03:09 / 03:18 tonight)"
+echo "pueue      -> ray develop     (your real dev session)"
+echo
+echo "=== the node_modules symlink ==="
+ls -l ~/.config/raycast/extensions/node_modules
+```
+
+```text
+=== which extensions are in BOTH vs only in .config ===
+trial      .config=yes  AppSupport=no
+tc         .config=yes  AppSupport=no
+pueue      .config=yes  AppSupport=yes
+translate  .config=yes  AppSupport=yes
+
+=== what I ran on each ===
+trial, tc  -> ray build only  (my test scaffolds, 03:09 / 03:18 tonight)
+pueue      -> ray develop     (your real dev session)
+
+=== the node_modules symlink ===
+drwxr-xr-x@ - david 15 Jul 17:16 @parcel
+drwxr-xr-x@ - david 15 Jul 17:16 @raycast
+drwxr-xr-x@ - david 15 Jul 17:16 react
+drwxr-xr-x@ - david 15 Jul 17:16 react-devtools-raycast
+drwxr-xr-x@ - david 15 Jul 17:16 react-reconciler
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 19:43:55Z)**_
+
+<think><details><summary>Thought Process</summary>
+So the filesystem copy isn't what triggers the registration—`ray build` only touches `.config`, while `ray develop` creates an additional Application Support entry. Let me clean up my test artifacts, then I'll look into chezmoi's setup conventions to answer that question accurately.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 19:43:55Z)**_
+
+Clean pattern. Now removing my two test scaffolds — they're mine, from tonight, and they'd otherwise show up as junk in your root search.
+
+_**Agent (claude-opus-5 2026-07-26 19:43:55Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Remove my test scaffolds from the Raycast extensions dir
+
+```bash
+cd ~/.config/raycast/extensions
+echo "=== confirming these are mine before deleting ==="
+node -p "['trial','tc'].map(d=>{const m=require('/Users/david/.config/raycast/extensions/'+d+'/package.json');return d+': name='+m.name+' author='+m.author+' title='+m.title}).join('\n')"
+rm -rf trial tc
+echo
+echo "=== removed; remaining named dirs ==="
+ls -d */ 2>/dev/null | grep -vE '^[0-9a-f]{8}-' 
+```
+
+```text
+=== confirming these are mine before deleting ===
+trial: name=trial author=test_user title=Trial
+tc: name=tc author=me title=Tc
+
+=== removed; remaining named dirs ===
+node_modules
+pueue
+translate
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 19:44:08Z)**_
+
+<think><details><summary>Thought Process</summary>
+I've confirmed those scaffolds were mine and removed them. Now I'm weighing whether to invoke the chezmoi-dotfiles skill to give a properly grounded answer about their setup conventions, since they're specifically asking if this approach fits their chezmoi structure — though the core question is really about Raycast design, and I already have strong evidence for that.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 19:44:08Z)**_
+
+<tool-use data-tool-type="generic" data-tool-name="Skill"><details>
+<summary>Tool use: **Skill**</summary>
+
+**Input:**
+
+- args: `Is there an existing convention for machine-local app state / built artifacts, and is there anything Raycast-related already managed?`
+- skill: `chezmoi-dotfiles`
+
+</details></tool-use>
+
+---
+
+_**User (2026-07-26 19:44:08Z)**_
+
+Base directory for this skill: /Users/david/.claude/skills/chezmoi-dotfiles
+
+<!-- managed-by: chezmoi-dotfiles (chezmoi source: dot_agents/skills/chezmoi-dotfiles/SKILL.md.tmpl) — do not hand-edit the deployed copy; it re-renders on every `chezmoi apply`. -->
+
+# chezmoi-dotfiles
+
+This machine's `$HOME` is managed by a **chezmoi** (configs) + **ansible** (system
+deps) dotfiles repo. This skill is the agent-facing map: how to drive it, and what
+custom tooling exists that you wouldn't otherwise know about. It is rendered per-host
+— the "What's enabled on THIS machine" section reflects what the user actually
+selected at init.
+
+## Orientation (read this first)
+
+- **Repo root**: `chezmoi source-path` (no args) prints the source dir. Work there
+  to edit: `cd "$(chezmoi source-path)"`.
+- **Source path of one file**: `chezmoi source-path ~/.config/foo/bar` → the
+  managed source file for that target.
+- **`docs/**` is NOT deployed to `$HOME`** (it's chezmoi-ignored). Read detail via
+  `"$(chezmoi source-path)/docs/..."`. A *subset* is deployed to `~/.config/docs/`
+  (e.g. keybindings, cli-tools) for runtime helpers.
+- **Read the contract before editing**: `"$(chezmoi source-path)/CLAUDE.md"` holds
+  Hard invariants and cross-file maintenance rules. Honor them.
+- This host: profile `macos`, OS `darwin`/`amd64`, primary shell `zsh`.
+
+## chezmoi essentials
+
+```bash
+chezmoi diff                 # preview changes (also: just chezmoi-diff)
+chezmoi apply                # deploy + run scripts (also: cas, or just chezmoi-apply)
+chezmoi status               # modified/added/removed targets
+chezmoi edit ~/.zshrc        # edit the SOURCE of a target
+chezmoi add  ~/.config/x     # start managing an existing file
+chezmoi re-add               # pull live edits back into source
+chezmoi managed | grep foo   # is X managed?
+chezmoi cat ~/.config/x      # render a target without applying
+chezmoi data | jq            # the template data (ground truth for the toggles below)
+```
+
+- **`cas`** = `chezmoi apply` + reload hint; **`cau`** = update from remote then apply
+  (defined in `dot_config/shell/99_chezmoi_reload.sh`).
+- **`dotcfg`** = reconfigure the init prompts on an already-set-up machine
+  (`dotcfg` for the TUI, `dotcfg --set installLlmTools=true --yes` for one toggle,
+  `dotcfg --dry-run` to preview). Shell twin: `czcfg`.
+- **Never `chezmoi add` a `modify_`/`create_` target** — it overwrites the script.
+- Full command cheat-sheet: `docs/this_repo/cheatsheet.md`. Install-vs-upgrade is
+  split: `chezmoi apply`/ansible is **install-only**; upgrades go through
+  `just upgrade-*`.
+
+## What's enabled on THIS machine
+
+(Rendered from this host's selections. For live truth: `chezmoi data | jq`.)
+- **Coding agents** — Claude Code, OpenCode, Cursor, Codex, Gemini, Copilot (configs + CLIs). See `docs/tools/agent-overlays.md`, `docs/tools/agent-skills.md`.
+- **Python uv tools** — mlflow, marimo, jupyter, etc. (powers the `mlf` CLI). See `docs/this_repo/uv-bootstrap.md`.
+- **Extra runtimes** — rust, bun, ruby via mise (+ cargo/gem tools). Node is always present.
+- **LLM tools** — Ollama / LiteLLM / local models.
+- **JS CLI tools** — standalone npm CLIs (e.g. readability-cli).
+- **.NET tools** — .NET SDK (mise) + dotnet global tools.
+- **IaC** — Azure CLI, Terraform, OpenTofu.
+- **Media** — ffmpeg, ImageMagick, exiftool, libvips.
+- **Media control** — nowplaying-cli + switchaudio-osx (macOS) / playerctl (Linux); unlocks full `sysplay`/`sysnow` (built-in `sysvol`/`sysmute` work regardless).
+- **Networking** — nmap, mtr, httpie, gping, trippy.
+- **Tunnels** — ngrok, cloudflared.
+- **Vim mode** — shell modal editing + tmux vim nav (NOT Neovim/editors — those are always vim).
+
+## Custom in-house CLIs (always deployed to `~/.dotfiles/bin`, on PATH)
+
+Each works from any cwd. Run with `--help`, or read `docs/tools/<name>.md`. Full list: `ls "$(chezmoi source-path)/dot_dotfiles/bin/"`.
+
+- **`fleet`** — cross-host ops over your machines: `fleet chezmoi apply`, `fleet hosts`, `fleet tmux`, `fleet info`, `fleet pueue`, `fleet exec`. See `docs/this_repo/fleet-apply.md`, `docs/tools/fleet-exec.md`, `docs/tools/fleet-hosts.md`.
+- **`mlf`** — MLflow umbrella CLI + TUI dashboard (needs Python uv tools). Picker twin: `tv mlflow`.
+- **`pqsum`** — pueue queue summary (text / AI / JSON). See `docs/tools/pueue.md`.
+- **`x`** — clipboard/file copy-paste-open with cross-platform fallbacks.
+- **`view-office`** — open/preview Office docs (.docx/.xlsx/.pptx + legacy .doc/.xls/.ppt) in the terminal; also powers the yazi Office previewer. See `docs/tools/office-viewers.md`.
+- **`mi-router`** / **`reyee`** / **`sms`** — read-only router CLIs (Xiaomi MiWiFi / Ruijie Reyee / Huawei HiLink SMS). See `docs/tools/{mi-router,reyee,sms}.md`.
+- **`mi-dhcp-bind`** — opt-in **write** companion to `mi-router`: set/remove MiWiFi static DHCP reservations (`bind --self` autodetects this host). See `docs/tools/mi-dhcp-bind.md`.
+- **`ping-monitor`** — record ping over time, flag latency spikes. See `docs/tools/ping-monitor.md`.
+- **`wake`** — Wake-on-LAN sender: `wake <host>` powers a box on by magic packet (hosts in `~/.config/wake/hosts.toml`). Passive side = `installWakeOnLan` ansible role. See `docs/sysadmin/wake-on-lan.md`.
+- **`yth`** — search your YouTube watch history (title/channel/description + captions; Takeout import + optional cookie sync). Picker twin: `tv yth`. See `docs/tools/yth.md`.
+- **`appsrc`** — detect how an installed app / CLI was installed & managed (cask / App Store / direct-download / apt / snap / flatpak / AppImage / cargo/npm/pipx/uv/mise/go/gem / manual): `appsrc which <cmd-or-app>` (live), `appsrc size <app>` (footprint + associated cache/data/containers), `appsrc tui` (interactive dashboard — sort by size, filter), bare `appsrc` / `appsrc scan` (cached inventory, `--json`/`--tsv`/`--size`/`--sort`). Picker twins: `tv appsrc` (by source) / `tv appsrc-size` (by footprint). See `docs/tools/appsrc.md`.
+- **`dotcfg`** — reconfigure dotfiles prompts (above).
+- **`sesh-preview`** — preview helper for the sesh picker.
+
+## Television (`tv`) — fuzzy pickers with custom channels
+
+There are ~40 **custom** channels (system state, fleet, services, infra, agents…)
+that you won't discover otherwise. Browse them:
+
+```bash
+tv                      # default picker
+tv list-channels        # list everything available
+tv <channel>            # open one, e.g. tv fleet-hosts | tv mlflow | tv pueue
+ls "$(chezmoi source-path)/dot_config/television/cable/"   # the channel definitions
+```
+
+Handy ones: `fleet-hosts`, `mlflow`, `pueue`, `ports`, `kill-process`, `services`,
+`sessions`, `keybindings`, `aliases`, `git-ops`, `mac-apps`/`linux-apps`. Full
+reference: `docs/tools/tv.md`.
+
+## Keybindings & keymaps
+
+- **`bindings`** (shell function) or **`tv keybindings`** — interactive reference.
+- **tmux**: `prefix + Space` (or `prefix + e`) opens the action menu;
+  `prefix + T` = sesh picker, `prefix + U` = tools. Deep ref: `docs/tools/tmux/keybindings.md`.
+- **shell ZLE widgets**: `Alt+S` sesh sessions, `Alt+T` tools, `Ctrl+R` history (atuin).
+- Master reference: `docs/shells/keybindings.md` (also deployed to `~/.config/docs/shells/keybindings.md`).
+
+## Aliases & functions
+
+`alias` to list shell aliases, or `tv aliases`. Catalog: `docs/shells/aliases.md`.
+Helpers worth knowing: `chezmoi-cd` (jump to source), `run-for` (time-box a command),
+`bindings` (above). App control: `applaunch`/`appquit`/`apprestart`/… (cross-platform).
+System audio (cross-platform, built-in): `sysvol`/`sysmute` (+ `sysplay`/`sysnow` with `installMediaControl`); remote mute via `fleet exec --login -- sysmute on`.
+
+## just recipes (run from the source dir)
+
+```bash
+cd "$(chezmoi source-path)" && just --list
+```
+
+Categories: `chezmoi-*`, `ansible-*`, `upgrade-*` (brew/mise/uv/npm/cargo/…),
+`fleet`/`fleet-*`, `gen-prompts` (regenerate prompt scaffolding), `check`/`lint`,
+`docker-*`. See `docs/this_repo/cheatsheet.md`.
+
+## Editing rules (don't skip)
+
+Before changing anything under the repo, read `CLAUDE.md` Hard invariants and the
+"Cross-file maintenance rules" table — many surfaces have mandatory mirror updates
+in the same commit (docs, completions, tool-managers index, this very skill, …).
+
+
+ARGUMENTS: Is there an existing convention for machine-local app state / built artifacts, and is there anything Raycast-related already managed?
+
+---
+
+_**Agent (claude-opus-5 2026-07-26 19:44:15Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to check whether Raycast is already being managed by chezmoi and understand the convention for handling machine-local state and build artifacts, then review the CLAUDE.md constraints to make sure my answer aligns with them.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 19:44:16Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check for existing Raycast management and state conventions
+
+```bash
+SRC=$(chezmoi source-path)
+echo "SRC=$SRC"
+echo "=== anything raycast-related? ==="
+grep -ril "raycast" "$SRC" --include='*' -l 2>/dev/null | grep -v '/.git/' | head -20
+echo "=== is ~/.config/raycast managed? ==="
+chezmoi managed | grep -i raycast || echo "  (not managed)"
+echo "=== does .chezmoiignore mention app state / caches? ==="
+[ -f "$SRC/.chezmoiignore" ] && head -40 "$SRC/.chezmoiignore"
+```
+
+```text
+Exit code 1
+SRC=/Users/david/.local/share/chezmoi
+=== anything raycast-related? ===
+/Users/david/.local/share/chezmoi/mkdocs.yml
+/Users/david/.local/share/chezmoi/.pre-commit-config.yaml
+/Users/david/.local/share/chezmoi/TODO.md
+/Users/david/.local/share/chezmoi/backlog/chezmoiscripts-namespace-refactor.md
+/Users/david/.local/share/chezmoi/backlog/raycast-sync/run_onchange_after_32_raycast_config.sh.tmpl
+/Users/david/.local/share/chezmoi/backlog/raycast-sync-non-pro.md
+/Users/david/.local/share/chezmoi/backlog/raycast-sync/docs-tools-raycast-sync.md
+/Users/david/.local/share/chezmoi/backlog/raycast-sync/raycast_sync.py
+/Users/david/.local/share/chezmoi/.specstory/history/2026-05-28_06-29-47Z-chezmoi-on-main-via.md
+/Users/david/.local/share/chezmoi/.specstory/history/2026-04-24_06-31-18Z-yazi-z-zoxide-sesh.md
+/Users/david/.local/share/chezmoi/.specstory/history/2026-07-08_02-04-53Z-image-hash-1-tailscale.md
+/Users/david/.local/share/chezmoi/.specstory/history/2026-05-06_03-30-59Z-figlet-https-www-figlet.md
+/Users/david/.local/share/chezmoi/.specstory/history/2026-04-24_02-36-54Z-tmux-scrolling-x-coding.md
+/Users/david/.local/share/chezmoi/.specstory/history/2026-03-16_08-57-37Z-command-name-model-command.md
+/Users/david/.local/share/chezmoi/.specstory/history/2026-02-05_14-03-50Z-run-chezmoi-update-and.md
+/Users/david/.local/share/chezmoi/.specstory/history/2026-04-22_08-50-40Z-2026-04-22-08.md
+/Users/david/.local/share/chezmoi/.specstory/history/2026-05-06_10-15-57Z-profile-centos-yzhang-at.md
+/Users/david/.local/share/chezmoi/.specstory/history/2026-02-05_08-06-47Z-system-reminder.md
+/Users/david/.local/share/chezmoi/.specstory/history/2026-04-24_05-46-52Z-security-chezmoi-on-main.md
+/Users/david/.local/share/chezmoi/.specstory/history/2026-05-14_02-52-20Z-hash-zsh-session-id.md
+=== is ~/.config/raycast managed? ===
+.config/shell/45_copilot_raycast.sh
+=== does .chezmoiignore mention app state / caches? ===
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 19:44:23Z)**_
+
+<think><details><summary>Thought Process</summary>
+I see there's already a backlog entry for this in the chezmoi repo with some prior analysis and a script. Let me pull up that existing work so I can build on what's already been thought through rather than starting from scratch.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 19:44:23Z)**_
+
+You've already analysed this — there's a `backlog/raycast-sync/` in your dotfiles. Let me read your own prior conclusion rather than re-derive it.
+
+_**Agent (claude-opus-5 2026-07-26 19:44:23Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read the existing raycast-sync backlog note
+
+`SRC=$(chezmoi source-path); cat "$SRC/backlog/raycast-sync-non-pro.md"`
+
+```text
+# Raycast config sync for non-Pro users (paused — export format blocks us)
+
+**TODO tag**: `P?/XL` — needs reverse-engineering or a Raycast-side opt-in before it's worth resurrecting.
+**Sibling surface**: [`pitfalls/raycast-library-files-not-portable-across-machines.md`](../pitfalls/raycast-library-files-not-portable-across-machines.md) — kept live; stands on its own as a trap-warning regardless of whether this sync ships.
+
+## Goal
+
+Non-Pro Raycast users have no official cross-machine config sync (Raycast Pro offers Cloud Sync; no equivalent for free tier). Build something that round-trips hotkeys / quicklinks / snippets / aliases / extensions list across machines, git-tracked and redacted.
+
+## Why this is paused
+
+Raycast's bulk export (`Settings → Advanced → Export` → `.rayconfig` file) is **AES-encrypted with a key derivation that does not match any public scheme**, even when the user supplies the password.
+
+Verified empirically against a real 837 KB export on Raycast 1.104.12 using pw `12345678`:
+
+| Scheme family | Tried | Result |
+|---|---|---|
+| `openssl enc -d -aes-256-cbc -nosalt -k 12345678` (+ `-md md5/sha1/sha256`) | Yes | Garbage output; no gzip magic |
+| `openssl enc -pbkdf2` (iters 1/1000/5000/10000/16384/100000, SHA1/256/512) | Yes (via pycryptodome) | No plausible decodes |
+| scrypt (N=1024, 16384; r=8; p=1) with salts `""`, zeros, first-8-of-file, `"com.raycast.macos"` | Yes | No plausible decodes |
+| Direct hash as key (MD5/SHA1/SHA256/SHA512 of password, padded/truncated to 32 bytes) with IV = first 16 bytes OR zero IV OR hash-derived IV | Yes | No plausible decodes |
+| `EVP_BytesToKey` (OpenSSL legacy) with MD5/SHA1/SHA256, no salt and file-offset salt | Yes | No plausible decodes |
+| AES-128 vs AES-256, CBC / ECB / CTR | Yes for all of the above | No plausible decodes |
+
+"No plausible decodes" = **0** outputs where first 2 bytes are gzip magic `1f8b` OR first 200 bytes pass a printable-ASCII-ratio check after starting with `{` or `[`.
+
+File structure observed:
+
+```
+offset 0..15    random-looking (likely IV, since it changes every export)
+offset 16..N    ciphertext (N always a multiple of 16 = AES block size)
+no 'Salted__' magic; no gzip magic anywhere; no OpenSSL header
+```
+
+The null hypothesis — **Raycast mixes keychain-bound or install-bound material into the KDF** — best matches the data. The user's password alone is insufficient even if the KDF were public, which makes a `--password` CLI flag pure theatre.
+
+**Additional UX blocker**: Raycast forces the Export Password field to be non-empty. We initially thought the user could clear it (per some stale community writeups) — they cannot. The field in `Extensions → Raycast → Export Settings & Data → Export Password` pre-fills with `12345678` and does not accept empty.
+
+## What was built (for revival)
+
+Preserved verbatim under [`./raycast-sync/`](raycast-sync/). The active-location copies were removed from the repo so the feature doesn't appear half-wired.
+
+| Original path | Preserved as | Status | Notes |
+|---|---|---|---|
+| `scripts/raycast_sync.py` | [`./raycast-sync/raycast_sync.py`](raycast-sync/raycast_sync.py) | **Never git-tracked** (only in working tree during the session); reconstructed here from final-session state. | Standalone PEP-723 CLI: `export` / `redact` / `import` / `diff` / `inspect`. Handles gzip↔JSON, key-name redaction (`password`/`token`/`apiKey`/…), `$HOME` path normalization, extensions-manifest extraction via a schema-tolerant walker, `secrets.env.example` emitter. Polls `~/Downloads/*.rayconfig` with per-file mtime baseline so it auto-detects `Raycast <timestamp>.rayconfig`. Sniffs gzip magic; dies with a clear message on encrypted input. |
+| `.chezmoiscripts/global/run_onchange_after_32_raycast_config.sh.tmpl` | [`./raycast-sync/run_onchange_after_32_raycast_config.sh.tmpl`](raycast-sync/run_onchange_after_32_raycast_config.sh.tmpl) | Was committed at `5e25f33`; recoverable also via `git show 5e25f33:.chezmoiscripts/global/run_onchange_after_32_raycast_config.sh.tmpl`. | Apply-time auto-import, gated by `syncRaycast` prompt and OS=darwin. SHA256-hashes `raycast/{raycast,extensions}.json` so chezmoi only re-fires on source change. |
+| `docs/tools/raycast-sync.md` | [`./raycast-sync/docs-tools-raycast-sync.md`](raycast-sync/docs-tools-raycast-sync.md) | **Never git-tracked**; reconstructed here. | Full user-facing workflow doc (TL;DR, what-syncs/doesn't table, redaction pipeline, AppleScript `--auto-gui` notes, troubleshooting). |
+| `raycast/` (source-of-truth dir) | Never populated because export never succeeded. `.chezmoiignore.tmpl` entry `raycast/**` kept it from deploying as `~/raycast/`. | N/A — the entry itself is reverted |
+| `syncRaycast` prompt in `.chezmoi.toml.tmpl` + `Dockerfile` + `scripts/init/dotfiles_init.py` (three-file cross-surface per the CLAUDE.md invariant) | Opt-in boolean, darwin-only. | Reverted in all three files |
+| `raycast` added to `DEFAULT_PATHS` in `scripts/redact_secrets.py` + new `REDACTABLE_SUFFIXES = {".md", ".json"}` + pre-commit regex `^raycast/.*\.json$` | Extended the agent-artifact redaction pipeline to cover JSON alongside Markdown. | Reverted |
+| `justfile` recipes `raycast-{export,redact,import,diff,sync}` | User-facing entrypoints. | Reverted |
+| `CLAUDE.md` redaction table row + "update THREE places when adding a surface" rule | Docs for the three-file wiring pattern. | Reverted (restored to original 4-row Markdown-only table) |
+| `README.md` Config Files entry | User-facing. | Reverted |
+| `pitfalls/raycast-library-files-not-portable-across-machines.md` | Explains why copying `~/Library/Application Support/com.raycast.macos/` doesn't work (per-machine keychain encryption on `raycast-enc.sqlite`). | **KEPT** — valid standalone warning |
+
+## What's factually confirmed (ground truth, survives the pause)
+
+1. **`~/Library/Application Support/com.raycast.macos/raycast-enc.sqlite` is per-machine keychain-encrypted.** Raw-file sync across machines results in empty hotkeys / quicklinks / snippets on the target machine. Reference: [Raycast security doc](https://developers.raycast.com/information/security).
+
+2. **macOS Sonoma+ breaks symlinked `~/Library/Application Support/*` preferences.** The old "symlink into iCloud / Dropbox" trick from the 2020-era writeups no longer works.
+
+3. **`com.raycast.macos.plist` contains machine-bound state** (window positions, account link). Not safe to sync even if you got past (1) + (2).
+
+4. **Extension API keys / OAuth tokens** are stored in macOS Keychain separately from the main encrypted DB. Even if we could decrypt `.rayconfig`, these wouldn't travel — every Raycast extension that authenticates to an external service would need its secret re-entered on the target machine.
+
+5. **Three separate export commands exist** in Raycast's built-in extensions (seen in Settings → Extensions → filter `export`):
+   - `Quicklinks → Export Quicklinks`
+   - `Raycast → Export Settings & Data` (the encrypted bulk one)
+   - `Snippets → Export Snippets`
+
+   **We did not investigate whether the two per-category exports are encrypted.** This is the cheapest next experiment when resuming — if either of those produces plain JSON/plist, the sync strategy pivots to per-category exports and skips the encrypted bulk entirely.
+
+## Revival paths, easiest first
+
+### Option A — per-category exports (cheapest spike)
+
+1. Run `Export Quicklinks` and `Export Snippets` in Raycast. Inspect bytes.
+2. If either is plain text / JSON / plist: rewrite `raycast_sync.py` to drive those two commands (plus any analogous `Export Aliases`, `Export Hotkeys`, `Export Floating Notes` if they exist) via `raycast://` deep links instead of the bulk export. Redaction + extensions-manifest logic from commit `5e25f33` still applies.
+3. Known compromise: hotkeys/settings/aliases may have no per-category export. They'd become "re-enter per machine", documented alongside the existing keychain-bound secrets caveat.
+4. Effort: **M** if the per-category files are plain; **XL** if they're also encrypted and Option A collapses into Option B.
+
+### Option B — write a Raycast extension that dumps via the Storage API
+
+Raycast's extension SDK gives extensions access to `LocalStorage` and a few adjacent read APIs. A custom extension installed locally (not published) could read the user's config and write plain JSON to disk. This sidesteps the export-file encryption entirely.
+
+- Effort: **L** (new TypeScript extension project, test locally, document install).
+- Portability: extensions run inside Raycast's sandbox, so they only see what the SDK exposes. If the SDK can't read hotkeys / aliases / settings, this doesn't help for those.
+- Reference: <https://developers.raycast.com/api-reference/storage>, <https://developers.raycast.com/api-reference/preferences>.
+
+### Option C — reverse-engineer Raycast.app's encryption
+
+- Effort: **XL**, ethically grey (Raycast isn't open-source), and likely to break on every Raycast update.
+- Don't pursue unless Raycast adds first-party tamper-signed docs of the format.
+
+### Option D — wait for Raycast to expose an unencrypted export flag
+
+- Zero effort on our side; infinite latency. File a feature request against [raycast/extensions](https://github.com/raycast/extensions) asking for a `--plain` export option or an extension-side dumper.
+
+## Attempted scheme list (so future-me doesn't redo it)
+
+Brute-force script (stored at `/tmp/try_decrypt2.py` during the session; not committed) iterated through:
+
+```
+passwords:  [b"12345678", b"raycast", b"", b"Raycast", b"RAYCAST"]
+PBKDF2:     iters = 1, 1000, 5000, 10000, 16384, 100000
+            salt  = "", 0x00*8, 0x00*16, file[:8], file[:16],
+                    "com.raycast.macos", "raycast", "salt"
+scrypt:     N=1024 or 16384; r=8, p=1; salts ""/0x00*8/file[:8]
+direct:     md5/sha1/sha256/sha512 of password, 3× repeated & truncated to 32;
+            IVs = file[:16], hash[:16], zeros, key[:16]
+EVP:        EVP_BytesToKey with md5/sha1/sha256; salts ""/file[:8]
+modes:      AES-CBC (first-16 as IV & rest as ct; whole-file as ct with zero IV),
+            AES-ECB, AES-CTR (first-8 as nonce)
+```
+
+Zero hits against a plausibility filter requiring gzip magic OR `{`/`[` start plus ≥180/200 printable bytes in the first 200-byte window.
+
+## Lessons that should graduate to AGENTS.md if this pattern recurs
+
+None yet. If a second closed-source macOS app turns out to have the same "forced non-empty password + keychain-bound KDF" pattern and we keep bumping into it, promote this into a Hard invariant warning agents not to invest brute-force time on cold targets.
+
+## If you resume this
+
+1. Start with **Option A** (per-category exports: inspect `Export Quicklinks` / `Export Snippets`) — ~30 minutes to find out if it's viable.
+2. Recover the script: `cp backlog/raycast-sync/raycast_sync.py scripts/raycast_sync.py && chmod +x scripts/raycast_sync.py`. The redactor, manifest walker, AppleScript `--auto-gui` fallback, and instruction-printing polling code are all reusable as-is; only `resolve_rayconfig_for_export` and `rayconfig_to_json` need swapping for per-category handling.
+3. Recover the apply-time script: `cp backlog/raycast-sync/run_onchange_after_32_raycast_config.sh.tmpl .chezmoiscripts/global/` (or `git show 5e25f33:.chezmoiscripts/global/run_onchange_after_32_raycast_config.sh.tmpl > .chezmoiscripts/global/run_onchange_after_32_raycast_config.sh.tmpl`).
+4. Recover the user-facing docs: `cp backlog/raycast-sync/docs-tools-raycast-sync.md docs/tools/raycast-sync.md`.
+5. Re-wire the 9 files. The `syncRaycast` chezmoi prompt machinery (three-file cross-surface with `doctor` parity check) is the most finicky part; `git show 5e25f33 -- .chezmoi.toml.tmpl Dockerfile scripts/init/dotfiles_init.py justfile CLAUDE.md README.md .chezmoiignore.tmpl .pre-commit-config.yaml scripts/redact_secrets.py` replays each one — pick out just the raycast hunks with `git show ... | grep -A4 -B1 -i raycast`.
+6. Keep the redaction pipeline extension (`DEFAULT_PATHS += "raycast"`, `REDACTABLE_SUFFIXES`) — it's generically useful for any future JSON-config surface and isn't Raycast-specific.
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 19:44:38Z)**_
+
+<think><details><summary>Thought Process</summary>
+I found a pitfall file that directly addresses this—`raycast-enc.sqlite` is encrypted per-machine with the keychain, so syncing the raw file leaves hotkeys and snippets empty on other machines. macOS Sonoma also broke symlinked paths in `~/Library/Application Support/`, and the plist file is machine-specific too.
+
+The key insight is that copying built extensions into `~/.config/raycast/extensions/` isn't enough—Raycast discovers extensions through that encrypted database, which is the same machine-bound wall you hit with config sync. The extension bundles themselves are just files, but the registration layer that makes them discoverable is locked behind the keychain encryption.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 19:44:39Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read the live raycast portability pitfall
+
+```bash
+SRC=$(chezmoi source-path); cat "$SRC/pitfalls/raycast-library-files-not-portable-across-machines.md" 2>/dev/null | head -60
+echo "=== TODO tag ==="; grep -n -i "raycast" "$SRC/TODO.md"
+```
+
+```text
+# Raycast hotkeys / quicklinks / snippets empty on a second Mac even though you copied `~/Library/Application Support/com.raycast.macos/` over
+
+**Symptoms** (grep this section):
+- Rsynced / tar-piped / Dropbox-synced `~/Library/Application Support/com.raycast.macos/` from machine A to machine B
+- On machine B, Raycast launches but Extensions list is empty, hotkeys gone, quicklinks gone, snippets gone, aliases gone — as if a fresh install
+- Or: Raycast logs an opaque "failed to open database" style error on launch after the copy
+- `file raycast-enc.sqlite` reports a regular SQLite DB but `sqlite3 raycast-enc.sqlite .tables` fails with "file is encrypted or is not a database"
+- Also affects: `raycast-activities-enc.sqlite`, `raycast-emoji.sqlite` (same encryption scheme)
+- Symlinking `~/Library/Application Support/com.raycast.macos` into iCloud Drive / Dropbox silently breaks Raycast on macOS Sonoma+ — Raycast rewrites the target on every apply, so the symlink gets blown away
+
+**First seen**: 2026-04-24 while investigating non-Pro cross-machine sync
+**Affects**: anyone without Raycast Pro (paid) who tries to sync Raycast config by treating it as plain filesystem state
+**Status**: known-by-design; the supported workaround is Raycast's built-in Export/Import, wired up in this repo as `scripts/raycast_sync.py` + `just raycast-sync` / `just raycast-import` — see [docs/tools/raycast-sync.md](../docs/tools/raycast-sync.md)
+
+## Why
+
+Files under `~/Library/Application Support/com.raycast.macos/` that end in `-enc.sqlite` are **encrypted** — "enc" is not a cosmetic suffix. The encryption key lives in the **macOS Keychain**, scoped to the user on that specific machine. Per Raycast's own security notes (<https://developers.raycast.com/information/security>), the key is derived via SHA-256 with salt, stored in the login keychain, and never leaves the device.
+
+Consequences:
+
+- Copy the `.sqlite` bytes to another Mac → the new machine's Keychain does not have the key → Raycast can't decrypt → it treats the DBs as corrupt and starts fresh, dropping all your hotkeys/quicklinks/snippets/aliases on the floor.
+- Copy the key too (from `~/Library/Keychains/login.keychain-db`) → you're now cross-pollinating every keychain secret, not just Raycast's, and the new machine's keychain password likely differs anyway.
+- Symlink the directory into iCloud Drive / Dropbox → works on older macOS but on Sonoma+ the OS refuses to follow symlinks under `Application Support/`, and Raycast does atomic rewrites that orphan the link.
+
+Adjacent keychain-bound surfaces: extension API keys / OAuth tokens for store extensions are also Keychain-scoped, separately from the `-enc.sqlite` files. Those also don't travel.
+
+## Fix paths
+
+### 1. Use the supported path: `.rayconfig` Export/Import
+
+Raycast has a first-party Export feature (Settings → Advanced → Export) that writes a `.rayconfig` file — a gzipped JSON blob — covering hotkeys, quicklinks, snippets, aliases, settings, and the extensions list. This file is portable. Import on the other Mac replays everything.
+
+This repo wraps it as:
+
+```sh
+just raycast-export    # on the source machine
+just raycast-import    # on the target machine (or via chezmoi apply + syncRaycast)
+```
+
+Extension API keys still have to be re-entered per machine — see `raycast/secrets.env.example` generated by the export.
+
+### 2. Pay for Raycast Pro
+
+Raycast Pro (paid) has Cloud Sync which handles all of the above transparently, including the keychain-scoped bits. If you rely heavily on Raycast, this is the lowest-friction answer. The sync in path (1) exists specifically because non-Pro users don't have this.
+
+### 3. Don't try to sync the encrypted files
+
+Never.
+
+## Related
+
+- `docs/tools/raycast-sync.md` — full workflow for path (1)
+- `scripts/raycast_sync.py` — the tooling
+- Raycast security doc: <https://developers.raycast.com/information/security>
+- Raycast Mac-to-Mac migration guide: <https://manual.raycast.com/mac/mac-mac-migration-guide>
+=== TODO tag ===
+113:- [ ] **[?/XL] Raycast config sync for non-Pro users** — git-tracked, redacted cross-machine sync for hotkeys / quicklinks / snippets / aliases / extensions. Full scaffold was built (key-name redactor, extensions-manifest walker, secrets.env.example emitter, chezmoi `syncRaycast` prompt with 3-file parity, `just raycast-*` recipes) but paused: Raycast's `.rayconfig` export is AES-encrypted with a non-public KDF that mixes in keychain-bound material — we brute-forced 150+ scheme combinations (PBKDF2/scrypt/SHA*/EVP_BytesToKey) against password `12345678` with zero plausible decodes, and Raycast forces a non-empty password field so even the empty-password bypass is closed. Cheapest revival spike: inspect the separate `Export Quicklinks` / `Export Snippets` commands for a plaintext format. Adjacent pitfall (`raycast-library-files-not-portable-across-machines.md`) stays live. → [research](backlog/raycast-sync-non-pro.md)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 19:44:47Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm noticing there's a live inconsistency in their dotfiles—the pitfall documentation still references `just raycast-export`, `just raycast-import`, and `docs/tools/raycast-sync.md` as if they exist, but the backlog notes indicate those were all reverted. This mismatch could easily send someone (or an agent) down a dead path, so it's worth flagging.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 19:44:48Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check whether the pitfall's fix paths still exist
+
+```bash
+SRC=$(chezmoi source-path)
+echo "=== do the just recipes the pitfall points at still exist? ==="
+grep -n "raycast" "$SRC/justfile" 2>/dev/null || echo "  no raycast recipes in justfile"
+echo "=== does docs/tools/raycast-sync.md exist? ==="
+ls "$SRC/docs/tools/raycast-sync.md" 2>&1 | tail -1
+echo "=== does scripts/raycast_sync.py exist? ==="
+ls "$SRC/scripts/raycast_sync.py" 2>&1 | tail -1
+```
+
+```text
+=== do the just recipes the pitfall points at still exist? ===
+  no raycast recipes in justfile
+=== does docs/tools/raycast-sync.md exist? ===
+"/Users/david/.local/share/chezmoi/docs/tools/raycast-sync.md": No such file or directory (os error 2)
+=== does scripts/raycast_sync.py exist? ===
+"/Users/david/.local/share/chezmoi/scripts/raycast_sync.py": No such file or directory (os error 2)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 19:45:14Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm noticing that the pitfall file references files that don't actually exist—`just raycast-sync`, `docs/tools/raycast-sync.md`, and `scripts/raycast_sync.py` were all moved into `backlog/raycast-sync/`. This is a dangling reference in the knowledge base that could cause confusion later, so I should flag it, though I'm hesitant to fix it outright.
+
+Now I'm structuring my answer: first, I'll explain that `ray build` installs extensions into `~/.config/raycast/extensions/<name>/`, which directly addresses part of the question. Then I'll clarify the actual mechanism—that directory is the bundle output, not the registration point itself. The real registration lives in `raycast-enc.sqlite`, which is keychain-encrypted per-machine, so copying a directory in won't make Raycast pick it up. Finally, I'll address whether chezmoi is suitable for this: it's not, because the extensions are build artifacts, not source files meant to be dotfile-managed.
+
+For what to actually do instead, publishing to the Raycast store is the cleanest path since extensions become re-downloadable across machines. Until then, running `ray develop` once per machine from the source checkout is the proper way to register it—a quick one-time setup that's far simpler than trying to sync the built artifacts.
+
+The real opportunity here is that your backlog's Option B (a Raycast extension using the Storage API) is now more feasible with the scaffolder and documented state management patterns, though it still won't solve the hotkey limitation since the SDK can't read system hotkeys.
+
+I should also flag the dangling references in the pitfalls file and double-check whether store-published extensions actually sync across machines for non-Pro users.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 19:45:25Z)**_
+
+Cleaned up first: `trial` and `tc` were mine (`author=test_user` / `author=me`, timestamps matching tonight's test runs). Removed — `ray build` installs into that directory, which is itself half the answer.
+
+## Copying there doesn't register the extension
+
+That directory is the **bundle output**, not the registration. The two dirs diverge exactly along which command I ran:
+
+| | `~/.config/raycast/extensions/` | `…/com.raycast.macos/extensions/` |
+|---|---|---|
+| `trial`, `tc` — `ray build` only | yes | **no** |
+| `pueue`, `translate` — `ray develop`'d | yes | yes |
+
+Registration lives in `raycast-enc.sqlite`, and you already established what that means — `pitfalls/raycast-library-files-not-portable-across-machines.md` in your dotfiles: the key is SHA-256-derived, in the login Keychain, scoped to that machine, never leaves the device. So a copied directory has no way to announce itself.
+
+Honest caveat: I can't fully prove the negative without driving the GUI. But it's the same wall you hit in `backlog/raycast-sync-non-pro.md`.
+
+## So: not chezmoi
+
+Three independent reasons, any one sufficient:
+
+1. **It's a build artifact.** `add-task.js` alone is 570 KB of bundled JS, regenerated by every `ray build`. chezmoi tracks source-of-truth config; this is `dist/`.
+2. **The directory contains `node_modules -> /Applications/Raycast.app/Contents/Resources/…/api/node_modules`** — an absolute symlink into the app bundle. Machine-local by construction.
+3. **Registration is keychain-bound**, per your own pitfall. A byte-perfect copy still wouldn't appear in root search.
+
+## What to do instead
+
+**Publish to the store.** Then machine B is just "install it" — no sync problem to solve, which is the real argument for finishing the screenshots.
+
+**Until then, `just dev` once per machine.** It registers properly and *persists after you stop* — genuinely once, not per session. You're cloning the repo on that machine anyway, so chezmoi adds nothing. `just deploy` would only ever be a worse `ray develop`.
+
+## One connection worth making
+
+Your backlog's **Option A** (per-category `Export Quicklinks` / `Export Snippets`, ~30 min to find out if they're plaintext) is still the cheapest spike. But **Option B** — "write a Raycast extension that dumps via the Storage API", which you costed at effort L — just got cheaper: `raycast-extension-dev` scaffolds a gated extension in one command, and `LocalStorage`/`preferences` semantics are in its `data-and-state.md` and `manifest-and-commands.md`. Your note's caveat still holds (the SDK can't read hotkeys), so it wouldn't be a complete answer.
+
+## A dangling reference to flag
+
+That pitfall file's **Status** line and **Fix path 1** both point at `just raycast-sync` / `just raycast-import`, `scripts/raycast_sync.py`, and `docs/tools/raycast-sync.md`. I checked — none of the three exist; they were reverted into `backlog/raycast-sync/` when the feature was paused. In a symptom-grep knowledge base that's the expensive kind of stale: it reads as "solved, use this" when it isn't. Want me to fix those two references to point at the backlog note instead?

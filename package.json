@@ -32,7 +32,7 @@
           "name": "showDetail",
           "title": "Detail Pane",
           "label": "Show the detail pane by default",
-          "description": "Show task metadata and a log preview beside the list. Toggle at any time with \u2318\u21e7D.",
+          "description": "Show task metadata and a log preview beside the list. Toggle at any time with ⌘⇧D.",
           "type": "checkbox",
           "required": false,
           "default": true
@@ -85,7 +85,18 @@
       "name": "groups",
       "title": "Groups",
       "description": "List Pueue groups, pause or resume them, change parallelism, and add or remove groups.",
-      "mode": "view"
+      "mode": "view",
+      "preferences": [
+        {
+          "name": "showDetail",
+          "title": "Detail Pane",
+          "label": "Show the detail pane by default",
+          "description": "Show each group's full breakdown — progress, average duration, estimated remaining, elapsed, and the ids that failed — beside the list. Toggle at any time with ⌘⇧D.",
+          "type": "checkbox",
+          "required": false,
+          "default": true
+        }
+      ]
     },
     {
       "name": "queue-menu",
@@ -123,7 +134,7 @@
         {
           "name": "maxItemsPerSection",
           "title": "Items per Section",
-          "description": "How many tasks to list under Running / Queued / Failed before collapsing into an \"\u2026and N more\" item. Keeps a large queue from rendering hundreds of menu items every minute.",
+          "description": "How many tasks to list under Running / Queued / Failed before collapsing into an \"…and N more\" item. Keeps a large queue from rendering hundreds of menu items every minute.",
           "type": "textfield",
           "required": false,
           "default": "7"

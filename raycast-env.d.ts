@@ -34,7 +34,10 @@ declare namespace Preferences {
   /** Preferences accessible in the `quick-add` command */
   export type QuickAdd = ExtensionPreferences & {}
   /** Preferences accessible in the `groups` command */
-  export type Groups = ExtensionPreferences & {}
+  export type Groups = ExtensionPreferences & {
+  /** Detail Pane - Show each group's full breakdown — progress, average duration, estimated remaining, elapsed, and the ids that failed — beside the list. Toggle at any time with ⌘⇧D. */
+  "showDetail": boolean
+}
   /** Preferences accessible in the `queue-menu` command */
   export type QueueMenu = ExtensionPreferences & {
   /** Menu Bar Title - What number to show next to the icon. The title is hidden entirely when the chosen counts are all zero. */

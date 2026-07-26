@@ -1,5 +1,10 @@
 /**
- * Groups: parallelism limits and pause state, one row each.
+ * Groups, and how far through their work they are.
+ *
+ * A group used to render as `running (0/1)` — running tasks over parallelism,
+ * two numbers that barely move. What a group is actually *for* is a batch: queue
+ * twenty jobs into it and watch them land. So the row leads with progress, and
+ * the detail pane carries the rest of what `group-summary.ts` computes.
  *
  * Two of pueue's group operations do something the name doesn't say, and both
  * confirmations spell it out — `kill --group` also *pauses* the group, and
@@ -17,10 +22,11 @@ import {
   Keyboard,
   LaunchType,
   List,
+  getPreferenceValues,
   launchCommand,
   useNavigation,
 } from "@raycast/api";
-import { useCachedPromise } from "@raycast/utils";
+import { useCachedPromise, useCachedState } from "@raycast/utils";
 
 import { actOnTasks, type ActOptions } from "./lib/actions";
 import {
@@ -28,7 +34,16 @@ import {
   ErrorEmptyView,
   StaleBannerItem,
 } from "./lib/error-states";
-import { groupIcon } from "./lib/format";
+import { formatDuration, groupProgressIcon } from "./lib/format";
+import {
+  parallelLabel,
+  progressPercent,
+  summarizeAll,
+  summarizeGroups,
+  summaryLine,
+  type GroupSummary,
+  type OverallSummary,
+} from "./lib/group-summary";
 import {
   ConnectionBannerItem,
   ConnectionSubmenu,
@@ -39,12 +54,8 @@ import {
 import {
   connectionByName,
   forConnection,
-  isPaused,
-  isQueued,
-  isRunning,
   snapshot,
   taskList,
-  type Group,
   type Mutation,
 } from "./lib/pueue";
 
@@ -52,8 +63,13 @@ import {
 const PARALLEL_CHOICES = [1, 2, 3, 4, 6, 8, 12, 0];
 
 export default function Command() {
+  const prefs = getPreferenceValues<Preferences.Groups>();
   const conn = useConnection();
   const stateAbort = useRef<AbortController>(null);
+  const [showDetail, setShowDetail] = useCachedState(
+    "groups.showDetail",
+    prefs.showDetail,
+  );
 
   // One read, not two. `status --json` returns the same groups map that
   // `group --json` does — verified byte-identical against 4.0.4, and a
@@ -95,14 +111,14 @@ export default function Command() {
   const stale =
     error !== undefined && describeError(error, conn.connection).structural;
   const tasks = taskList(snap?.state.tasks ?? {});
-  const entries = Object.entries(snap?.state.groups ?? {}).sort(([a], [b]) =>
-    a.localeCompare(b),
-  );
+  const summaries = summarizeGroups(snap?.state.groups ?? {}, tasks);
+  const overall = summarizeAll(summaries);
 
   return (
     <List
       isLoading={state.isLoading}
-      searchBarPlaceholder={`Search ${entries.length} group${entries.length === 1 ? "" : "s"}…`}
+      isShowingDetail={showDetail && summaries.length > 0}
+      searchBarPlaceholder={`Search ${summaries.length} group${summaries.length === 1 ? "" : "s"}…`}
     >
       {stale || conn.switchable || conn.invalid.length > 0 ? (
         <List.Section title="Connection">
@@ -118,7 +134,7 @@ export default function Command() {
         </List.Section>
       ) : null}
 
-      {entries.length === 0 ? (
+      {summaries.length === 0 ? (
         <List.EmptyView
           icon={Icon.Tray}
           title="No groups"
@@ -129,69 +145,81 @@ export default function Command() {
           }
         />
       ) : (
-        entries.map(([name, group]) => (
-          <GroupItem
-            key={name}
-            name={name}
-            group={group}
-            running={
-              tasks.filter((t) => t.group === name && isRunning(t)).length
-            }
-            paused={tasks.filter((t) => t.group === name && isPaused(t)).length}
-            queued={tasks.filter((t) => t.group === name && isQueued(t)).length}
-            total={tasks.filter((t) => t.group === name).length}
-            onReload={reload}
-            onAct={(mutation, options) =>
-              actOnTasks(mutation, state, {
-                ...options,
-                connection: conn.connection,
-              })
-            }
-            connection={conn}
-          />
-        ))
+        // The whole queue, free, in the heading the rows already sit under.
+        <List.Section title="Groups" subtitle={overallLine(overall)}>
+          {summaries.map((summary) => (
+            <GroupItem
+              key={summary.name}
+              summary={summary}
+              showDetail={showDetail}
+              onToggleDetail={() => setShowDetail((v) => !v)}
+              onReload={reload}
+              onAct={(mutation, options) =>
+                actOnTasks(mutation, state, {
+                  ...options,
+                  connection: conn.connection,
+                })
+              }
+              connection={conn}
+            />
+          ))}
+        </List.Section>
       )}
     </List>
   );
 }
 
+/** `13/26 done · 6 failed` — omitted entirely when there is nothing to say. */
+function overallLine(o: OverallSummary): string | undefined {
+  if (o.total === 0) return undefined;
+  const parts = [`${o.finished}/${o.total} done`];
+  if (o.running > 0) parts.push(`${o.running} running`);
+  if (o.failed > 0) parts.push(`${o.failed} failed`);
+  return parts.join(" · ");
+}
+
 function GroupItem(props: {
-  name: string;
-  group: Group;
-  running: number;
-  paused: number;
-  queued: number;
-  total: number;
+  summary: GroupSummary;
+  showDetail: boolean;
+  onToggleDetail: () => void;
   onReload: () => void;
   onAct: (mutation: Mutation, options: ActOptions) => Promise<boolean>;
   connection: ConnectionState;
 }) {
   const { push } = useNavigation();
-  const { name, group, onAct } = props;
+  const { summary: s, onAct } = props;
+  const name = s.name;
   const isDefault = name === "default";
-  const limit = group.parallel_tasks === 0 ? "∞" : String(group.parallel_tasks);
+  const eta = formatDuration(s.etaMs);
 
   return (
     <List.Item
-      icon={groupIcon(group)}
+      icon={groupProgressIcon(s)}
       title={name}
-      subtitle={`${props.running}/${limit} running`}
-      keywords={[name, group.status.toLowerCase()]}
+      // With the pane open the row is a third of the window; the numbers move
+      // into the pane and the row keeps only what identifies the group.
+      subtitle={props.showDetail ? undefined : summaryLine(s)}
+      keywords={[
+        name,
+        s.status.toLowerCase(),
+        ...(s.failed > 0 ? ["failed"] : []),
+        ...(s.running > 0 ? ["running"] : []),
+      ]}
       accessories={[
-        ...(props.queued > 0 ? [{ text: `${props.queued} queued` }] : []),
-        ...(props.paused > 0 ? [{ text: `${props.paused} paused` }] : []),
+        ...(!props.showDetail && eta ? [{ text: `~${eta} left` }] : []),
         {
           tag: {
-            value: group.status,
+            value: s.status,
             color:
-              group.status === "Running"
+              s.status === "Running"
                 ? Color.Green
-                : group.status === "Paused"
+                : s.status === "Paused"
                   ? Color.Orange
                   : Color.SecondaryText,
           },
         },
       ]}
+      detail={props.showDetail ? <GroupDetail summary={s} /> : undefined}
       actions={
         <ActionPanel>
           <ActionPanel.Section>
@@ -207,7 +235,7 @@ function GroupItem(props: {
                 }).catch(() => {})
               }
             />
-            {group.status === "Running" ? (
+            {s.status === "Running" ? (
               <Action
                 title="Pause Group"
                 icon={Icon.Pause}
@@ -232,7 +260,7 @@ function GroupItem(props: {
                 }
               />
             )}
-            {group.status === "Running" ? (
+            {s.status === "Running" ? (
               <Action
                 title="Pause Group (Let Running Tasks Finish)"
                 icon={Icon.Pause}
@@ -259,9 +287,7 @@ function GroupItem(props: {
                 <Action
                   key={n}
                   title={n === 0 ? "Unlimited" : String(n)}
-                  icon={
-                    n === group.parallel_tasks ? Icon.Checkmark : Icon.Circle
-                  }
+                  icon={n === s.parallel ? Icon.Checkmark : Icon.Circle}
                   onAction={() =>
                     onAct(
                       { op: "parallel", count: n, group: name },
@@ -300,7 +326,7 @@ function GroupItem(props: {
                       title: `Kill running tasks in “${name}”?`,
                       // Verified in `pueue kill --help`: "Kill all running tasks
                       // in a group. This also pauses the group".
-                      message: `${props.running} running task${props.running === 1 ? "" : "s"} will be killed, and the group will also be paused.`,
+                      message: `${s.running} running task${s.running === 1 ? "" : "s"} will be killed, and the group will also be paused.`,
                       actionTitle: "Kill and Pause",
                       destructive: true,
                     },
@@ -325,8 +351,8 @@ function GroupItem(props: {
                         // Verified in `pueue group remove --help`: "This will
                         // move all tasks in this group to the default group!"
                         message:
-                          props.total > 0
-                            ? `Its ${props.total} task${props.total === 1 ? "" : "s"} will be moved to the default group, not deleted.`
+                          s.total > 0
+                            ? `Its ${s.total} task${s.total === 1 ? "" : "s"} will be moved to the default group, not deleted.`
                             : "The group is empty.",
                         actionTitle: "Remove Group",
                         destructive: true,
@@ -359,6 +385,12 @@ function GroupItem(props: {
               }
             />
             <Action
+              title={props.showDetail ? "Hide Detail" : "Show Detail"}
+              icon={Icon.Sidebar}
+              shortcut={{ modifiers: ["cmd", "shift"], key: "d" }}
+              onAction={props.onToggleDetail}
+            />
+            <Action
               title="Reload"
               icon={Icon.ArrowClockwise}
               shortcut={Keyboard.Shortcut.Common.Refresh}
@@ -367,6 +399,96 @@ function GroupItem(props: {
             <ConnectionSubmenu state={props.connection} />
           </ActionPanel.Section>
         </ActionPanel>
+      }
+    />
+  );
+}
+
+/**
+ * The pqsum table, as a Raycast pane.
+ *
+ * Everything here is derived; nothing is fetched. The breakdown is a TagList
+ * rather than one row per state so an idle group stays two lines instead of
+ * seven, and only the states that have tasks appear at all.
+ */
+function GroupDetail({ summary: s }: { summary: GroupSummary }) {
+  const avg = formatDuration(s.avgMs);
+  const eta = formatDuration(s.etaMs);
+  const elapsed = formatDuration(s.elapsedMs);
+
+  const breakdown: { text: string; color: Color }[] = [
+    ...(s.running > 0
+      ? [{ text: `${s.running} running`, color: Color.Blue }]
+      : []),
+    ...(s.queued > 0
+      ? [{ text: `${s.queued} queued`, color: Color.SecondaryText }]
+      : []),
+    ...(s.paused > 0
+      ? [{ text: `${s.paused} paused`, color: Color.Orange }]
+      : []),
+    ...(s.stashed > 0
+      ? [{ text: `${s.stashed} stashed`, color: Color.SecondaryText }]
+      : []),
+    ...(s.succeeded > 0
+      ? [{ text: `${s.succeeded} succeeded`, color: Color.Green }]
+      : []),
+    ...(s.failed > 0 ? [{ text: `${s.failed} failed`, color: Color.Red }] : []),
+  ];
+
+  return (
+    <List.Item.Detail
+      metadata={
+        <List.Item.Detail.Metadata>
+          <List.Item.Detail.Metadata.Label
+            title="Progress"
+            text={
+              s.total === 0
+                ? "no tasks"
+                : `${s.finished}/${s.total} · ${progressPercent(s.progress)}`
+            }
+          />
+          {breakdown.length > 0 ? (
+            <List.Item.Detail.Metadata.TagList title="Breakdown">
+              {breakdown.map((b) => (
+                <List.Item.Detail.Metadata.TagList.Item
+                  key={b.text}
+                  text={b.text}
+                  color={b.color}
+                />
+              ))}
+            </List.Item.Detail.Metadata.TagList>
+          ) : null}
+          <List.Item.Detail.Metadata.Separator />
+          <List.Item.Detail.Metadata.Label
+            title="Daemon"
+            text={`${s.status} · ${parallelLabel(s.parallel)} at a time`}
+          />
+          <List.Item.Detail.Metadata.Separator />
+          <List.Item.Detail.Metadata.Label
+            title="Average duration"
+            text={avg ?? "—"}
+          />
+          {/* An em dash rather than a number means one of two honest things:
+              nothing has finished yet, or only one thing has and a single
+              sample is not an estimate. See group-summary.ts. */}
+          <List.Item.Detail.Metadata.Label
+            title="Estimated remaining"
+            text={eta ? `~${eta}` : "—"}
+          />
+          <List.Item.Detail.Metadata.Label
+            title="Elapsed"
+            text={elapsed ?? "—"}
+          />
+          {s.failedIds.length > 0 ? (
+            <>
+              <List.Item.Detail.Metadata.Separator />
+              <List.Item.Detail.Metadata.Label
+                title="Failed"
+                text={s.failedIds.map((id) => `#${id}`).join(" ")}
+              />
+            </>
+          ) : null}
+        </List.Item.Detail.Metadata>
       }
     />
   );

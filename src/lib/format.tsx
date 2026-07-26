@@ -4,7 +4,9 @@
  */
 
 import { Color, Icon, type Image } from "@raycast/api";
+import { getProgressIcon } from "@raycast/utils";
 
+import type { GroupSummary } from "./group-summary";
 import {
   endedAt,
   exitCode,
@@ -91,6 +93,36 @@ export function groupIcon(group: Group): Image.ImageLike {
     default:
       return { source: Icon.Circle, tintColor: Color.SecondaryText };
   }
+}
+
+/**
+ * The one colour that describes a whole group.
+ *
+ * Ordered by what you would want to be told first. A failure outranks a pause,
+ * because a paused group is a decision and a failed task is a surprise; a pause
+ * outranks activity, because a paused group is not going to finish on its own.
+ */
+export function groupColor(s: GroupSummary): Color {
+  if (s.failed > 0) return Color.Red;
+  if (s.status === "Paused") return Color.Orange;
+  if (s.running > 0) return Color.Blue;
+  if (s.total > 0 && s.finished === s.total) return Color.Green;
+  return Color.SecondaryText;
+}
+
+/**
+ * A filled ring rather than a play/pause glyph.
+ *
+ * The ring is the only thing on the row that shows *progress*, which is what a
+ * group is for. The tint carries the pause state the glyph used to, so nothing
+ * is lost — and an empty group keeps the old glyph, because a 0 % ring on a
+ * group with no tasks reads as "stuck" rather than "nothing here".
+ */
+export function groupProgressIcon(s: GroupSummary): Image.ImageLike {
+  if (s.total === 0) {
+    return groupIcon({ status: s.status, parallel_tasks: s.parallel });
+  }
+  return getProgressIcon(s.progress, groupColor(s));
 }
 
 /**
