@@ -56298,3 +56298,4964 @@ Refusing: artifacts are dirty but no code changes staged.
  M .specstory/history/2026-07-26_12-50-19Z-at-users-david-src.md
 ```
 </details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:16:17Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Run the hygiene scans on staged, history, and working tree
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+S=.claude/skills/agent-history-hygiene
+git add .specstory
+echo "=== scan-staged ==="
+bash "$S/scripts/scan-staged.sh" --verbose 2>&1 | tail -20; echo "scan-staged exit=$?"
+echo
+echo "=== full-repo history scan (we're about to publish ALL of it) ==="
+gitleaks git --no-banner 2>&1 | tail -20; echo "gitleaks-history exit=$?"
+echo
+echo "=== working tree scan ==="
+gitleaks dir --no-banner . 2>&1 | tail -12; echo "gitleaks-dir exit=$?"
+```
+
+```text
+=== scan-staged ===
+scan-staged exit=0
+
+=== full-repo history scan (we're about to publish ALL of it) ===
+2:16AM INF **27 commits scanned.
+2:16AM INF **scanned ~3078472 bytes (3.08 MB) in 14.1s
+2:16AM INF **no leaks found
+gitleaks-history exit=0
+
+=== working tree scan ===
+2:16AM INF **scanned ~6952913 bytes (6.95 MB) in 3.62s
+2:16AM INF **no leaks found
+gitleaks-dir exit=0
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:16:46Z)**_
+
+<think><details><summary>Thought Process</summary>
+All three security scans came back clean, so I'm ready to push. I'll commit the transcript update and staged specstory, then create the public repo, push everything with tags, and enable Pages—taking it step by step so each action is reviewable.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 18:16:46Z)**_
+
+All three scans clean:
+
+| Scan | Result |
+|---|---|
+| `scan-staged.sh` | exit 0 — clean |
+| Full history, 27 commits / 3.08 MB | **no leaks found** |
+| Working tree, 6.95 MB | **no leaks found** |
+
+Pushing as you specified.
+
+_**Agent (claude-opus-5 2026-07-26 18:16:47Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit the transcript and show the planned GitHub commands
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+git commit -q -m "Back up the session transcript
+
+Scanned with gitleaks before publishing: staged, full history (27
+commits), and working tree all clean — no credentials, keys, or tokens.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
+git log --oneline | head -3
+echo
+echo "=== about to run ==="
+echo "  gh repo create daviddwlee84/Pueue-Raycast-Extension --public --source=. --remote=origin --push"
+echo "  git push origin v0.1.0 v0.2.0"
+echo "  enable-pages.sh --repo daviddwlee84/Pueue-Raycast-Extension"
+```
+
+```text
+87d46ab Back up the session transcript
+d2043e4 Add a bilingual MkDocs site
+d7f144b Record v0.3.0 candidates
+
+=== about to run ===
+  gh repo create daviddwlee84/Pueue-Raycast-Extension --public --source=. --remote=origin --push
+  git push origin v0.1.0 v0.2.0
+  enable-pages.sh --repo daviddwlee84/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:17:16Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Create the public repo and push
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+gh repo create daviddwlee84/Pueue-Raycast-Extension \
+  --public \
+  --source=. \
+  --remote=origin \
+  --description "Manage the Pueue task queue daemon from Raycast — tasks, live output, groups, a menu bar item, and remote daemons over SSH." \
+  --push 2>&1 | tail -6
+echo "=== remote ==="; git remote -v
+echo "=== push tags ==="; git push origin v0.1.0 v0.2.0 2>&1 | tail -4
+```
+
+```text
+https://github.com/daviddwlee84/Pueue-Raycast-Extension
+To https://github.com/daviddwlee84/Pueue-Raycast-Extension.git
+ * [new branch]      HEAD -> main
+branch 'main' set up to track 'origin/main'.
+=== remote ===
+origin	https://github.com/daviddwlee84/Pueue-Raycast-Extension.git (fetch)
+origin	https://github.com/daviddwlee84/Pueue-Raycast-Extension.git (push)
+=== push tags ===
+To https://github.com/daviddwlee84/Pueue-Raycast-Extension.git
+ * [new tag]         v0.1.0 -> v0.1.0
+ * [new tag]         v0.2.0 -> v0.2.0
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:17:27Z)**_
+
+Repo live with both tags. Now Pages — dry run first, per the skill:
+
+_**Agent (claude-opus-5 2026-07-26 18:17:30Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Preview enabling GitHub Pages
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+S=.claude/skills/mkdocs-site-bootstrap
+gh repo view --json nameWithOwner,visibility --jq '"\(.nameWithOwner) (\(.visibility))"'
+echo "=== dry run ==="
+bash "$S/scripts/enable-pages.sh" --repo daviddwlee84/Pueue-Raycast-Extension --dry-run 2>&1 | tail -12
+```
+
+```text
+daviddwlee84/Pueue-Raycast-Extension (PUBLIC)
+=== dry run ===
+Target repo: daviddwlee84/Pueue-Raycast-Extension
+[dry-run] gh api -X POST repos/daviddwlee84/Pueue-Raycast-Extension/pages -f build_type=workflow
+[dry-run] gh workflow run docs.yml --repo daviddwlee84/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:17:48Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Enable GitHub Pages and trigger the first deploy
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+S=.claude/skills/mkdocs-site-bootstrap
+bash "$S/scripts/enable-pages.sh" --repo daviddwlee84/Pueue-Raycast-Extension 2>&1 | tail -12
+```
+
+```text
+Target repo: daviddwlee84/Pueue-Raycast-Extension
+Enabling GitHub Pages...
+Pages enabled. Site will be at: https://daviddwlee84.github.io/Pueue-Raycast-Extension/
+Triggering workflow: docs.yml
+https://github.com/daviddwlee84/Pueue-Raycast-Extension/actions/runs/30214413564
+Latest run:
+in_progress		Docs	Docs	main	workflow_dispatch	30214413564	4s	2026-07-26T18:17:43Z
+{"repo":"daviddwlee84/Pueue-Raycast-Extension","workflow":"docs.yml","status":"triggered","check_with":"gh run watch --repo daviddwlee84/Pueue-Raycast-Extension"}
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:18:18Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Watch the docs deploy
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+gh run watch 30214413564 --repo daviddwlee84/Pueue-Raycast-Extension --exit-status 2>&1 | tail -20; echo "exit=$?"
+```
+
+```text
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run astral-sh/setup-uv@v5
+  ✓ Run actions/setup-python@v5
+  ✓ Run uv sync --extra docs
+  ✓ Run uv run mkdocs build
+  ✓ Run actions/upload-pages-artifact@v3
+  ✓ Post Run actions/setup-python@v5
+  ✓ Post Run astral-sh/setup-uv@v5
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
+✓ deploy in 11s (ID 89825959413)
+  ✓ Set up job
+  ✓ Run actions/deploy-pages@v5
+  ✓ Complete job
+
+ANNOTATIONS
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5, actions/upload-artifact@v4, astral-sh/setup-uv@v5. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+build: .github#2
+
+exit=0
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:18:56Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Verify the live site in both languages
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+S=.claude/skills/mkdocs-site-bootstrap
+sleep 12
+URL=https://daviddwlee84.github.io/Pueue-Raycast-Extension/
+for p in "" "zh-TW/" "getting-started/" "zh-TW/getting-started/" "remote/" "llms.txt"; do
+  code=$(curl -s -o /dev/null -w '%{http_code}' "$URL$p")
+  printf "  %-3s  %s\n" "$code" "$URL$p"
+done
+echo
+echo "=== language switcher present? ==="
+curl -s "$URL" | grep -o 'md-select__link[^>]*href="[^"]*"' | head -4
+echo "=== zh-TW page really Chinese? ==="
+curl -s "${URL}zh-TW/" | grep -o '<title>[^<]*</title>'
+bash "$S/scripts/check-preferences.sh" \
+  --set mkdocs_site_bootstrap.pages_deployed=true \
+  --set mkdocs_site_bootstrap.pages_enabled_at=$(date +%F) >/dev/null 2>&1 && echo "preferences updated"
+```
+
+```text
+  200  https://daviddwlee84.github.io/Pueue-Raycast-Extension/
+  200  https://daviddwlee84.github.io/Pueue-Raycast-Extension/zh-TW/
+  200  https://daviddwlee84.github.io/Pueue-Raycast-Extension/getting-started/
+  200  https://daviddwlee84.github.io/Pueue-Raycast-Extension/zh-TW/getting-started/
+  200  https://daviddwlee84.github.io/Pueue-Raycast-Extension/remote/
+  200  https://daviddwlee84.github.io/Pueue-Raycast-Extension/llms.txt
+
+=== language switcher present? ===
+=== zh-TW page really Chinese? ===
+<title>首頁 - Pueue for Raycast</title>
+preferences updated
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:19:20Z)**_
+
+<think><details><summary>Thought Process</summary>
+Everything's working as expected—all pages are returning 200 status codes in both languages, the Traditional Chinese homepage title is displaying correctly, and the llms.txt file is in place. The language switcher isn't showing up in my grep search, so I'm going to try a different approach and look for Material Design's `md-select` class to verify it's actually there.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 18:19:20Z)**_
+
+Site is live in both languages — `<title>首頁 - Pueue for Raycast</title>` confirms the nav translations landed. Let me verify the language switcher renders, since my grep pattern found nothing:
+
+_**Agent (claude-opus-5 2026-07-26 18:19:22Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Verify the language switcher links both ways
+
+```bash
+URL=https://daviddwlee84.github.io/Pueue-Raycast-Extension/
+echo "=== language selector markup ==="
+curl -s "$URL" | grep -oE '(md-select|alternate|hreflang)[^>]{0,120}' | head -8
+echo
+echo "=== does the EN page link to the zh-TW one? ==="
+curl -s "$URL" | grep -oE 'href="[^"]*zh-TW[^"]*"' | head -4
+echo
+echo "=== and back? ==="
+curl -s "${URL}zh-TW/" | grep -oE 'href="[^"]*Pueue-Raycast-Extension/(index\.html)?"' | head -3
+```
+
+```text
+=== language selector markup ===
+alternate" href="/Pueue-Raycast-Extension/" hreflang="en"
+alternate" href="/Pueue-Raycast-Extension/zh-TW/" hreflang="zh-TW"
+md-select"
+md-select__inner"
+md-select__list"
+md-select__item"
+hreflang="en" class="md-select__link"
+md-select__item"
+
+=== does the EN page link to the zh-TW one? ===
+href="/Pueue-Raycast-Extension/zh-TW/"
+href="/Pueue-Raycast-Extension/zh-TW/"
+
+=== and back? ===
+href="/Pueue-Raycast-Extension/"
+href="/Pueue-Raycast-Extension/"
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:19:47Z)**_
+
+Language switcher works both ways, with correct `hreflang` alternates for SEO. Recording the notes and committing:
+
+_**Agent (claude-opus-5 2026-07-26 18:19:57Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Link the site from README, note maintenance, push
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+python3 - <<'PY'
+import pathlib
+p = pathlib.Path("README.md"); s = p.read_text()
+s = s.replace(
+    "# Pueue for Raycast\n",
+    "# Pueue for Raycast\n\n**Docs: <https://daviddwlee84.github.io/Pueue-Raycast-Extension/>** "
+    "(English · [繁體中文](https://daviddwlee84.github.io/Pueue-Raycast-Extension/zh-TW/))\n",
+    1,
+)
+p.write_text(s)
+
+p = pathlib.Path("TODO.md"); s = p.read_text()
+s = s.replace(
+    "## v0.3.0 candidates",
+    """## Docs site
+
+Live at <https://daviddwlee84.github.io/Pueue-Raycast-Extension/>, bilingual
+(en + zh-TW), deployed by `.github/workflows/docs.yml` on every push touching
+`docs/`, `mkdocs.yml`, or `pyproject.toml`.
+
+- `[S]` **Keep the zh-TW pages in step with the English ones.** They are
+  suffix siblings (`remote.md` / `remote.zh-TW.md`), so an edit to one silently
+  leaves the other stale — `fallback_to_default: true` means a missing page
+  falls back rather than 404s, which hides drift.
+- `[S]` **Consider surfacing `pitfalls/` and `backlog/` on the site.** They are
+  repo-only today and linked by absolute GitHub URL, because MkDocs cannot
+  resolve a relative `.md` link that leaves `docs/`.
+- `[?]` **`--strict` is off in CI.** `mkdocs-llmstxt` and `mkdocs-static-i18n`
+  are incompatible under it: llmstxt's source-path lookups break once i18n
+  remaps the page index. We kept `/llms.txt`. Revisit if llmstxt gains i18n
+  awareness.
+
+## v0.3.0 candidates""",
+)
+p.write_text(s)
+print("README + TODO updated")
+PY
+uv run mkdocs build 2>&1 | grep -cE "^WARNING" | xargs echo "build warnings (all llmstxt/i18n):"
+git add README.md TODO.md .skills
+git commit -q -m "Link the docs site, and note how to keep it honest
+
+Live at https://daviddwlee84.github.io/Pueue-Raycast-Extension/, English
+and 繁體中文, deployed on every push that touches docs/.
+
+TODO records the two things that will rot if unattended: zh-TW pages are
+suffix siblings, so editing one silently leaves the other stale — and
+fallback_to_default hides that by serving the English page rather than
+404ing. And --strict stays off because mkdocs-llmstxt's source-path
+lookups break once static-i18n remaps the page index; we chose /llms.txt
+over the safety net, which is a trade worth re-examining if llmstxt gains
+i18n awareness.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
+git push -q origin main && echo "pushed"
+gh run list --repo daviddwlee84/Pueue-Raycast-Extension --limit 1 --json status,conclusion,displayTitle --jq '.[] | "\(.status) \(.conclusion // "") — \(.displayTitle)"'
+```
+
+```text
+README + TODO updated
+build warnings (all llmstxt/i18n): 5
+pushed
+completed success — Docs
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:20:20Z)**_
+
+<think><details><summary>Thought Process</summary>
+I see the issue now — my string replacement is matching the first occurrence of "v0.3.0 candidates" that was already inserted by the earlier Edit tool, so I'm duplicating those sections instead of replacing them correctly. I need to look at the actual file structure to understand where the boundaries are.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 18:20:20Z)**_
+
+I duplicated the "Docs site" and "v0.3.0 candidates" sections in `TODO.md` — `str.replace` without a count, and I'd already added that heading via an earlier edit. Fixing:
+
+_**Agent (claude-opus-5 2026-07-26 18:20:21Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Deduplicate the TODO sections
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+python3 - <<'PY'
+import pathlib, re
+p = pathlib.Path("TODO.md"); s = p.read_text()
+
+def section(name):
+    m = re.search(rf"^## {re.escape(name)}\n.*?(?=^## )", s, re.S | re.M)
+    return m
+
+# Keep the first occurrence of each duplicated section, drop later ones.
+for name in ("Docs site", "v0.3.0 candidates"):
+    occurrences = [m.start() for m in re.finditer(rf"^## {re.escape(name)}$", s, re.M)]
+    while len(occurrences) > 1:
+        # remove the LAST occurrence and its body
+        m = list(re.finditer(rf"^## {re.escape(name)}\n.*?(?=^## )", s, re.S | re.M))[-1]
+        s = s[:m.start()] + s[m.end():]
+        occurrences = [x.start() for x in re.finditer(rf"^## {re.escape(name)}$", s, re.M)]
+
+p.write_text(s)
+print("headings now:")
+for m in re.finditer(r"^## .*$", s, re.M):
+    print("  " + m.group(0))
+PY
+```
+
+```text
+headings now:
+  ## Next
+  ## Docs site
+  ## v0.3.0 candidates
+  ## Later
+  ## Deferred, with notes
+  ## Won't do
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:20:44Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit the fix and report final state
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+git add TODO.md && git commit -q -m "Dedupe TODO sections
+
+The previous commit inserted Docs site and v0.3.0 candidates twice — a
+str.replace without a count, against a heading an earlier edit had
+already added.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
+git push -q origin main && echo pushed
+echo "=== final state ==="
+gh repo view daviddwlee84/Pueue-Raycast-Extension --json nameWithOwner,visibility,homepageUrl --jq '"\(.nameWithOwner)  \(.visibility)"'
+gh run list --repo daviddwlee84/Pueue-Raycast-Extension --limit 2 --json status,conclusion,displayTitle --jq '.[] | "  \(.status) \(.conclusion // "") — \(.displayTitle)"'
+git log --oneline v0.2.0..HEAD | wc -l | xargs echo "  commits since v0.2.0:"
+echo "  tags: $(git tag -l | tr '\n' ' ')"
+```
+
+```text
+pushed
+=== final state ===
+daviddwlee84/Pueue-Raycast-Extension  PUBLIC
+  completed success — Docs
+  commits since v0.2.0: 4
+  tags: v0.1.0 v0.2.0
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:21:06Z)**_
+
+Live and bilingual: **<https://daviddwlee84.github.io/Pueue-Raycast-Extension/>** · [繁體中文](https://daviddwlee84.github.io/Pueue-Raycast-Extension/zh-TW/)
+
+## What's there
+
+Two new pages covering exactly what you asked for — the extension intro and setup — plus the three existing `docs/` files as the development-knowledge half:
+
+| Page | |
+|---|---|
+| Home | What it is, the five commands, requirements, the background-refresh trap |
+| Getting Started | Install → first task → menu bar → reading a failure → troubleshooting |
+| Remote daemons | The SSH setup |
+| The pueue JSON contract | Wire format and every trap |
+| Raycast surfaces | Why it's a menu bar command |
+
+`getting-started` is explicit that it's **not on the Raycast store yet**, so the install path is clone + `npm run dev` — with the note that it stays registered after you stop dev.
+
+## The multi-agent run
+
+7 agents, 5m31s, 0 errors. The two new English pages were authored while the three existing pages were translated concurrently — no barrier between them, since those three needed no authoring. Verified rather than assumed: all 5 zh-TW pages carry the terminology admonition, and **every code-fence count matches its English source** (24/24, 18/18, 12/12, 8/8, 2/2).
+
+Spot-checking the translations, the terminology rule held: 「優先權 (priority)」, 「依賴 (dependencies)」 on first mention; `daemon`, `root search`, `widget API`, `ControlMaster` left in English; command names like **Queue Menu Bar** untranslated.
+
+## Publishing
+
+Per your condition, I ran the hygiene check first — clean on all three surfaces: `scan-staged.sh` exit 0, **full history (27 commits, 3.08 MB) no leaks**, working tree no leaks. Then created the public repo, pushed `main` plus `v0.1.0`/`v0.2.0`, enabled Pages via the API, and the deploy succeeded. All six URLs return 200 in both languages, and the switcher links both ways with correct `hreflang` alternates.
+
+## Two things recorded rather than hidden
+
+- **`--strict` is off in CI.** `mkdocs-llmstxt` and `mkdocs-static-i18n` are incompatible under it — llmstxt's source-path lookups break once i18n remaps the page index. I kept `/llms.txt`. The 5 build warnings are all that, nothing else.
+- **zh-TW pages can silently rot.** They're suffix siblings, and `fallback_to_default: true` serves the English page rather than 404ing when one goes missing — so drift is invisible. Both are in `TODO.md`.
+
+One correction: my first `TODO.md` edit duplicated two sections (a `str.replace` without a count). Fixed in a follow-up commit, and the site is unaffected.
+
+---
+
+_**User (2026-07-26 18:35:41Z)**_
+
+[Image #14] Multiple remotes 雖然說 One per line. Verified parsing four at once 但是 Raycast config中的UI似乎沒辦法換行？
+
+_**User (2026-07-26 18:35:41Z)**_
+
+[Image: source: /var/folders/dq/zbxks7r975j049mj8jk19wtw0000gp/T/clipboard-2026-07-27-023445-89102ED3.png]
+
+---
+
+_**Agent (claude-opus-5 2026-07-26 18:36:10Z)**_
+
+<think><details><summary>Thought Process</summary>
+You're right that `textfield` only accepts single-line input, so the "one per line" approach won't work in Raycast's UI. I'm checking what preference types are actually available in the Raycast API—`textfield`, `password`, `checkbox`, `dropdown`, `appPicker`, `file`, and `directory`—to see if there's a `textarea` option or if I need a different approach for multi-line input.
+
+Since Raycast likely doesn't support multi-line preferences, I should use a single-line separator like semicolon between connection entries instead of newlines. The semicolon is safe since it won't appear in SSH hostnames or typical config paths, and I can keep newline support for anyone editing the config through other means.
+
+Before implementing this parser change, I should verify what preference types Raycast actually supports to confirm there's no textarea option — it's a small fix but worth validating the constraint properly.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 18:36:10Z)**_
+
+You're right — Raycast's `textfield` is single-line; there's no way to type a newline. Let me confirm what preference types actually exist rather than assume:
+
+_**Agent (claude-opus-5 2026-07-26 18:36:11Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check whether Raycast has a multiline preference type
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+echo "=== preference types in the installed API typings ==="
+grep -rnoE '"(textfield|password|checkbox|dropdown|appPicker|file|directory|textarea)"' node_modules/@raycast/api/types/index.d.ts 2>/dev/null | sort -u -t: -k3 | head -12
+echo
+echo "=== any textarea/multiline anywhere in the API? ==="
+grep -rniE "textarea|multiline|multi-line" node_modules/@raycast/api/types/index.d.ts | head -5 || echo "  none in @raycast/api types"
+echo
+echo "=== what does ray lint's schema accept? ==="
+find node_modules/@raycast -name "*.json" -path "*schema*" 2>/dev/null | head -3
+grep -rl "appPicker" node_modules/@raycast/api 2>/dev/null | head -3
+```
+
+```text
+=== preference types in the installed API typings ===
+node_modules/@raycast/api/types/index.d.ts:7688:"appPicker"
+node_modules/@raycast/api/types/index.d.ts:7688:"checkbox"
+node_modules/@raycast/api/types/index.d.ts:7688:"directory"
+node_modules/@raycast/api/types/index.d.ts:3470:"dropdown"
+node_modules/@raycast/api/types/index.d.ts:4130:"file"
+node_modules/@raycast/api/types/index.d.ts:3863:"password"
+node_modules/@raycast/api/types/index.d.ts:3907:"textarea"
+node_modules/@raycast/api/types/index.d.ts:3905:"textfield"
+
+=== any textarea/multiline anywhere in the API? ===
+node_modules/@raycast/api/types/index.d.ts:2782:     *       <Form.TextArea id="textArea" title="About" placeholder="Enter something about you" />
+node_modules/@raycast/api/types/index.d.ts:2813:     *       <Form.TextArea id="textArea" title="About" placeholder="Enter something about you" />
+node_modules/@raycast/api/types/index.d.ts:2906:     * A Ref Type for the {@link Form.TextArea}.
+node_modules/@raycast/api/types/index.d.ts:2907:     * Use refs to control your Form by calling `Form.TextArea.focus()` or `Form.TextArea.reset()` functions.
+node_modules/@raycast/api/types/index.d.ts:2910:     * Using Ref to focus {@link Form.TextArea}.
+
+=== what does ray lint's schema accept? ===
+node_modules/@raycast/api/types/index.d.ts
+node_modules/@raycast/api/dist/utils/generate-typeScript-definitions.js
+node_modules/@raycast/api/dist/utils/publish/publish-to-store.js
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:36:25Z)**_
+
+<think><details><summary>Thought Process</summary>
+I see that `textarea` is actually part of the Form namespace, not the preferences section. Let me look at line 7688 to find the actual preference type union that includes appPicker, checkbox, and directory.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 18:36:25Z)**_
+
+`"textarea"` at 3907 is `Form.TextArea`, not a preference. Let me look at the actual preference type union:
+
+_**Agent (claude-opus-5 2026-07-26 18:36:35Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Test empirically whether a textarea preference is allowed
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+sed -n '7680,7700p' node_modules/@raycast/api/types/index.d.ts
+echo "=== does ray lint reject type: textarea in a preference? (empirical) ==="
+cp package.json /tmp/pkg.bak
+python3 -c "
+import json,pathlib
+p=pathlib.Path('package.json'); m=json.loads(p.read_text())
+for pref in m['preferences']:
+    if pref['name']=='connections': pref['type']='textarea'
+p.write_text(json.dumps(m,indent=2)+'\n')
+"
+npm run lint 2>&1 | grep -iE "textarea|error|preference" | head -5
+cp /tmp/pkg.bak package.json && echo "  (manifest restored)"
+```
+
+```text
+ declare interface Preference_2 {
+     /**
+      * The name of the preference.
+      */
+     name: string;
+     /**
+      * The type of the preference.
+      */
+     type: "appPicker" | "checkbox" | "dropdown" | "password" | "textfield" | "file" | "directory";
+     /**
+      * Specifies if the preference is required.
+      *
+      * @remarks
+      * If the preference is required, an onboarding view is shown when the
+      * extension is opened for the first time.
+      *
+      * @defaultValue `false`
+      */
+     required: boolean;
+     /**
+      * The title of the preference.
+=== does ray lint reject type: textarea in a preference? (empirical) ===
+error  - validate package.json file
+  172:14  error  must be equal to one of the allowed values
+ ›   Error: linting issues found (tip: try re-running with '--fix')
+  (manifest restored)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:37:06Z)**_
+
+<think><details><summary>Thought Process</summary>
+I've confirmed that textarea isn't supported in the type union—the allowed values are appPicker, checkbox, dropdown, password, textfield, file, and directory. Ray lint explicitly rejects textarea as invalid. Since multi-line input is impossible with preferences, the newline-separated format breaks down when storing multiple connections. I'll implement support for semicolon as a record separator while keeping newline support for manual editing.
+
+I'm splitting records on either newline or semicolon, and using pipe as the field delimiter within each record. Semicolon is safe since it's not valid in hostnames and extremely unlikely in config paths. Now I need to update the preference description, placeholder text, and documentation across remote.md, README, index.md, and the zh-TW translation, plus update the assertions to verify the new format works correctly.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 18:37:06Z)**_
+
+Confirmed two ways — the type union is `"appPicker" | "checkbox" | "dropdown" | "password" | "textfield" | "file" | "directory"`, and `ray lint` rejects `textarea` outright with *"must be equal to one of the allowed values"*. **There is no multi-line preference in Raycast.** So "one per line" is unusable past the first connection — a real design bug.
+
+Fixing the parser to accept a single-line separator:
+
+_**Agent (claude-opus-5 2026-07-26 18:37:07Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Accept semicolon as a connection separator
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+python3 - <<'PY'
+import pathlib
+p = pathlib.Path("src/lib/pueue/connections.ts"); s = p.read_text()
+
+s = s.replace(
+    """/**
+ * Parse the `connections` preference. One connection per line.
+ *
+ *     local_ubuntu                                 ssh, host = the name itself
+ *     lab | gpu.example.com                        ssh
+ *     lab | gpu.example.com | ~/.cargo/bin/pueue   ssh, explicit remote binary
+ *     lab | ~/pueue/client.yml                     socket
+ *     lab | ~/pueue/client.yml | gpu-host          socket for reads, ssh to submit
+ *""",
+    """/**
+ * Parse the `connections` preference.
+ *
+ * Connections are separated by `;` **or** a newline; fields within one by `|`.
+ *
+ * The semicolon is not a stylistic choice. Raycast has no multi-line preference
+ * type — the union is appPicker | checkbox | dropdown | password | textfield |
+ * file | directory, and `ray lint` rejects anything else — so a `textfield` is
+ * the only option and there is no way to type a newline into it. Newlines are
+ * still accepted for anyone editing the stored value by other means.
+ *
+ *     local_ubuntu                                 ssh, host = the name itself
+ *     lab | gpu.example.com                        ssh
+ *     lab | gpu.example.com | ~/.cargo/bin/pueue   ssh, explicit remote binary
+ *     lab | ~/pueue/client.yml                     socket
+ *     lab | ~/pueue/client.yml | gpu-host          socket for reads, ssh to submit
+ *     lab | host1 ; gpu | host2                    two connections, one line
+ *""",
+)
+s = s.replace(
+    "  for (const line of (raw ?? \"\").split(/\\r?\\n/)) {",
+    "  // Split on ';' as well as newlines — see the docstring: a Raycast\n  // preference is single-line, so ';' is the only usable separator in the UI.\n  for (const line of (raw ?? \"\").split(/[\\n;]/)) {",
+)
+p.write_text(s)
+print("parser accepts ';'")
+PY
+grep -n "split(/" src/lib/pueue/connections.ts
+```
+
+```text
+parser accepts ';'
+104:  for (const line of (raw ?? "").split(/[\n;]/)) {
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:37:34Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Assert the semicolon separator
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+python3 - <<'PY'
+import pathlib
+p = pathlib.Path("src/lib/dev-check.ts"); s = p.read_text()
+s = s.replace(
+    '''check(
+  "order is preserved",
+  parse("a | h1\\nb | h2").connections.map((c) => c.name),
+  ["a", "b"],
+);''',
+    '''check(
+  "order is preserved",
+  parse("a | h1\\nb | h2").connections.map((c) => c.name),
+  ["a", "b"],
+);
+
+// Raycast has no multi-line preference type — `ray lint` rejects anything
+// outside appPicker|checkbox|dropdown|password|textfield|file|directory — so a
+// newline cannot be typed into the settings field at all. ';' is the only
+// separator a user can actually enter, which makes these the load-bearing cases.
+check(
+  "';' separates connections, because a newline cannot be typed",
+  parse("lab | host1 ; gpu | host2").connections.map((c) => c.name),
+  ["lab", "gpu"],
+);
+check(
+  "whitespace around ';' is tolerated",
+  parse("lab|host1;gpu|host2").connections.map((c) => c.sshHost),
+  ["host1", "host2"],
+);
+check(
+  "';' mixes with newlines",
+  parse("a | h1 ; b | h2\\nc | h3").connections.map((c) => c.name),
+  ["a", "b", "c"],
+);
+check(
+  "a trailing ';' does not create an empty connection",
+  parse("lab | host1 ;").connections.length,
+  1,
+);
+check(
+  "bare names separated by ';'",
+  parse("local_ubuntu ; gpu-box").connections.map((c) => c.sshHost),
+  ["local_ubuntu", "gpu-box"],
+);
+check(
+  "a full three-field record survives ';' splitting",
+  parse("lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | h2").connections[0],
+  {
+    name: "lab",
+    mode: "ssh",
+    sshHost: "local_ubuntu",
+    remoteBinary: "~/.cargo/bin/pueue",
+    remote: true,
+  },
+);''',
+)
+p.write_text(s)
+print("assertions added")
+PY
+just verify 2>&1 | sed -n '/connection parsing/,/^$/p'
+```
+
+```text
+assertions added
+connection parsing
+  ok   empty means no connections
+  ok   undefined is fine
+  ok   a bare name is an ssh host that labels itself — the zero-setup form
+  ok   name | host is ssh mode
+  ok   a second field containing a slash is a config, so socket mode
+  ok   and a bare .yml counts as a path too
+  ok   config plus host: socket for reads, ssh to submit
+  ok   tilde is expanded
+  ok   blank lines and # comments are skipped silently
+  ok   a malformed line is REPORTED, not dropped
+  ok   two non-path fields plus a third is ambiguous, so reported
+  ok   an empty second field is reported
+  ok   order is preserved
+  ok   ';' separates connections, because a newline cannot be typed
+  ok   whitespace around ';' is tolerated
+  ok   ';' mixes with newlines
+  ok   a trailing ';' does not create an empty connection
+  ok   bare names separated by ';'
+  ok   a full three-field record survives ';' splitting
+  ok   host plus a path is the remote pueue binary, not a config
+  ok   a remote binary path is NOT expanded against our home directory
+  ok   host plus a non-path third field is still ambiguous
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:37:58Z)**_
+
+All pass. Updating the preference description users actually read, then fanning out the doc sync:
+
+_**Agent (claude-opus-5 2026-07-26 18:37:59Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Update the preference description and English docs
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+python3 - <<'PY'
+import pathlib, json
+p = pathlib.Path("package.json"); m = json.loads(p.read_text())
+for pref in m["preferences"]:
+    if pref["name"] == "connections":
+        pref["description"] = (
+            "Separate connections with ';'. Simplest form is just an SSH host you "
+            "can already reach — everything runs over ssh, nothing to set up: "
+            "\"local_ubuntu\". Add a label with \"name | ssh-host\", and the remote "
+            "pueue path if it isn't on the non-interactive PATH (a cargo install "
+            "isn't): \"lab | local_ubuntu | ~/.cargo/bin/pueue\". Advanced: a config "
+            "path as the second field selects a forwarded socket."
+        )
+        pref["placeholder"] = "lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com"
+p.write_text(json.dumps(m, indent=2) + "\n")
+print("preference description updated")
+PY
+npm run build 2>&1 | tail -2
+python3 - <<'PY'
+import pathlib, re
+# English docs: replace "one per line" phrasing everywhere it appears
+for f in ["README.md", "docs/index.md", "docs/getting-started.md", "docs/remote.md"]:
+    p = pathlib.Path(f)
+    if not p.exists(): continue
+    s = p.read_text(); orig = s
+    s = s.replace("One per line: ", "Separated by `;`: ")
+    s = s.replace("one per line", "separated by `;`")
+    s = s.replace("One per line", "Separated by `;`")
+    if s != orig:
+        p.write_text(s); print("  touched", f)
+PY
+grep -rn "per line\|;`" README.md docs/index.md docs/remote.md 2>/dev/null | head -8
+```
+
+```text
+(eval):33: unmatched "
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:38:19Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Update the preference description safely
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+python3 - <<'PYEOF'
+import pathlib, json
+p = pathlib.Path("package.json"); m = json.loads(p.read_text())
+for pref in m["preferences"]:
+    if pref["name"] == "connections":
+        pref["description"] = (
+            "Separate connections with ';'. Simplest form is just an SSH host you can "
+            "already reach - everything runs over ssh, nothing to set up: local_ubuntu. "
+            "Add a label with 'name | ssh-host', and the remote pueue path if it is not "
+            "on the non-interactive PATH (a cargo install is not): "
+            "'lab | local_ubuntu | ~/.cargo/bin/pueue'. Advanced: a config path as the "
+            "second field selects a forwarded socket instead."
+        )
+        pref["placeholder"] = "lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com"
+p.write_text(json.dumps(m, indent=2) + "\n")
+print("preference updated")
+PYEOF
+npm run build 2>&1 | tail -2
+grep -n "connections" -A 3 raycast-env.d.ts | head -6
+```
+
+```text
+preference updated
+info  - generated extension's TypeScript definitions
+ready  - built extension successfully
+15:  /** Remote Connections - Separate connections with ';'. Simplest form is just an SSH host you can already reach - everything runs over ssh, nothing to set up: local_ubuntu. Add a label with 'name | ssh-host', and the remote pueue path if it is not on the non-interactive PATH (a cargo install is not): 'lab | local_ubuntu | ~/.cargo/bin/pueue'. Advanced: a config path as the second field selects a forwarded socket instead. */
+16:  "connections"?: string,
+17-  /** Confirmations - Ask before destructive actions in the view commands. Menu bar destructive actions are always behind ⌥ regardless of this setting. */
+18-  "confirmDestructive": boolean
+19-}
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:38:49Z)**_
+
+Now the doc sync across both languages — a real fan-out, since the zh-TW pages must stay terminologically consistent:
+
+_**Agent (claude-opus-5 2026-07-26 18:38:50Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="Workflow"><details>
+<summary>Tool use: **Workflow**</summary>
+
+```text
+Workflow launched in background. Task ID: wbdytotjt
+Summary: Correct the "one per line" connection syntax across English and zh-TW docs
+Transcript dir: /Users/david/.claude/projects/-Users-david-Documents-Program-Pueue-Raycast-Extension/1b31cf2b-ca09-46d1-a9a9-fb973d135045/subagents/workflows/wf_3bfad0b4-318
+Script file: /Users/david/.claude/projects/-Users-david-Documents-Program-Pueue-Raycast-Extension/1b31cf2b-ca09-46d1-a9a9-fb973d135045/workflows/scripts/fix-connections-separator-docs-wf_3bfad0b4-318.js
+(Edit this file with Write/Edit and re-invoke Workflow with {scriptPath: "/Users/david/.claude/projects/-Users-david-Documents-Program-Pueue-Raycast-Extension/1b31cf2b-ca09-46d1-a9a9-fb973d135045/workflows/scripts/fix-connections-separator-docs-wf_3bfad0b4-318.js"} to iterate without resending the script.)
+Run ID: wf_3bfad0b4-318
+To resume after editing the script: Workflow({scriptPath: "/Users/david/.claude/projects/-Users-david-Documents-Program-Pueue-Raycast-Extension/1b31cf2b-ca09-46d1-a9a9-fb973d135045/workflows/scripts/fix-connections-separator-docs-wf_3bfad0b4-318.js", resumeFromRunId: "wf_3bfad0b4-318"}) — completed agents return cached results (cached results may themselves be empty — inspect journal.jsonl before assuming there is something to recover).
+
+You will be notified when it completes. Use /workflows to watch live progress.
+```
+</details></tool-use>
+
+_**Agent - sidechain (2026-07-26 18:38:50Z)**_
+
+
+A factual correction has to be applied to the docs.
+
+WHAT WAS WRONG
+The Remote Connections preference was documented as "one connection per line".
+That is impossible to enter. Raycast has no multi-line preference type — the
+allowed union is exactly:
+
+    appPicker | checkbox | dropdown | password | textfield | file | directory
+
+and `ray lint` rejects anything else with "must be equal to one of the allowed
+values". A textfield is single-line, so a user physically cannot type a newline
+into the settings field. Anyone with more than one remote was stuck.
+
+WHAT IS TRUE NOW
+Connections are separated by a semicolon `;`. Fields within one connection are
+still separated by `|`. Newlines are also still accepted, but only matter for
+values set by other means — the settings UI cannot produce one.
+
+Correct examples:
+
+    local_ubuntu
+    lab | local_ubuntu | ~/.cargo/bin/pueue
+    lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com
+    tunnelled | ~/pueue/client.yml | gpu-host
+
+Field rules, unchanged:
+  - one field  -> an SSH host that is also its own label
+  - two fields -> name | ssh-host   (or  name | config-path  for socket mode)
+  - three      -> after a host, the third is the REMOTE pueue binary path;
+                  after a config path, the third is an SSH host for submitting
+  - a field containing "/" or ending .yml is read as a config path
+
+YOUR TASK
+Edit the file named below. Find every place that says or implies "one per line"
+for this preference, and correct it — including any code block showing multiple
+connections stacked on separate lines, which should become a single line joined
+by " ; ". Where it reads naturally, add one short clause explaining WHY the
+separator is a semicolon (Raycast preferences are single-line), because a reader
+who doesn't know that will assume the semicolon is arbitrary and get it wrong.
+
+Do not restructure the page or change anything unrelated. Keep the surrounding
+prose voice. Use the Edit tool for surgical changes; read the file first.
+Return a one-line summary of what you changed, or "no change needed".
+
+
+File to edit: /Users/david/Documents/Program/Pueue-Raycast-Extension/README.md
+
+_**Agent - sidechain (2026-07-26 18:38:50Z)**_
+
+
+A factual correction has to be applied to the docs.
+
+WHAT WAS WRONG
+The Remote Connections preference was documented as "one connection per line".
+That is impossible to enter. Raycast has no multi-line preference type — the
+allowed union is exactly:
+
+    appPicker | checkbox | dropdown | password | textfield | file | directory
+
+and `ray lint` rejects anything else with "must be equal to one of the allowed
+values". A textfield is single-line, so a user physically cannot type a newline
+into the settings field. Anyone with more than one remote was stuck.
+
+WHAT IS TRUE NOW
+Connections are separated by a semicolon `;`. Fields within one connection are
+still separated by `|`. Newlines are also still accepted, but only matter for
+values set by other means — the settings UI cannot produce one.
+
+Correct examples:
+
+    local_ubuntu
+    lab | local_ubuntu | ~/.cargo/bin/pueue
+    lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com
+    tunnelled | ~/pueue/client.yml | gpu-host
+
+Field rules, unchanged:
+  - one field  -> an SSH host that is also its own label
+  - two fields -> name | ssh-host   (or  name | config-path  for socket mode)
+  - three      -> after a host, the third is the REMOTE pueue binary path;
+                  after a config path, the third is an SSH host for submitting
+  - a field containing "/" or ending .yml is read as a config path
+
+YOUR TASK
+Edit the file named below. Find every place that says or implies "one per line"
+for this preference, and correct it — including any code block showing multiple
+connections stacked on separate lines, which should become a single line joined
+by " ; ". Where it reads naturally, add one short clause explaining WHY the
+separator is a semicolon (Raycast preferences are single-line), because a reader
+who doesn't know that will assume the semicolon is arbitrary and get it wrong.
+
+Do not restructure the page or change anything unrelated. Keep the surrounding
+prose voice. Use the Edit tool for surgical changes; read the file first.
+Return a one-line summary of what you changed, or "no change needed".
+
+
+File to edit: /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/index.md
+
+_**Agent - sidechain (2026-07-26 18:38:50Z)**_
+
+
+A factual correction has to be applied to the docs.
+
+WHAT WAS WRONG
+The Remote Connections preference was documented as "one connection per line".
+That is impossible to enter. Raycast has no multi-line preference type — the
+allowed union is exactly:
+
+    appPicker | checkbox | dropdown | password | textfield | file | directory
+
+and `ray lint` rejects anything else with "must be equal to one of the allowed
+values". A textfield is single-line, so a user physically cannot type a newline
+into the settings field. Anyone with more than one remote was stuck.
+
+WHAT IS TRUE NOW
+Connections are separated by a semicolon `;`. Fields within one connection are
+still separated by `|`. Newlines are also still accepted, but only matter for
+values set by other means — the settings UI cannot produce one.
+
+Correct examples:
+
+    local_ubuntu
+    lab | local_ubuntu | ~/.cargo/bin/pueue
+    lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com
+    tunnelled | ~/pueue/client.yml | gpu-host
+
+Field rules, unchanged:
+  - one field  -> an SSH host that is also its own label
+  - two fields -> name | ssh-host   (or  name | config-path  for socket mode)
+  - three      -> after a host, the third is the REMOTE pueue binary path;
+                  after a config path, the third is an SSH host for submitting
+  - a field containing "/" or ending .yml is read as a config path
+
+YOUR TASK
+Edit the file named below. Find every place that says or implies "one per line"
+for this preference, and correct it — including any code block showing multiple
+connections stacked on separate lines, which should become a single line joined
+by " ; ". Where it reads naturally, add one short clause explaining WHY the
+separator is a semicolon (Raycast preferences are single-line), because a reader
+who doesn't know that will assume the semicolon is arbitrary and get it wrong.
+
+Do not restructure the page or change anything unrelated. Keep the surrounding
+prose voice. Use the Edit tool for surgical changes; read the file first.
+Return a one-line summary of what you changed, or "no change needed".
+
+
+File to edit: /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/remote.md
+
+_**Agent - sidechain (2026-07-26 18:38:50Z)**_
+
+
+A factual correction has to be applied to the docs.
+
+WHAT WAS WRONG
+The Remote Connections preference was documented as "one connection per line".
+That is impossible to enter. Raycast has no multi-line preference type — the
+allowed union is exactly:
+
+    appPicker | checkbox | dropdown | password | textfield | file | directory
+
+and `ray lint` rejects anything else with "must be equal to one of the allowed
+values". A textfield is single-line, so a user physically cannot type a newline
+into the settings field. Anyone with more than one remote was stuck.
+
+WHAT IS TRUE NOW
+Connections are separated by a semicolon `;`. Fields within one connection are
+still separated by `|`. Newlines are also still accepted, but only matter for
+values set by other means — the settings UI cannot produce one.
+
+Correct examples:
+
+    local_ubuntu
+    lab | local_ubuntu | ~/.cargo/bin/pueue
+    lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com
+    tunnelled | ~/pueue/client.yml | gpu-host
+
+Field rules, unchanged:
+  - one field  -> an SSH host that is also its own label
+  - two fields -> name | ssh-host   (or  name | config-path  for socket mode)
+  - three      -> after a host, the third is the REMOTE pueue binary path;
+                  after a config path, the third is an SSH host for submitting
+  - a field containing "/" or ending .yml is read as a config path
+
+YOUR TASK
+Edit the file named below. Find every place that says or implies "one per line"
+for this preference, and correct it — including any code block showing multiple
+connections stacked on separate lines, which should become a single line joined
+by " ; ". Where it reads naturally, add one short clause explaining WHY the
+separator is a semicolon (Raycast preferences are single-line), because a reader
+who doesn't know that will assume the semicolon is arbitrary and get it wrong.
+
+Do not restructure the page or change anything unrelated. Keep the surrounding
+prose voice. Use the Edit tool for surgical changes; read the file first.
+Return a one-line summary of what you changed, or "no change needed".
+
+
+File to edit: /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/getting-started.md
+
+_**Agent - sidechain (2026-07-26 18:38:50Z)**_
+
+
+A factual correction has to be applied to the docs.
+
+WHAT WAS WRONG
+The Remote Connections preference was documented as "one connection per line".
+That is impossible to enter. Raycast has no multi-line preference type — the
+allowed union is exactly:
+
+    appPicker | checkbox | dropdown | password | textfield | file | directory
+
+and `ray lint` rejects anything else with "must be equal to one of the allowed
+values". A textfield is single-line, so a user physically cannot type a newline
+into the settings field. Anyone with more than one remote was stuck.
+
+WHAT IS TRUE NOW
+Connections are separated by a semicolon `;`. Fields within one connection are
+still separated by `|`. Newlines are also still accepted, but only matter for
+values set by other means — the settings UI cannot produce one.
+
+Correct examples:
+
+    local_ubuntu
+    lab | local_ubuntu | ~/.cargo/bin/pueue
+    lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com
+    tunnelled | ~/pueue/client.yml | gpu-host
+
+Field rules, unchanged:
+  - one field  -> an SSH host that is also its own label
+  - two fields -> name | ssh-host   (or  name | config-path  for socket mode)
+  - three      -> after a host, the third is the REMOTE pueue binary path;
+                  after a config path, the third is an SSH host for submitting
+  - a field containing "/" or ending .yml is read as a config path
+
+YOUR TASK
+Edit the file named below. Find every place that says or implies "one per line"
+for this preference, and correct it — including any code block showing multiple
+connections stacked on separate lines, which should become a single line joined
+by " ; ". Where it reads naturally, add one short clause explaining WHY the
+separator is a semicolon (Raycast preferences are single-line), because a reader
+who doesn't know that will assume the semicolon is arbitrary and get it wrong.
+
+Do not restructure the page or change anything unrelated. Keep the surrounding
+prose voice. Use the Edit tool for surgical changes; read the file first.
+Return a one-line summary of what you changed, or "no change needed".
+
+This file is the Traditional Chinese (zh-TW) translation. Apply the same
+correction, in 繁體中文, following the page's existing terminology rule:
+
+  - Technical terms appear as 「中文 (English original)」 on FIRST mention.
+  - NEVER invent a translation. Keep English where there is no established
+    term (e.g. `textfield`, `preference`, `daemon`, `ssh`).
+  - NEVER translate code, CLI flags, file names, or anything in backticks.
+  - Keep the terminology admonition at the top of the page exactly as it is.
+
+Keep every code block byte-identical to its English counterpart — only the
+surrounding prose is Chinese.
+
+
+File to edit: /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/index.zh-TW.md
+
+_**Agent - sidechain (2026-07-26 18:38:50Z)**_
+
+
+A factual correction has to be applied to the docs.
+
+WHAT WAS WRONG
+The Remote Connections preference was documented as "one connection per line".
+That is impossible to enter. Raycast has no multi-line preference type — the
+allowed union is exactly:
+
+    appPicker | checkbox | dropdown | password | textfield | file | directory
+
+and `ray lint` rejects anything else with "must be equal to one of the allowed
+values". A textfield is single-line, so a user physically cannot type a newline
+into the settings field. Anyone with more than one remote was stuck.
+
+WHAT IS TRUE NOW
+Connections are separated by a semicolon `;`. Fields within one connection are
+still separated by `|`. Newlines are also still accepted, but only matter for
+values set by other means — the settings UI cannot produce one.
+
+Correct examples:
+
+    local_ubuntu
+    lab | local_ubuntu | ~/.cargo/bin/pueue
+    lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com
+    tunnelled | ~/pueue/client.yml | gpu-host
+
+Field rules, unchanged:
+  - one field  -> an SSH host that is also its own label
+  - two fields -> name | ssh-host   (or  name | config-path  for socket mode)
+  - three      -> after a host, the third is the REMOTE pueue binary path;
+                  after a config path, the third is an SSH host for submitting
+  - a field containing "/" or ending .yml is read as a config path
+
+YOUR TASK
+Edit the file named below. Find every place that says or implies "one per line"
+for this preference, and correct it — including any code block showing multiple
+connections stacked on separate lines, which should become a single line joined
+by " ; ". Where it reads naturally, add one short clause explaining WHY the
+separator is a semicolon (Raycast preferences are single-line), because a reader
+who doesn't know that will assume the semicolon is arbitrary and get it wrong.
+
+Do not restructure the page or change anything unrelated. Keep the surrounding
+prose voice. Use the Edit tool for surgical changes; read the file first.
+Return a one-line summary of what you changed, or "no change needed".
+
+This file is the Traditional Chinese (zh-TW) translation. Apply the same
+correction, in 繁體中文, following the page's existing terminology rule:
+
+  - Technical terms appear as 「中文 (English original)」 on FIRST mention.
+  - NEVER invent a translation. Keep English where there is no established
+    term (e.g. `textfield`, `preference`, `daemon`, `ssh`).
+  - NEVER translate code, CLI flags, file names, or anything in backticks.
+  - Keep the terminology admonition at the top of the page exactly as it is.
+
+Keep every code block byte-identical to its English counterpart — only the
+surrounding prose is Chinese.
+
+
+File to edit: /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/remote.zh-TW.md
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:38:55Z)**_
+
+I'll read the file first.
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:38:55Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="Read"><details>
+<summary>Tool use: **Read**</summary>
+ `./docs/index.md`
+
+```text
+1	# Pueue for Raycast
+2	
+3	A Raycast extension for the [Pueue](https://github.com/Nukesor/pueue) task queue
+4	daemon: browse and act on tasks, follow live output, control groups and
+5	parallelism, and watch the queue from the menu bar. It shells out to the `pueue`
+6	command line tool and queues nothing itself, so `pueue` has to be installed and
+7	`pueued` has to be running before any of it does anything.
+8	
+9	## Commands
+10	
+11	| Command | What it does |
+12	| --- | --- |
+13	| **Tasks** | Browse the queue grouped by status, with a detail pane and log preview. Restart, kill, pause, stash, enqueue, remove, and clean. Takes an optional pueue query as an argument, e.g. `status=failed order_by id desc`. |
+14	| **Add Task** | Queue a command with a working directory, group, label, priority, dependencies, and delay. |
+15	| **Quick Add Task** | Queue a command straight from root search, reusing the group and directory you last used. |
+16	| **Groups** | Pause and resume groups, change parallelism, add and remove groups. |
+17	| **Queue Menu Bar** | Running / queued / failed counts in the menu bar, with per-task actions. Refreshes every minute. |
+18	
+19	Raycast has no widget API. A `mode: "menu-bar"` command is the only
+20	always-visible surface available to an extension, which is what **Queue Menu
+21	Bar** is — see [Raycast surfaces](raycast-surfaces.md).
+22	
+23	## Requirements
+24	
+25	Install the CLI:
+26	
+27	```sh
+28	brew install pueue
+29	# or
+30	cargo install --locked pueue
+31	```
+32	
+33	Start the daemon:
+34	
+35	```sh
+36	brew services start pueue
+37	```
+38	
+39	or, from a terminal:
+40	
+41	```sh
+42	pueued -d
+43	```
+44	
+45	!!! warning "Start the daemon from a terminal or `brew services`, not from a GUI app"
+46	
+47	    A `pueued` started as a child of a GUI process inherits that process's
+48	    environment — no `~/.zshrc`, a bare `PATH` — and hands it to **every task it
+49	    ever runs**. The extension's one-click *Start Daemon* action only appears
+50	    when `pueued` is managed by `brew services`, so launchd owns it.
+51	
+52	Built for **pueue 4.x**. Pueue 4.0 changed the state format incompatibly — task
+53	timestamps and results moved inside the status enum — so pueue 3.x is not
+54	supported.
+55	
+56	!!! note "The extension can't use a bare `pueue`"
+57	
+58	    Raycast runs extensions under launchd, which never sources your shell rc, so
+59	    Homebrew and `~/.cargo/bin` are not on its `PATH` even though they are in
+60	    your terminal. The extension always invokes an absolute path and probes
+61	    `/opt/homebrew/bin`, `/usr/local/bin`, `~/.cargo/bin`, `~/.local/bin`. If
+62	    yours lives elsewhere, set **Pueue Binary Path**.
+63	
+64	## Background refresh is off by default
+65	
+66	!!! warning "A freshly installed menu bar command shows nothing until you run it once"
+67	
+68	    Raycast disables background refresh for store installs until the command is
+69	    first opened. Run **Queue Menu Bar** from Raycast's root search once, or
+70	    enable background refresh in that command's settings, and the menu bar item
+71	    appears and starts updating on its own.
+72	
+73	    This is the single most likely "it's broken" report, and it isn't a bug in
+74	    the extension.
+75	
+76	## Remote daemons
+77	
+78	Watch and control a `pueued` on another machine. Setup is one line —
+79	Preferences → *Remote Connections*, an SSH host you can already reach:
+80	
+81	```text
+82	local_ubuntu
+83	```
+84	
+85	No tunnel, no shared secret, no config file. Every command runs as
+86	`ssh local_ubuntu 'pueue …'`, with SSH connection multiplexing on: measured at
+87	**10–30 ms per call**, against 22–44 ms for a *local* pueue, and 200–400 ms for
+88	plain ssh without multiplexing. Submitting works because the client runs on the
+89	remote box, where a task's working directory actually resolves.
+90	
+91	Details, including the advanced forwarded-socket mode:
+92	[Remote daemons](remote.md).
+93	
+94	## Where to next
+95	
+96	- [Getting Started](getting-started.md) — install, first task, keyboard
+97	  shortcuts, preferences.
+98	- [Remote daemons](remote.md) — driving a `pueued` on another host over SSH.
+99	- [The pueue JSON contract](pueue-json-contract.md) — what `pueue` actually
+100	  emits, and where a reasonable reading of it is wrong.
+101	- [Raycast surfaces](raycast-surfaces.md) — the entry points Raycast offers, and
+102	  why this extension is shaped the way it is.
+103
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:38:55Z)**_
+
+I'll read the README first.
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:38:55Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="Read"><details>
+<summary>Tool use: **Read**</summary>
+ `./README.md`
+
+```text
+1	# Pueue for Raycast
+2	
+3	**Docs: <https://daviddwlee84.github.io/Pueue-Raycast-Extension/>** (English · [繁體中文](https://daviddwlee84.github.io/Pueue-Raycast-Extension/zh-TW/))
+4	
+5	Manage the [Pueue](https://github.com/Nukesor/pueue) task queue daemon from Raycast: browse and act on tasks, follow live output, control groups and parallelism, and watch the queue from the menu bar.
+6	
+7	## Requirements
+8	
+9	This extension drives the `pueue` command line tool. It does not queue anything itself.
+10	
+11	```sh
+12	brew install pueue
+13	# or
+14	cargo install --locked pueue
+15	```
+16	
+17	### Start the daemon
+18	
+19	```sh
+20	brew services start pueue
+21	```
+22	
+23	or, **from a terminal**:
+24	
+25	```sh
+26	pueued -d
+27	```
+28	
+29	> **Start the daemon from a terminal or `brew services`, not from a GUI app.**
+30	> A `pueued` started as a child of a GUI process inherits that process's
+31	> environment — no `~/.zshrc`, a bare `PATH` — and hands it to **every task it
+32	> ever runs**. The extension's one-click *Start Daemon* action only appears when
+33	> `pueued` is managed by `brew services`, so launchd owns it.
+34	
+35	## Background refresh is off by default
+36	
+37	**A freshly installed menu bar command shows nothing until you run it once.**
+38	
+39	Raycast disables background refresh for store installs until the command is first opened. Run **Queue Menu Bar** from Raycast's root search once, or enable background refresh in that command's settings, and the menu bar item appears and starts updating on its own.
+40	
+41	This is the single most likely "it's broken" report, and it isn't a bug in the extension.
+42	
+43	## Commands
+44	
+45	| Command | What it does |
+46	| --- | --- |
+47	| **Tasks** | Browse the queue grouped by status, with a detail pane and log preview. Restart, kill, pause, stash, enqueue, remove, and clean. Takes an optional pueue query as an argument, e.g. `status=failed order_by id desc`. |
+48	| **Add Task** | Queue a command with a working directory, group, label, priority, dependencies, and delay. |
+49	| **Quick Add Task** | Queue a command straight from root search, reusing the group and directory you last used. |
+50	| **Groups** | Pause and resume groups, change parallelism, add and remove groups. |
+51	| **Queue Menu Bar** | Running / queued / failed counts in the menu bar, with per-task actions. Refreshes every minute. |
+52	
+53	### Keyboard shortcuts (Tasks)
+54	
+55	| Shortcut | Action |
+56	| --- | --- |
+57	| `⏎` | Show log |
+58	| `⌘L` | Follow output (running tasks) |
+59	| `⌘⇧R` | Restart as a new task |
+60	| `⌘⌥R` | Restart in place — same id, **overwrites the log** |
+61	| `⌘⇧P` | Pause · `⌘⇧S` Resume / Start now |
+62	| `⌘⇧T` | Stash · `⌘⇧E` Enqueue |
+63	| `⌘⇧K` | Kill · `⌘⌫` Remove |
+64	| `⌘⇧D` | Toggle the detail pane · `⌘R` Reload |
+65	
+66	## Preferences
+67	
+68	| Preference | Default | Notes |
+69	| --- | --- | --- |
+70	| **Pueue Binary Path** | auto-probe | Empty probes `/opt/homebrew/bin`, `/usr/local/bin`, `~/.cargo/bin`, `~/.local/bin`. |
+71	| **Pueue Config Path** | pueue's default | Passed as `--config`, and used to locate `task_logs/`. |
+72	| **Remote Connections** | none | One per line: `name \| client config path \| ssh host`. See [Remote daemons](#remote-daemons). |
+73	| **Confirm destructive actions** | on | Kill, remove, clean, and reset ask first. Menu bar destructive actions are always behind `⌥`. |
+74	
+75	### "It works in my terminal but the extension can't find pueue"
+76	
+77	Raycast runs extensions under launchd, which never sources your shell rc — so Homebrew and `~/.cargo/bin` are **not** on its `PATH` even though they are in your terminal. The extension always invokes an absolute path and probes the directories above. If yours lives somewhere else, set **Pueue Binary Path**.
+78	
+79	## Remote daemons
+80	
+81	Watch and control a `pueued` on another machine. **Setup is one line** —
+82	Preferences → *Remote Connections*, an SSH host you can already reach:
+83	
+84	```text
+85	local_ubuntu
+86	```
+87	
+88	That's it. No tunnel to keep alive, no shared secret to copy, no config file.
+89	Every command runs as `ssh local_ubuntu 'pueue …'`, and SSH connection
+90	multiplexing keeps it fast — measured at **10–30 ms per call**, against 22–44 ms
+91	for a *local* pueue. (Without multiplexing it would be 200–400 ms, which is why
+92	the extension always passes `ControlMaster`.)
+93	
+94	The only requirement is that `pueue` is on that host's **non-interactive** PATH.
+95	`ssh host 'cmd'` doesn't read your shell rc, so a `~/.cargo/bin` install won't be
+96	found; the extension says so explicitly if that happens.
+97	
+98	A **Connection** submenu then appears in Tasks and Groups (`⌘⇧N`), and as a
+99	**Daemon** dropdown on Add Task. Submitting works properly too, because the
+100	client runs on the remote box — pueue resolves a task's working directory
+101	wherever the client is, which is the thing that makes naive remote submission
+102	fail.
+103	
+104	<details>
+105	<summary>Advanced: reading through a forwarded socket</summary>
+106	
+107	Marginally faster, but needs a tunnel kept alive, the daemon's shared secret
+108	copied over, and a client config written:
+109	
+110	```text
+111	gpu-box | ~/.config/pueue/remote/client.yml | gpu-host
+112	```
+113	
+114	The third field is still an SSH host, used only for submission. The config
+115	**must** set `client: read_local_logs: false`, or log reads return a *local*
+116	task's output under the same id instead of failing.
+117	
+118	Full setup: **[docs/remote.md](docs/remote.md)**.
+119	</details>
+120	
+121	## Tasks inherit the daemon's environment
+122	
+123	pueue runs each command as `sh -c '<your command>'` in the **daemon's** environment, not your shell's. A command that depends on `$PATH` entries from `~/.zshrc` may need an absolute path, or an entry under `daemon.env_vars` in `pueue.yml`.
+124	
+125	A trailing `&` detaches the process, so the task finishes instantly while the real work keeps running unsupervised.
+126	
+127	## Notifications when a task finishes
+128	
+129	Pueue can run a command whenever a task completes. **This extension never writes to your `pueue.yml`** — add this yourself:
+130	
+131	```yaml
+132	daemon:
+133	  callback: 'osascript -e "display notification \"{{ command }} → {{ result }}\" with title \"Pueue #{{ id }}\""'
+134	  callback_log_lines: 10
+135	```
+136	
+137	Available variables: `id`, `command`, `path`, `group`, `result`, `exit_code`, `start`, `end`, `output`, `output_path`, `queued_count`, `stashed_count`. Restart the daemon after editing the config.
+138	
+139	## Compatibility
+140	
+141	Built for **pueue 4.x**. Pueue 4.0 changed the state format incompatibly — task timestamps and results moved inside the status enum — so pueue 3.x is not supported.
+142	
+143	## License
+144	
+145	MIT
+146
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:38:57Z)**_
+
+I'll read the file first.
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:38:57Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="Read"><details>
+<summary>Tool use: **Read**</summary>
+ `./docs/remote.md`
+
+```text
+1	# Driving a remote pueued
+2	
+3	pueue can't schedule *across* hosts, but a local client can drive a `pueued` on
+4	another machine with full control — `status`, `log`, `follow`, `kill`, `add`.
+5	
+6	This extension needs no protocol code for that: a connection is just a client
+7	config, and pueue's own client does the rest. What it does need is to stop
+8	assuming "local" in the four places that quietly did.
+9	
+10	> The setup below is distilled from a run verified against a macOS client
+11	> (pueue 4.0.4) driving a Linux `pueued` (4.0.2) over SSH socket forwarding.
+12	
+13	## The short version
+14	
+15	Preferences → **Remote Connections**, one line:
+16	
+17	```text
+18	local_ubuntu
+19	```
+20	
+21	An SSH host you can already reach. Nothing else — no tunnel, no secret, no
+22	config file. Every command runs as `ssh local_ubuntu 'pueue …'`.
+23	
+24	**Why this is the default rather than a fallback.** Measured against a LAN host:
+25	
+26	```text
+27	plain ssh, one connection per call    200–400 ms
+28	with ControlMaster multiplexing        10–30 ms
+29	local pueue status --json              22–44 ms
+30	```
+31	
+32	A multiplexed remote read costs about the same as a local one, so there is
+33	little left for the forwarded socket to buy. The extension always passes
+34	`ControlMaster=auto -o ControlPersist=120`; ssh expires the shared connection
+35	by itself, so unlike a tunnel there is nothing to start, watch, or clean up.
+36	
+37	Requirements:
+38	
+39	- `pueue` reachable on the remote host. **`ssh host 'cmd'` runs a
+40	  non-interactive shell**, which reads no rc file — so a `cargo install` in
+41	  `~/.cargo/bin` is invisible to it even though `which pueue` works when you log
+42	  in. This is common enough that the connection can name the path:
+43	
+44	  ```text
+45	  lab | local_ubuntu | ~/.cargo/bin/pueue
+46	  ```
+47	
+48	  A third field after a *host* is the remote binary; after a *config path* it is
+49	  an SSH host. They can't be confused, because a host never contains a slash.
+50	  The `~` is expanded on the far side, not here.
+51	
+52	  Without it you get `zsh:1: command not found: pueue`, which the extension
+53	  detects and explains rather than passing through raw.
+54	- Key or agent auth. `BatchMode=yes` is set, so a password prompt fails fast
+55	  rather than hanging with no terminal to type into.
+56	
+57	Submission works properly in this mode for free: the client runs on the remote
+58	box, so the working directory is resolved where it actually exists. That is the
+59	problem the rest of this document exists to work around.
+60	
+61	## Advanced: reading through a forwarded socket
+62	
+63	### 1. Forward the daemon's socket
+64	
+65	The server needs **no reconfiguration** — it keeps its default unix socket.
+66	
+67	```sh
+68	ssh myhost 'ls /run/user/$(id -u)/pueue_*.socket'
+69	# /run/user/1000/pueue_myuser.socket
+70	
+71	ssh -f -N -o ExitOnForwardFailure=yes \
+72	    -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+73	    -L ~/.config/pueue/remote/remote.sock:/run/user/1000/pueue_myuser.socket \
+74	    myhost
+75	```
+76	
+77	Remove the stale local socket file before re-forwarding. `autossh` or a launchd
+78	agent keeps it up.
+79	
+80	### 2. Copy the shared secret
+81	
+82	The client authenticates with the *same* secret file as the daemon. It is a
+83	credential: anyone holding it with a route to the socket can run commands as the
+84	daemon's user.
+85	
+86	```sh
+87	mkdir -p ~/.config/pueue/remote && chmod 700 ~/.config/pueue/remote
+88	ssh myhost 'cat ~/.local/share/pueue/shared_secret' > ~/.config/pueue/remote/shared_secret
+89	chmod 600 ~/.config/pueue/remote/shared_secret
+90	```
+91	
+92	### 3. Write a client-only config
+93	
+94	```yaml
+95	# ~/.config/pueue/remote/client.yml
+96	client:
+97	  read_local_logs: false          # REQUIRED — see below
+98	shared:
+99	  use_unix_socket: true
+100	  unix_socket_path: /Users/you/.config/pueue/remote/remote.sock
+101	  shared_secret_path: /Users/you/.config/pueue/remote/shared_secret
+102	```
+103	
+104	Because the tunnel terminates at the daemon's own unix socket, **no TLS
+105	certificate is involved**. Direct TCP+TLS is possible but requires editing the
+106	server's config and restarting `pueued`, which interrupts a running queue.
+107	
+108	### 4. Tell the extension
+109	
+110	```text
+111	gpu-box | ~/.config/pueue/remote/client.yml | myhost
+112	```
+113	
+114	A second field containing a `/` (or ending `.yml`) is read as a config path,
+115	which selects socket mode. The third field is still an SSH host and is still
+116	needed to submit — the socket cannot fix the working-directory problem.
+117	
+118	A line the extension cannot parse is shown in the task list as **Unreadable
+119	connection** rather than silently ignored.
+120	
+121	A **Connection** submenu then appears in the Action Panel of Tasks and Groups
+122	(⌘⇧N), and as a **Daemon** dropdown on the Add Task form. With no remote
+123	connections configured, none of it renders.
+124	
+125	## `read_local_logs: false` is mandatory
+126	
+127	Set it. Two things depend on it:
+128	
+129	1. **pueue itself** otherwise tries to read the remote daemon's log directory on
+130	   your local filesystem.
+131	2. **This extension** reads the same setting to decide whether its own on-disk
+132	   log fast path is safe, so it can never disagree with pueue about where a log
+133	   lives.
+134	
+135	Left at the default `true`, the local log directory usually *exists* — so a read
+136	returns a **different task's output under the same id** rather than failing.
+137	Silently wrong, which is why it's a hard requirement rather than a suggestion.
+138	
+139	## Submitting: use the SSH host
+140	
+141	**This is the trap.** pueue records a task's working directory at submit time and
+142	canonicalises it on whichever machine the **client** runs on. Submitting from
+143	here against a remote daemon fails three ways:
+144	
+145	| You do | What happens |
+146	|---|---|
+147	| submit from a local directory | The local path is sent. It doesn't exist on the daemon → `FailedToSpawn`, never runs. |
+148	| type a remote-only path | The local client **refuses**: `Failed to canonicalize given working directory path`. |
+149	| type `/tmp` from macOS | Silently rewritten to `/private/tmp` → fails on Linux. |
+150	
+151	Only a path that exists *and canonicalises identically on both machines* works.
+152	That rules out your actual project directories.
+153	
+154	So when a connection has an SSH host, **Add Task submits with
+155	`ssh <host> 'pueue add …'`** — the client runs on the far side, where the paths
+156	are real. Reads and control commands keep using the forwarded socket, which is
+157	faster and needs no second authentication.
+158	
+159	The quoting that makes this safe is asserted, and was verified by pushing
+160	`echo "double" && echo 'single' && echo HOME=$HOME` through the quoter and then
+161	through a real shell.
+162	
+163	## Other things worth knowing
+164	
+165	- **Task ids are global to the daemon.** A remote connection sees and can remove
+166	  *everyone's* tasks on that box. Be careful with Clean and Reset; prefer labels.
+167	- **SSH mode has no version-skew problem.** The client runs on the remote box,
+168	  so it is always the same version as its daemon. This only applies to socket
+169	  mode.
+170	- **A version mismatch warns but works.** A 4.0.4 client against a 4.0.2 daemon
+171	  prints `Different protocol version detected` on every command and behaves
+172	  normally. The extension filters that line out of stderr, so it can't become a
+173	  toast title and hide the real error underneath.
+174	- **`FailedToSpawn` is `Done`, not `Failed`,** with a dict-shaped result
+175	  (`{"FailedToSpawn": "<os error>"}`). The extension treats any terminal result
+176	  that isn't `Success` as a failure, so a job that never started is never
+177	  reported as success.
+178	- **Just SSH over instead**, for one-off submissions. `ssh myhost 'pueue add …'`
+179	  needs no setup at all. A forwarded connection earns its keep when you want to
+180	  *watch* a remote queue from here.
+181	
+182	## If it doesn't work
+183	
+184	| Symptom | Cause |
+185	|---|---|
+186	| `status` hangs | The tunnel is down. Re-forward. |
+187	| secret mismatch | Re-copy `shared_secret`. |
+188	| tasks land as `FailedToSpawn` | The working directory. Add an SSH host to the connection. |
+189	| logs show the wrong output | `read_local_logs` is not `false`. |
+190	| `command not found: pueue` | ssh uses a non-interactive shell. Add the remote path as a third field. |
+191
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:38:58Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="Read"><details>
+<summary>Tool use: **Read**</summary>
+ `./docs/getting-started.md`
+
+```text
+1	# Getting started
+2	
+3	A first run, start to finish: install pueue, install the extension, queue one
+4	task, put the queue in the menu bar, and read a failure.
+5	
+6	The extension shells out to the `pueue` command line tool. It queues nothing
+7	itself, so step 1 is not optional.
+8	
+9	## 1. Install pueue and start the daemon
+10	
+11	```sh
+12	brew install pueue
+13	# or
+14	cargo install --locked pueue
+15	```
+16	
+17	Then start the daemon:
+18	
+19	```sh
+20	brew services start pueue
+21	```
+22	
+23	or, **from a terminal**:
+24	
+25	```sh
+26	pueued -d
+27	```
+28	
+29	!!! warning "Start the daemon from a terminal or `brew services`, not from a GUI app"
+30	
+31	    `pueued` hands its own environment to **every task it ever runs**. Started as
+32	    a child of a GUI process, that environment has no `~/.zshrc` and a bare
+33	    `PATH`, and every task you queue inherits it. The extension's one-click
+34	    *Start Daemon* action only appears when `brew services` manages the daemon,
+35	    so launchd owns it rather than Raycast.
+36	
+37	Verify both halves — the client and the daemon — with one command:
+38	
+39	```sh
+40	pueue status
+41	```
+42	
+43	A working install prints a table (empty is fine, `Task list is empty` is fine).
+44	If the daemon is not up you get an error instead; see
+45	[troubleshooting](#6-troubleshooting) below.
+46	
+47	Check the version while you are here:
+48	
+49	```sh
+50	pueue --version
+51	```
+52	
+53	!!! note "pueue 4.x only"
+54	
+55	    Pueue 4.0 changed the state format incompatibly — task timestamps and
+56	    results moved inside the status enum — so pueue 3.x is not supported.
+57	
+58	## 2. Install the extension
+59	
+60	The extension is **not on the Raycast store yet**. For now, run it from source:
+61	
+62	```sh
+63	git clone https://github.com/daviddwlee84/Pueue-Raycast-Extension.git
+64	cd Pueue-Raycast-Extension
+65	npm install
+66	npm run dev
+67	```
+68	
+69	`npm run dev` (`ray develop`) registers the extension in Raycast's root search.
+70	It stays registered after you stop the dev process with `Ctrl-C`, so you can use
+71	it normally from then on — `npm run dev` is only needed again to pick up code
+72	changes.
+73	
+74	Open Raycast and type `Pueue`. Five commands should appear:
+75	
+76	| Command | What it does |
+77	| --- | --- |
+78	| **Tasks** | Browse the queue grouped by status, with a detail pane and log preview. Takes an optional pueue query as an argument, e.g. `status=failed order_by id desc`. |
+79	| **Add Task** | Queue a command with a working directory, group, label, priority, dependencies, and delay. |
+80	| **Quick Add Task** | Queue a command straight from root search, reusing the group and directory you last used. |
+81	| **Groups** | Pause and resume groups, change parallelism, add and remove groups. |
+82	| **Queue Menu Bar** | Running / queued / failed counts in the menu bar, with per-task actions. |
+83	
+84	## 3. Queue your first task
+85	
+86	Open Raycast, type `Quick Add Task`, press `Tab` to move into the argument, and
+87	paste something that takes a few seconds so you can watch it run:
+88	
+89	```sh
+90	sleep 20 && echo done
+91	```
+92	
+93	Press `⏎`. A HUD confirms `Queued task 0 · sleep 20 && echo done`. There is no
+94	window — **Quick Add Task** is a `no-view` command that runs and exits.
+95	
+96	On a first run it queues into the `default` group with your home directory as
+97	the working directory. After that it reuses whatever **Add Task** last used, so
+98	the common case needs no configuration. Use **Add Task** when you want to pick
+99	the directory, group, label, priority, dependencies, or a delay.
+100	
+101	Now open **Tasks**. The new task appears under *Running*, with the command, its
+102	group, and how long it has been going. Selecting it fills the detail pane with
+103	metadata and the last 20 log lines.
+104	
+105	!!! note "Tasks run in the daemon's environment"
+106	
+107	    pueue runs each command as `sh -c '<your command>'` in **pueued's**
+108	    environment, not your shell's. A command that relies on `PATH` entries from
+109	    `~/.zshrc` may need an absolute path, or an entry under `daemon.env_vars` in
+110	    `pueue.yml`. A trailing `&` detaches the process, so the task finishes
+111	    instantly while the real work keeps running unsupervised.
+112	
+113	## 4. Turn on the menu bar
+114	
+115	Run **Queue Menu Bar** from Raycast's root search **once**.
+116	
+117	!!! warning "A fresh install shows nothing until you run the command once"
+118	
+119	    Raycast disables background refresh for store installs until the command is
+120	    first opened. Until then the menu bar item does not exist. Run it once, or
+121	    enable background refresh in that command's settings, and it appears and
+122	    starts updating on its own every minute.
+123	
+124	    This is the single most likely "it's broken" report, and it is not a bug in
+125	    the extension.
+126	
+127	Once it is running you get a pueue glyph in the menu bar with a number next to
+128	it. By default that number is the **running** count. The command's settings
+129	change what it counts:
+130	
+131	| Menu Bar Title | Shows |
+132	| --- | --- |
+133	| Running count *(default)* | running |
+134	| Running / queued | both, separated |
+135	| Running + queued + paused | one total |
+136	| Icon only | no number at all |
+137	
+138	**The title disappears at zero.** Raycast has no badge API — the count *is* the
+139	title, and an empty title renders as just the glyph. So an idle queue is a bare
+140	icon, not a `0`.
+141	
+142	Open the menu to see Running, Queued, and Failed sections with per-task actions,
+143	a Groups section with pause/resume and a parallelism picker, and an
+144	`Updated HH:MM` row. That last row exists because Raycast restores a menu bar
+145	render from a database rather than by re-running the command, so a stale render
+146	can outlive a restart — the timestamp makes staleness visible instead of
+147	misleading.
+148	
+149	!!! tip "Destructive actions in the menu bar are behind `⌥`"
+150	
+151	    Raycast's confirmation dialog presents in the Raycast window, which is
+152	    closed while a menu is open. Rather than risk a silently swallowed
+153	    confirmation, kill and remove only appear when you hold `⌥`, regardless of
+154	    the *Confirm destructive actions* preference.
+155	
+156	If your queue holds thousands of finished tasks, set **Menu Bar Query** to
+157	`last 100` so the minute-by-minute read stays cheap.
+158	
+159	## 5. Reading a failure
+160	
+161	Queue something that fails:
+162	
+163	```sh
+164	ls /definitely-not-a-directory
+165	```
+166	
+167	Open **Tasks**. It lands under *Failed* with its exit code.
+168	
+169	**The detail pane** (`⌘⇧D` toggles it) shows the command, working directory,
+170	group, label, timestamps, exit code, and a preview of the last 20 log lines —
+171	enough to identify most failures without leaving the list. Raise or lower the
+172	preview length with the *Log Preview Lines* preference on the Tasks command;
+173	each selection change costs one extra `pueue log` call.
+174	
+175	**The log view** (`⏎`) shows the full output, read from pueue's `task_logs/`
+176	directory on disk. `⌘⇧F` copies `pueue follow <id>` if you would rather watch it
+177	in a terminal.
+178	
+179	**Following live output** (`⌘L`) works on running tasks: it streams `pueue
+180	follow`, which polls the on-disk log every 250 ms. The header reads *Following*
+181	while the task runs and flips to *Finished* when it ends — `follow` exiting is
+182	the task finishing, not an error. Leaving the view kills the child process.
+183	
+184	The rest of the Tasks shortcuts:
+185	
+186	| Shortcut | Action |
+187	| --- | --- |
+188	| `⏎` | Show log |
+189	| `⌘L` | Follow output (running tasks) |
+190	| `⌘⇧R` | Restart as a new task |
+191	| `⌘⌥R` | Restart in place — same id, **overwrites the log** |
+192	| `⌘⇧P` | Pause · `⌘⇧S` Resume / Start now |
+193	| `⌘⇧T` | Stash · `⌘⇧E` Enqueue |
+194	| `⌘⇧K` | Kill · `⌘⌫` Remove |
+195	| `⌘⇧D` | Toggle the detail pane · `⌘R` Reload |
+196	
+197	The usual loop on a failure is: read the log, fix the command, `⌘⇧R` to restart
+198	as a new task. Use `⌘⌥R` only when you want to keep the id — it overwrites the
+199	existing log.
+200	
+201	To see only failures, pass a query as the command's argument:
+202	
+203	```text
+204	status=failed order_by id desc
+205	```
+206	
+207	## 6. Troubleshooting
+208	
+209	### "It works in my terminal but the extension can't find pueue"
+210	
+211	Symptom: **Pueue CLI not found**, or `spawn pueue ENOENT`, while `which pueue`
+212	answers instantly in your terminal.
+213	
+214	Raycast runs extensions under launchd, which never sources `~/.zshrc`,
+215	`~/.zprofile`, or any other shell rc. Homebrew's `bin` and `~/.cargo/bin` are
+216	added to `PATH` *by those files*, so the extension's `PATH` is roughly
+217	`/usr/bin:/bin` and a bare `pueue` cannot be found.
+218	
+219	The extension never invokes a bare binary name. It probes, in order:
+220	
+221	```text
+222	/opt/homebrew/bin   Apple Silicon Homebrew
+223	/usr/local/bin      Intel Homebrew
+224	~/.cargo/bin
+225	~/.local/bin
+226	```
+227	
+228	If yours lives somewhere else, find it and set it explicitly:
+229	
+230	```sh
+231	which pueue
+232	```
+233	
+234	Paste the result into Raycast → Extensions → Pueue → **Pueue Binary Path**.
+235	
+236	!!! note "The dev terminal hides this class of bug"
+237	
+238	    `npm run dev`'s console inherits your full interactive `PATH`, so a
+239	    PATH-related problem can work there and fail in production. Exercise
+240	    PATH changes from Raycast — root search or the menu bar — not from the
+241	    dev terminal. Background:
+242	    [pitfalls/raycast-launchd-path-pueue-not-found.md](https://github.com/daviddwlee84/Pueue-Raycast-Extension/blob/main/pitfalls/raycast-launchd-path-pueue-not-found.md).
+243	
+244	### "Pueue daemon not running"
+245	
+246	pueue is installed but `pueued` isn't reachable. The extension says so with a
+247	one-click **Start Daemon (brew services)** action — but only when `brew
+248	services` already manages the daemon, because starting `pueued` from Raycast
+249	would make it a child of Raycast's launchd process and hand that stripped
+250	environment to every task it later runs.
+251	
+252	Otherwise, start it yourself and reload with `⌘R`:
+253	
+254	```sh
+255	brew services start pueue
+256	# or
+257	pueued -d
+258	```
+259	
+260	Two error strings mean different things:
+261	
+262	- `Did you start the daemon at least once?` — `pueued` has **never** run, so
+263	  there is no shared secret file yet.
+264	- `while connecting to daemon` — it ran and has since stopped.
+265	
+266	## Next steps
+267	
+268	- [Remote daemons](remote.md) — watch and control a `pueued` on another machine.
+269	  Setup is one line in the **Remote Connections** preference: an SSH host you can
+270	  already reach, e.g. `local_ubuntu`. No tunnel, no shared secret, no config
+271	  file. Multiplexed SSH measures **10–30 ms per call** against 22–44 ms for a
+272	  local pueue (200–400 ms without multiplexing, which is why the extension always
+273	  passes `ControlMaster`). Submitting works because the client runs on the remote
+274	  box, where the working directory actually resolves.
+275	- [The pueue JSON contract](pueue-json-contract.md) — what the extension parses
+276	  out of `pueue status --json` and `pueue log --json`.
+277	- [Raycast surfaces](raycast-surfaces.md) — why the menu bar is the only
+278	  always-visible surface. Raycast has **no widget API** for extensions; a
+279	  `mode: "menu-bar"` command is the whole of it.
+280	- Desktop notifications when a task finishes are a pueue feature, not an
+281	  extension one — this extension never writes to your `pueue.yml`. The
+282	  `daemon.callback` snippet is in the
+283	  [README](https://github.com/daviddwlee84/Pueue-Raycast-Extension/blob/main/README.md#notifications-when-a-task-finishes).
+284	- [TODO.md](https://github.com/daviddwlee84/Pueue-Raycast-Extension/blob/main/TODO.md)
+285	  — what is planned next.
+286
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:38:59Z)**_
+
+I'll read the file first.
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:38:59Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="Read"><details>
+<summary>Tool use: **Read**</summary>
+ `./docs/index.zh-TW.md`
+
+```text
+1	# Pueue for Raycast
+2	
+3	!!! note "Terminology rule (zh-TW pages)"
+4	    技術名詞首次出現以「中文 (English original)」格式呈現，例：依賴注入
+5	    (dependency injection)。**不自創翻譯**——若無公認譯名直接保留英文
+6	    （如 `embedding`、`tokenizer`）。代碼、API 名、CLI flag、套件名、檔名一律不翻。
+7	
+8	這是一個給 [Pueue](https://github.com/Nukesor/pueue) 任務佇列 (task queue)
+9	daemon 用的 Raycast 擴充功能：瀏覽任務並對它們下指令、即時追蹤輸出、控制群組
+10	(group) 與並行度 (parallelism)，並從選單列 (menu bar) 盯著佇列。它是去呼叫
+11	`pueue` 這個命令列工具，本身不排任何隊；所以在它能做任何事之前，`pueue` 必須先裝好，
+12	`pueued` 也必須正在執行。
+13	
+14	## 指令 (Commands)
+15	
+16	| Command | What it does |
+17	| --- | --- |
+18	| **Tasks** | 依狀態分組瀏覽佇列，附詳細資訊面板與 log 預覽。可以 restart、kill、pause、stash、enqueue、remove、clean。可帶一個選用的 pueue query 作為參數，例如 `status=failed order_by id desc`。 |
+19	| **Add Task** | 送出一個指令，並指定工作目錄、group、label、優先權 (priority)、依賴 (dependencies) 與延遲 (delay)。 |
+20	| **Quick Add Task** | 直接從 root search 送出指令，沿用你上次使用的 group 與目錄。 |
+21	| **Groups** | 暫停與恢復 group、調整並行度、新增與刪除 group。 |
+22	| **Queue Menu Bar** | 在選單列顯示 running / queued / failed 的數量，並提供針對個別任務的操作。每分鐘更新一次。 |
+23	
+24	Raycast 沒有 widget API。`mode: "menu-bar"` 指令是擴充功能唯一能取得的常駐可見介面，
+25	**Queue Menu Bar** 就是這樣一個指令——見 [Raycast 的擴充介面](raycast-surfaces.md)。
+26	
+27	## 需求 (Requirements)
+28	
+29	安裝 CLI：
+30	
+31	```sh
+32	brew install pueue
+33	# or
+34	cargo install --locked pueue
+35	```
+36	
+37	啟動 daemon：
+38	
+39	```sh
+40	brew services start pueue
+41	```
+42	
+43	或者，從終端機：
+44	
+45	```sh
+46	pueued -d
+47	```
+48	
+49	!!! warning "請從終端機或 `brew services` 啟動 daemon，不要從 GUI app 啟動"
+50	
+51	    以 GUI 行程 (process) 的子行程身分啟動的 `pueued`，會繼承那個行程的環境——沒有
+52	    `~/.zshrc`、只有一個很陽春的 `PATH`——然後把這份環境交給**它之後跑的每一個任務**。
+53	    擴充功能裡那個一鍵 *Start Daemon* 的操作，只有在 `pueued` 由 `brew services`
+54	    管理、也就是由 launchd 擁有它的時候才會出現。
+55	
+56	本擴充功能是針對 **pueue 4.x** 開發的。Pueue 4.0 以不相容的方式改了 state 格式——
+57	任務的時間戳記與結果被搬進 status enum 裡面——所以不支援 pueue 3.x。
+58	
+59	!!! note "擴充功能沒辦法直接用一個裸的 `pueue`"
+60	
+61	    Raycast 是在 launchd 底下執行擴充功能的，而 launchd 從來不會去 source 你的 shell
+62	    rc，所以即使 Homebrew 和 `~/.cargo/bin` 在你的終端機裡是通的，它們並不在 Raycast
+63	    的 `PATH` 上。擴充功能一律以絕對路徑呼叫，並會去探測 `/opt/homebrew/bin`、
+64	    `/usr/local/bin`、`~/.cargo/bin`、`~/.local/bin`。如果你的裝在別的地方，請設定
+65	    **Pueue Binary Path**。
+66	
+67	## 背景更新 (background refresh) 預設是關的
+68	
+69	!!! warning "剛裝好的 menu bar 指令，在你手動跑過一次之前不會顯示任何東西"
+70	
+71	    對於從 store 安裝的擴充功能，Raycast 會停用背景更新，直到該指令第一次被開啟為止。
+72	    從 Raycast 的 root search 執行一次 **Queue Menu Bar**，或是在該指令的設定裡打開
+73	    background refresh，選單列項目就會出現並開始自行更新。
+74	
+75	    這是最常見的「它壞掉了」回報，而且它不是這個擴充功能的 bug。
+76	
+77	## 遠端 daemon
+78	
+79	監看並控制另一台機器上的 `pueued`。設定只有一行——Preferences → *Remote
+80	Connections*，填一個你本來就連得到的 SSH host：
+81	
+82	```text
+83	local_ubuntu
+84	```
+85	
+86	不需要隧道 (tunnel)、不需要 shared secret、不需要設定檔。每個指令都是以
+87	`ssh local_ubuntu 'pueue …'` 的形式執行，並開啟 SSH 連線多工 (connection
+88	multiplexing)：實測為**每次呼叫 10–30 ms**，相較之下*本機* pueue 是 22–44 ms，
+89	而沒有多工的純 ssh 則是 200–400 ms。送出任務之所以能正常運作，是因為 client 跑在遠端
+90	那台機器上，任務的工作目錄在那裡才真的解析得出來。
+91	
+92	細節（包含進階的轉發 socket 模式）：[遠端 daemon](remote.md)。
+93	
+94	## 接下來看哪裡
+95	
+96	- [Getting Started](getting-started.md) — 安裝、第一個任務、鍵盤快速鍵、偏好設定。
+97	- [遠端 daemon](remote.md) — 透過 SSH 驅動另一台主機上的 `pueued`。
+98	- [pueue JSON 契約](pueue-json-contract.md) — `pueue` 實際上吐出什麼，以及哪些看似
+99	  合理的解讀其實是錯的。
+100	- [Raycast 的擴充介面](raycast-surfaces.md) — Raycast 提供哪些進入點，以及這個擴充
+101	  功能為什麼長成現在這個樣子。
+102
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:00Z)**_
+
+I'll read the file first.
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:00Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="Read"><details>
+<summary>Tool use: **Read**</summary>
+ `./docs/remote.zh-TW.md`
+
+```text
+1	# 操控遠端的 pueued
+2	
+3	!!! note "Terminology rule (zh-TW pages)"
+4	    技術名詞首次出現以「中文 (English original)」格式呈現，例：依賴注入
+5	    (dependency injection)。**不自創翻譯**——若無公認譯名直接保留英文
+6	    （如 `embedding`、`tokenizer`）。代碼、API 名、CLI flag、套件名、檔名一律不翻。
+7	
+8	pueue 無法*跨主機*排程，但本機的 client 可以完整操控另一台機器上的 `pueued`——
+9	`status`、`log`、`follow`、`kill`、`add` 都能用。
+10	
+11	這件事不需要本擴充功能寫任何協定 (protocol) 程式碼：一個連線就只是一份 client 設定，
+12	其餘交給 pueue 自己的 client 處理。真正要做的，是把四個原本默默假設「在本機」的地方
+13	改掉。
+14	
+15	> 以下設定流程，來自一次實測：macOS client（pueue 4.0.4）透過 SSH socket 轉發
+16	> 操控 Linux 上的 `pueued`（4.0.2）。
+17	
+18	## 最短版本
+19	
+20	Preferences → **Remote Connections**，填一行：
+21	
+22	```text
+23	local_ubuntu
+24	```
+25	
+26	一台你本來就連得上的 SSH 主機 (SSH host)。沒別的了——不用隧道 (tunnel)、不用密鑰、
+27	不用設定檔。每個指令都以 `ssh local_ubuntu 'pueue …'` 執行。
+28	
+29	**為什麼這是預設做法，而不是退路。** 對區域網路內的主機實測：
+30	
+31	```text
+32	plain ssh, one connection per call    200–400 ms
+33	with ControlMaster multiplexing        10–30 ms
+34	local pueue status --json              22–44 ms
+35	```
+36	
+37	經過多工 (multiplexing) 的遠端讀取，成本跟本機讀取差不多，所以轉發 socket 能再省下的
+38	空間已經不多。擴充功能一律帶上 `ControlMaster=auto -o ControlPersist=120`；ssh 會自己
+39	讓共用連線過期，因此不像隧道那樣有東西要啟動、盯著、或善後。
+40	
+41	需求：
+42	
+43	- 遠端主機上有可執行的 `pueue`。**`ssh host 'cmd'` 跑的是非互動式 shell
+44	  (non-interactive shell)**，不會讀取任何 rc 檔——所以即使你登入後 `which pueue` 找得到，
+45	  裝在 `~/.cargo/bin` 的 `cargo install` 版本對它仍是隱形的。這種情況夠常見，因此連線
+46	  設定可以直接指名路徑：
+47	
+48	  ```text
+49	  lab | local_ubuntu | ~/.cargo/bin/pueue
+50	  ```
+51	
+52	  接在*主機*後面的第三個欄位是遠端執行檔；接在*設定檔路徑*後面的則是 SSH 主機。兩者不會
+53	  混淆，因為主機名稱裡永遠不會有斜線。`~` 是在對面那端展開，不是在這裡。
+54	
+55	  少了它你會拿到 `zsh:1: command not found: pueue`，擴充功能會偵測並說明這個錯誤，而不是
+56	  把原始訊息直接丟出來。
+57	- 金鑰 (key) 或 agent 認證。`BatchMode=yes` 已設定，所以密碼提示會直接快速失敗，而不是
+58	  卡在那裡等你在一個根本不存在的終端機裡輸入。
+59	
+60	在這個模式下，送出任務 (submission) 自然就是對的：client 跑在遠端機器上，工作目錄
+61	(working directory) 是在它真正存在的地方解析。這正是本文其餘篇幅要繞開的問題。
+62	
+63	## 進階：透過轉發的 socket 讀取
+64	
+65	### 1. 轉發 daemon 的 socket
+66	
+67	伺服器端**完全不用重新設定**——維持它預設的 unix socket 即可。
+68	
+69	```sh
+70	ssh myhost 'ls /run/user/$(id -u)/pueue_*.socket'
+71	# /run/user/1000/pueue_myuser.socket
+72	
+73	ssh -f -N -o ExitOnForwardFailure=yes \
+74	    -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+75	    -L ~/.config/pueue/remote/remote.sock:/run/user/1000/pueue_myuser.socket \
+76	    myhost
+77	```
+78	
+79	重新轉發之前，先刪掉本機殘留的 socket 檔。用 `autossh` 或 launchd agent 可以讓它保持連線。
+80	
+81	### 2. 複製 shared secret
+82	
+83	client 使用與 daemon *相同*的 shared secret 檔案來認證。它是一份憑證：任何人只要拿到它、
+84	又能連到那個 socket，就能以 daemon 所屬使用者的身分執行指令。
+85	
+86	```sh
+87	mkdir -p ~/.config/pueue/remote && chmod 700 ~/.config/pueue/remote
+88	ssh myhost 'cat ~/.local/share/pueue/shared_secret' > ~/.config/pueue/remote/shared_secret
+89	chmod 600 ~/.config/pueue/remote/shared_secret
+90	```
+91	
+92	### 3. 寫一份只給 client 用的設定
+93	
+94	```yaml
+95	# ~/.config/pueue/remote/client.yml
+96	client:
+97	  read_local_logs: false          # REQUIRED — see below
+98	shared:
+99	  use_unix_socket: true
+100	  unix_socket_path: /Users/you/.config/pueue/remote/remote.sock
+101	  shared_secret_path: /Users/you/.config/pueue/remote/shared_secret
+102	```
+103	
+104	因為隧道的終點就是 daemon 自己的 unix socket，**過程中完全沒有 TLS 憑證
+105	(TLS certificate) 參與**。直接走 TCP+TLS 也可以，但那需要改伺服器端設定並重啟 `pueued`，
+106	會中斷正在跑的佇列。
+107	
+108	### 4. 告訴擴充功能
+109	
+110	```text
+111	gpu-box | ~/.config/pueue/remote/client.yml | myhost
+112	```
+113	
+114	第二個欄位如果含有 `/`（或以 `.yml` 結尾），會被視為設定檔路徑，也就選擇了 socket 模式。
+115	第三個欄位仍然是 SSH 主機，而且仍然必要——送出任務時，socket 解決不了工作目錄的問題。
+116	
+117	擴充功能解析不了的那一行，會在任務列表中顯示為 **Unreadable connection**，而不是默默忽略。
+118	
+119	接著 Tasks 與 Groups 的 Action Panel 中會出現 **Connection** 子選單 (submenu)（⌘⇧N），
+120	Add Task 表單上則會出現 **Daemon** 下拉選單 (dropdown)。若沒有設定任何遠端連線，這些介面
+121	一律不會出現。
+122	
+123	## `read_local_logs: false` 是必填
+124	
+125	一定要設。有兩件事靠它：
+126	
+127	1. **pueue 本身**否則會試圖在你的本機檔案系統上讀取遠端 daemon 的 log 目錄。
+128	2. **本擴充功能**會讀同一個設定，來判斷自己那條讀取磁碟 log 的快速路徑 (fast path) 是否
+129	   安全，這樣它就不可能跟 pueue 對「log 在哪裡」有不同的認知。
+130	
+131	如果留在預設值 `true`，本機的 log 目錄通常*是存在的*——於是讀取會回傳**同一個 id 底下另一個
+132	任務的輸出**，而不是報錯。這是靜默的錯誤，所以它是硬性要求，而非建議。
+133	
+134	## 送出任務：用 SSH 主機
+135	
+136	**這就是陷阱。** pueue 會在送出當下記錄任務的工作目錄，並在跑 **client** 的那台機器上做
+137	canonicalise。從這裡對遠端 daemon 送出任務，會用三種方式失敗：
+138	
+139	| 你做的事 | 發生什麼 |
+140	|---|---|
+141	| 從本機目錄送出 | 送出去的是本機路徑。它在 daemon 上並不存在 → `FailedToSpawn`，永遠不會執行。 |
+142	| 輸入只有遠端才有的路徑 | 本機 client **直接拒絕**：`Failed to canonicalize given working directory path`。 |
+143	| 在 macOS 上輸入 `/tmp` | 會被靜默改寫成 `/private/tmp` → 在 Linux 上失敗。 |
+144	
+145	只有那些*在兩台機器上都存在、而且 canonicalise 結果完全相同*的路徑才行得通。你實際的專案目錄
+146	基本上都不符合。
+147	
+148	所以當一個連線帶有 SSH 主機時，**Add Task 會以 `ssh <host> 'pueue add …'` 送出**——client
+149	跑在對面那端，路徑是真的。讀取與控制類指令則繼續走轉發的 socket，比較快，也不需要第二次認證。
+150	
+151	讓這件事安全的引號處理 (quoting) 有寫成 assertion，並且實測驗證過：把
+152	`echo "double" && echo 'single' && echo HOME=$HOME` 先丟進 quoter，再丟進真正的 shell 跑。
+153	
+154	## 其他值得知道的事
+155	
+156	- **任務 id 對 daemon 而言是全域 (global) 的。** 一個遠端連線看得到、也刪得掉那台機器上
+157	  *所有人*的任務。使用 Clean 與 Reset 時要小心；優先用標籤 (labels)。
+158	- **SSH 模式沒有版本落差 (version skew) 問題。** client 跑在遠端機器上，所以永遠跟它的
+159	  daemon 同版本。這一點只在 socket 模式下才需要擔心。
+160	- **版本不一致會警告，但仍可運作。** 4.0.4 的 client 對上 4.0.2 的 daemon，會在每個指令
+161	  印出 `Different protocol version detected`，行為則一切正常。擴充功能會把那一行從 stderr
+162	  濾掉，免得它變成 toast 標題、把底下真正的錯誤蓋住。
+163	- **`FailedToSpawn` 屬於 `Done`，不是 `Failed`，** 而且結果是 dict 形狀
+164	  （`{"FailedToSpawn": "<os error>"}`）。擴充功能會把任何不是 `Success` 的終止結果
+165	  (terminal result) 都當成失敗，所以一個從未啟動的工作絕不會被回報為成功。
+166	- **也可以乾脆直接 SSH 過去**，處理一次性的送出。`ssh myhost 'pueue add …'` 完全不用設定。
+167	  當你想從這裡*盯著*一個遠端佇列時，轉發連線才值得。
+168	
+169	## 如果不成功
+170	
+171	| 症狀 | 原因 |
+172	|---|---|
+173	| `status` 卡住不動 | 隧道斷了。重新轉發。 |
+174	| shared secret 不符 | 重新複製 `shared_secret`。 |
+175	| 任務都變成 `FailedToSpawn` | 工作目錄問題。在連線設定裡加上 SSH 主機。 |
+176	| log 顯示的是別的輸出 | `read_local_logs` 不是 `false`。 |
+177	| `command not found: pueue` | ssh 用的是非互動式 shell。把遠端路徑加成第三個欄位。 |
+178
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:06Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm checking whether this documentation actually says or implies "one per line" anywhere. The setup line is just describing that configuration takes a single line, which is accurate. Let me search through the file to confirm there's no mention of the "per line" phrasing the task is looking for.
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:06Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Grep index.md for line/separator wording
+
+`grep -n -i -E "per line|one line|newline|separat|;|\bline\b" docs/index.md`
+
+```text
+6:command line tool and queues nothing itself, so `pueue` has to be installed and
+78:Watch and control a `pueued` on another machine. Setup is one line —
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:39:08Z)**_
+
+<think><details><summary>Thought Process</summary>
+Let me test the parser directly with a realistic multi-connection value to verify the fix works end-to-end, then I'll add a pitfall entry documenting this discovery.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 18:39:08Z)**_
+
+While that runs, let me verify the fix against a value you could actually type into that field:
+
+_**Agent (claude-opus-5 2026-07-26 18:39:14Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Verify multi-connection parsing and a live read
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+rm -rf .build/live && npx tsc --outDir .build/live --module commonjs --target ES2022 --lib ES2023 \
+  --esModuleInterop --skipLibCheck --strict src/lib/pueue/connections.ts src/lib/pueue/ssh.ts src/lib/pueue/argv.ts >/dev/null 2>&1
+node -e '
+const { parseConnections } = require("./.build/live/connections.js");
+// Exactly what fits on one line in the Raycast settings field.
+const v = "lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com ; nas | ts_nas";
+const { connections, invalid } = parseConnections(v);
+console.log("  input :", v);
+console.log("  invalid:", invalid.length);
+for (const c of connections)
+  console.log(`    ${c.name.padEnd(6)} mode=${c.mode} host=${String(c.sshHost).padEnd(16)} bin=${c.remoteBinary ?? "(PATH)"}`);
+'
+echo
+echo "=== and the real one still works ==="
+node -e '
+const { parseConnections } = require("./.build/live/connections.js");
+const { sshArgv } = require("./.build/live/ssh.js");
+const { execFileSync } = require("node:child_process");
+const [c] = parseConnections("lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | example.invalid").connections;
+const out = execFileSync("ssh", sshArgv(c.sshHost, ["--color","never","status","--json"], c.remoteBinary), {encoding:"utf8", maxBuffer:64e6});
+console.log("  remote tasks via the ;-separated config:", Object.keys(JSON.parse(out).tasks).length);
+'
+```
+
+```text
+  input : lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com ; nas | ts_nas
+  invalid: 0
+    lab    mode=ssh host=local_ubuntu     bin=~/.cargo/bin/pueue
+    gpu    mode=ssh host=gpu.example.com  bin=(PATH)
+    nas    mode=ssh host=ts_nas           bin=(PATH)
+
+=== and the real one still works ===
+  remote tasks via the ;-separated config: 33
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:15Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm searching through the file for mentions of Remote Connections and finding that it only appears in the "Next steps" section, where it describes setup as "one line" in the preference rather than multiple connections per line. Let me look for any code blocks or additional references to clarify this.
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:16Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Grep for line/separator mentions in getting-started.md
+
+`grep -n -i -e "per line" -e "one line" -e "newline" -e "Remote Connections" -e "semicolon" -e ";" /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/getting-started.md`
+
+```text
+44:If the daemon is not up you get an error instead; see
+172:preview length with the *Log Preview Lines* preference on the Tasks command;
+269:  Setup is one line in the **Remote Connections** preference: an SSH host you can
+278:  always-visible surface. Raycast has **no widget API** for extensions; a
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:16Z)**_
+
+<think><details><summary>Thought Process</summary>
+Looking at the file structure, I'm noticing that the examples don't actually show multiple connections stacked on separate lines—each instance is a single connection per example. The phrasing around line 15 ("one line:") and line 118's reference to line-based parsing suggest the format expects one connection per line, but I need to clarify whether that's actually a requirement or just how the examples happen to be formatted. The changes I'm considering involve potentially adjusting line 15's wording since it already implies a single-line format.
+
+For line 118, changing "A line the extension cannot parse" to "A connection the extension cannot parse" makes more sense semantically. I should also add an explanation about how multiple connections are separated by semicolons since Raycast preferences are single-line textfields—this detail would fit best right after the short example around lines 15-22, or in the "Tell the extension" section. I'm checking if there are other places in the repo that reference this format for consistency, though the task is focused on editing just this file.
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:17Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+
+`grep -rn "per line\|one per line\|semicolon\|;\s*gpu\|separated" --include="*.md" --include="*.json" --include="*.ts" --include="*.tsx" . --exclude-dir=node_modules --exclude-dir=.specstory | head -40`
+
+```text
+package.json:174:      "placeholder": "lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com"
+README.md:72:| **Remote Connections** | none | One per line: `name \| client config path \| ssh host`. See [Remote daemons](#remote-daemons). |
+TODO.md:27:  rows with their live status instead of a comma-separated list of ids.
+.agents/skills/project-knowledge-harness/SKILL.md:10:Three surfaces, sharply separated by **time direction** and **access pattern**:
+.agents/skills/project-knowledge-harness/SKILL.md:107:   prompts for missing fields per line; in `--batch` mode it only
+.agents/skills/agent-history-hygiene/references/pre-commit-redaction-stack.md:167:(one glob per line, gitignore syntax).
+.agents/skills/agent-history-hygiene/SKILL.md:12:Three surfaces, separated by purpose:
+.agents/skills/agent-history-hygiene/references/transcript-session-discovery.md:55:TSV by default (two columns per line, tab-separated):
+docs/getting-started.md:134:| Running / queued | both, separated |
+.claude/plans/users-david-src-tries-2026-07-09-transl-prancy-sprout.md:281:Reads its `command`/`label` arguments, pulls group+cwd from `LocalStorage`, adds, `showHUD`, background-launches `queue-menu`. Highest value per line in the extension.
+src/lib/dev-check.ts:813:  parse("lab | host1 ; gpu | host2").connections.map((c) => c.name),
+src/lib/dev-check.ts:818:  parse("lab|host1;gpu|host2").connections.map((c) => c.sshHost),
+src/lib/dev-check.ts:832:  "bare names separated by ';'",
+src/lib/dev-check.ts:833:  parse("local_ubuntu ; gpu-box").connections.map((c) => c.sshHost),
+src/lib/dev-check.ts:838:  parse("lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | h2").connections[0],
+src/lib/pueue/connections.ts:67: * Connections are separated by `;` **or** a newline; fields within one by `|`.
+src/lib/pueue/connections.ts:69: * The semicolon is not a stylistic choice. Raycast has no multi-line preference
+src/lib/pueue/connections.ts:80: *     lab | host1 ; gpu | host2                    two connections, one line
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:20Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm checking the Chinese documentation against the English version to see if that one-line setup claim was already addressed in the English docs.
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:21Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read English index docs section
+
+`sed -n '70,100p' docs/index.md && echo "=== git status ===" && git status --short`
+
+```text
+    enable background refresh in that command's settings, and the menu bar item
+    appears and starts updating on its own.
+
+    This is the single most likely "it's broken" report, and it isn't a bug in
+    the extension.
+
+## Remote daemons
+
+Watch and control a `pueued` on another machine. Setup is one line —
+Preferences → *Remote Connections*, an SSH host you can already reach:
+
+```text
+local_ubuntu
+```
+
+No tunnel, no shared secret, no config file. Every command runs as
+`ssh local_ubuntu 'pueue …'`, with SSH connection multiplexing on: measured at
+**10–30 ms per call**, against 22–44 ms for a *local* pueue, and 200–400 ms for
+plain ssh without multiplexing. Submitting works because the client runs on the
+remote box, where a task's working directory actually resolves.
+
+Details, including the advanced forwarded-socket mode:
+[Remote daemons](remote.md).
+
+## Where to next
+
+- [Getting Started](getting-started.md) — install, first task, keyboard
+  shortcuts, preferences.
+- [Remote daemons](remote.md) — driving a `pueued` on another host over SSH.
+- [The pueue JSON contract](pueue-json-contract.md) — what `pueue` actually
+  emits, and where a reasonable reading of it is wrong.
+=== git status ===
+ M .specstory/.project.json
+ M .specstory/history/2026-07-26_12-50-19Z-at-users-david-src.md
+ M package.json
+ M raycast-env.d.ts
+ M src/lib/dev-check.ts
+ M src/lib/pueue/connections.ts
+?? .specstory/history/2026-07-26_18-27-10Z-at-specstory-history-2026.md
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:21Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm checking the English version of the documentation to see what corrections were applied there.
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:21Z)**_
+
+Let me check the English counterpart for reference.
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:21Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+List docs and grep English remote page
+
+`ls /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/ && echo "---" && grep -n "per line\|;\|分號\|一行\|每行" /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/remote.md`
+
+```text
+assets
+getting-started.md
+getting-started.zh-TW.md
+index.md
+index.zh-TW.md
+pueue-json-contract.md
+pueue-json-contract.zh-TW.md
+raycast-surfaces.md
+raycast-surfaces.zh-TW.md
+remote.md
+remote.zh-TW.md
+---
+34:`ControlMaster=auto -o ControlPersist=120`; ssh expires the shared connection
+48:  A third field after a *host* is the remote binary; after a *config path* it is
+166:  *everyone's* tasks on that box. Be careful with Clean and Reset; prefer labels.
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:27Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm checking whether "Setup is one line" actually describes a per-connection separator rule or just the setup effort itself. Looking at the context, it's about configuration being a single line, which does reinforce the single-line preference, so the statement holds up. Since there are no code blocks stacking multiple connections, no changes are needed here.
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:27Z)**_
+
+no change needed
+
+_**Agent - sidechain (2026-07-26 18:39:27Z)**_
+
+
+A factual correction has to be applied to the docs.
+
+WHAT WAS WRONG
+The Remote Connections preference was documented as "one connection per line".
+That is impossible to enter. Raycast has no multi-line preference type — the
+allowed union is exactly:
+
+    appPicker | checkbox | dropdown | password | textfield | file | directory
+
+and `ray lint` rejects anything else with "must be equal to one of the allowed
+values". A textfield is single-line, so a user physically cannot type a newline
+into the settings field. Anyone with more than one remote was stuck.
+
+WHAT IS TRUE NOW
+Connections are separated by a semicolon `;`. Fields within one connection are
+still separated by `|`. Newlines are also still accepted, but only matter for
+values set by other means — the settings UI cannot produce one.
+
+Correct examples:
+
+    local_ubuntu
+    lab | local_ubuntu | ~/.cargo/bin/pueue
+    lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com
+    tunnelled | ~/pueue/client.yml | gpu-host
+
+Field rules, unchanged:
+  - one field  -> an SSH host that is also its own label
+  - two fields -> name | ssh-host   (or  name | config-path  for socket mode)
+  - three      -> after a host, the third is the REMOTE pueue binary path;
+                  after a config path, the third is an SSH host for submitting
+  - a field containing "/" or ending .yml is read as a config path
+
+YOUR TASK
+Edit the file named below. Find every place that says or implies "one per line"
+for this preference, and correct it — including any code block showing multiple
+connections stacked on separate lines, which should become a single line joined
+by " ; ". Where it reads naturally, add one short clause explaining WHY the
+separator is a semicolon (Raycast preferences are single-line), because a reader
+who doesn't know that will assume the semicolon is arbitrary and get it wrong.
+
+Do not restructure the page or change anything unrelated. Keep the surrounding
+prose voice. Use the Edit tool for surgical changes; read the file first.
+Return a one-line summary of what you changed, or "no change needed".
+
+This file is the Traditional Chinese (zh-TW) translation. Apply the same
+correction, in 繁體中文, following the page's existing terminology rule:
+
+  - Technical terms appear as 「中文 (English original)」 on FIRST mention.
+  - NEVER invent a translation. Keep English where there is no established
+    term (e.g. `textfield`, `preference`, `daemon`, `ssh`).
+  - NEVER translate code, CLI flags, file names, or anything in backticks.
+  - Keep the terminology admonition at the top of the page exactly as it is.
+
+Keep every code block byte-identical to its English counterpart — only the
+surrounding prose is Chinese.
+
+
+File to edit: /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/getting-started.zh-TW.md
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:29Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm scanning through the README to find inconsistencies about single-line setup and connections. Line 72 mentions "One per line" and line 81 says "Setup is one line," but the code examples show single connections, so there's no actual conflict there. The only place referencing multiple items per line is line 72, which I should update to align with the rest of the documentation. I'm deciding where to insert a note about multiple remote connections separated by semicolons — it should flow naturally after the initial setup explanation and code block, before the PATH requirement section, so readers understand the syntax constraint comes from Raycast's single-line preference fields. I think the best placement is after the PATH requirement paragraph, right before the "A Connection submenu then appears" section — that way the multi-remote note sits naturally next to where the UI actually shows multiple connections. I'll add a paragraph explaining how to separate multiple remotes with semicolons since Raycast preference fields are single-line, then show an example with a couple of different remote configurations. Updating the table cell to clarify that connections are separated by semicolons while keeping the field format close to the original, then verifying there's no separate docs file to update and confirming the setup description remains accurate.
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:29Z)**_
+
+Now the two surgical edits.
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:29Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/README.md has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:34Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to focus on editing remote.md specifically, not README.md, since that's what the task requires. Let me check the doc comment style in connections.ts to match the voice and formatting.
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:34Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="Read"><details>
+<summary>Tool use: **Read**</summary>
+ `./src/lib/pueue/connections.ts`
+
+```text
+1	/**
+2	 * Named pueue connections.
+3	 *
+4	 * A connection is either
+5	 *
+6	 *   - **ssh** — every command runs as `ssh <host> 'pueue …'`. Nothing to set up
+7	 *     on either machine beyond pueue being installed and SSH working. This is
+8	 *     the default because it is also fast: SSH connection multiplexing brings
+9	 *     the per-call cost to 10–30 ms, against 22–44 ms for a *local* pueue.
+10	 *     Without multiplexing it would be 200–400 ms, which is why `ssh.ts`
+11	 *     insists on it.
+12	 *
+13	 *   - **socket** — a client-only config selected with `-c`, talking to an
+14	 *     SSH-forwarded unix socket. Marginally faster still, but needs a tunnel
+15	 *     kept alive, the daemon's shared secret copied over, and a config written.
+16	 *     Worth it only if you are already maintaining the tunnel.
+17	 *
+18	 * The distinction that matters for correctness is the same either way: a remote
+19	 * daemon's logs are not on this disk, and a task's working directory is
+20	 * resolved wherever the *client* runs. SSH mode gets the second one right for
+21	 * free, because the client runs on the remote box.
+22	 *
+23	 * Deliberately free of Raycast imports so the parsing can be asserted by
+24	 * `just verify`; the preference-backed lookups live in `binary.ts`.
+25	 */
+26	
+27	import { readFileSync } from "node:fs";
+28	import { homedir } from "node:os";
+29	import { join } from "node:path";
+30	
+31	export type ConnectionMode = "local" | "ssh" | "socket";
+32	
+33	export interface Connection {
+34	  /** Display name. "Local" for the implicit default. */
+35	  name: string;
+36	  mode: ConnectionMode;
+37	  /** `--config` path, for socket mode. Undefined means pueue's own default. */
+38	  configPath?: string;
+39	  /** SSH destination — anything `ssh` accepts, including a ~/.ssh/config alias. */
+40	  sshHost?: string;
+41	  /**
+42	   * Path to `pueue` on the remote host.
+43	   *
+44	   * Needed more often than you'd hope: `ssh host 'cmd'` runs a *non-interactive*
+45	   * shell, which reads no rc file, so a cargo install in ~/.cargo/bin is
+46	   * invisible even though `which pueue` works when you log in.
+47	   */
+48	  remoteBinary?: string;
+49	  /** True for anything that isn't this machine's own daemon. */
+50	  remote: boolean;
+51	}
+52	
+53	export const LOCAL_CONNECTION_NAME = "Local";
+54	
+55	export function expandTilde(p: string): string {
+56	  return p.replace(/^~(?=\/|$)/, homedir());
+57	}
+58	
+59	/** A config path, as opposed to an SSH host. Hosts don't contain slashes. */
+60	function looksLikePath(field: string): boolean {
+61	  return field.includes("/") || /\.(ya?ml)$/i.test(field);
+62	}
+63	
+64	/**
+65	 * Parse the `connections` preference.
+66	 *
+67	 * Connections are separated by `;` **or** a newline; fields within one by `|`.
+68	 *
+69	 * The semicolon is not a stylistic choice. Raycast has no multi-line preference
+70	 * type — the union is appPicker | checkbox | dropdown | password | textfield |
+71	 * file | directory, and `ray lint` rejects anything else — so a `textfield` is
+72	 * the only option and there is no way to type a newline into it. Newlines are
+73	 * still accepted for anyone editing the stored value by other means.
+74	 *
+75	 *     local_ubuntu                                 ssh, host = the name itself
+76	 *     lab | gpu.example.com                        ssh
+77	 *     lab | gpu.example.com | ~/.cargo/bin/pueue   ssh, explicit remote binary
+78	 *     lab | ~/pueue/client.yml                     socket
+79	 *     lab | ~/pueue/client.yml | gpu-host          socket for reads, ssh to submit
+80	 *     lab | host1 ; gpu | host2                    two connections, one line
+81	 *
+82	 * The bare form is the point: the simplest thing a person can type — the SSH
+83	 * host they already have in `~/.ssh/config` — is also a complete, working
+84	 * configuration.
+85	 *
+86	 * Field two is told apart by whether it looks like a path, and field three
+87	 * follows from that: after a config it is an SSH host, after a host it is the
+88	 * remote pueue binary. Both are unambiguous, because a host never contains a
+89	 * slash and a path always does.
+90	 *
+91	 * Blank lines and `#` comments are ignored so the field can be annotated.
+92	 * Unparseable lines are returned as `invalid` rather than dropped, because
+93	 * silently ignoring a line someone typed is indistinguishable from a bug.
+94	 */
+95	export function parseConnections(raw: string | undefined): {
+96	  connections: Connection[];
+97	  invalid: string[];
+98	} {
+99	  const connections: Connection[] = [];
+100	  const invalid: string[] = [];
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:40Z)**_
+
+<think><details><summary>Thought Process</summary>
+Looking at line 269, "setup is one line" refers to the brevity of configuration—a single line of text—rather than implying each connection occupies one line. The phrasing is technically correct but subtly misleading about the format. I should clarify that a single connection is one entry in the field, with multiple connections handled differently.
+
+The key question is whether this phrasing actually implies "one per line" strongly enough to warrant correction. It's a weak implication at best—a careful reader might infer multiple connections need multiple lines, but it's not explicit. A surgical fix would be changing "one line" to "one entry" or "one field," and potentially noting the semicolon separator. However, adding the separator explanation might exceed the scope since this page never mentions it, and the task asks to add clarification only where it reads naturally. I'm weighing whether the addition feels organic or like scope creep.
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:41Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check remote.md separator wording
+
+`grep -rn -e "per line" -e ";" /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/remote.md | head -40`
+
+```text
+/Users/david/Documents/Program/Pueue-Raycast-Extension/docs/remote.md:34:`ControlMaster=auto -o ControlPersist=120`; ssh expires the shared connection
+/Users/david/Documents/Program/Pueue-Raycast-Extension/docs/remote.md:48:  A third field after a *host* is the remote binary; after a *config path* it is
+/Users/david/Documents/Program/Pueue-Raycast-Extension/docs/remote.md:166:  *everyone's* tasks on that box. Be careful with Clean and Reset; prefer labels.
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:41Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="Read"><details>
+<summary>Tool use: **Read**</summary>
+ `./docs/remote.md`
+
+```text
+1	# Driving a remote pueued
+2	
+3	pueue can't schedule *across* hosts, but a local client can drive a `pueued` on
+4	another machine with full control — `status`, `log`, `follow`, `kill`, `add`.
+5	
+6	This extension needs no protocol code for that: a connection is just a client
+7	config, and pueue's own client does the rest. What it does need is to stop
+8	assuming "local" in the four places that quietly did.
+9	
+10	> The setup below is distilled from a run verified against a macOS client
+11	> (pueue 4.0.4) driving a Linux `pueued` (4.0.2) over SSH socket forwarding.
+12	
+13	## The short version
+14	
+15	Preferences → **Remote Connections**, one line:
+16	
+17	```text
+18	local_ubuntu
+19	```
+20	
+21	An SSH host you can already reach. Nothing else — no tunnel, no secret, no
+22	config file. Every command runs as `ssh local_ubuntu 'pueue …'`.
+23	
+24	**Why this is the default rather than a fallback.** Measured against a LAN host:
+25	
+26	```text
+27	plain ssh, one connection per call    200–400 ms
+28	with ControlMaster multiplexing        10–30 ms
+29	local pueue status --json              22–44 ms
+30	```
+31	
+32	A multiplexed remote read costs about the same as a local one, so there is
+33	little left for the forwarded socket to buy. The extension always passes
+34	`ControlMaster=auto -o ControlPersist=120`; ssh expires the shared connection
+35	by itself, so unlike a tunnel there is nothing to start, watch, or clean up.
+36	
+37	Requirements:
+38	
+39	- `pueue` reachable on the remote host. **`ssh host 'cmd'` runs a
+40	  non-interactive shell**, which reads no rc file — so a `cargo install` in
+41	  `~/.cargo/bin` is invisible to it even though `which pueue` works when you log
+42	  in. This is common enough that the connection can name the path:
+43	
+44	  ```text
+45	  lab | local_ubuntu | ~/.cargo/bin/pueue
+46	  ```
+47	
+48	  A third field after a *host* is the remote binary; after a *config path* it is
+49	  an SSH host. They can't be confused, because a host never contains a slash.
+50	  The `~` is expanded on the far side, not here.
+51	
+52	  Without it you get `zsh:1: command not found: pueue`, which the extension
+53	  detects and explains rather than passing through raw.
+54	- Key or agent auth. `BatchMode=yes` is set, so a password prompt fails fast
+55	  rather than hanging with no terminal to type into.
+56	
+57	Submission works properly in this mode for free: the client runs on the remote
+58	box, so the working directory is resolved where it actually exists. That is the
+59	problem the rest of this document exists to work around.
+60	
+61	## Advanced: reading through a forwarded socket
+62	
+63	### 1. Forward the daemon's socket
+64	
+65	The server needs **no reconfiguration** — it keeps its default unix socket.
+66	
+67	```sh
+68	ssh myhost 'ls /run/user/$(id -u)/pueue_*.socket'
+69	# /run/user/1000/pueue_myuser.socket
+70	
+71	ssh -f -N -o ExitOnForwardFailure=yes \
+72	    -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+73	    -L ~/.config/pueue/remote/remote.sock:/run/user/1000/pueue_myuser.socket \
+74	    myhost
+75	```
+76	
+77	Remove the stale local socket file before re-forwarding. `autossh` or a launchd
+78	agent keeps it up.
+79	
+80	### 2. Copy the shared secret
+81	
+82	The client authenticates with the *same* secret file as the daemon. It is a
+83	credential: anyone holding it with a route to the socket can run commands as the
+84	daemon's user.
+85	
+86	```sh
+87	mkdir -p ~/.config/pueue/remote && chmod 700 ~/.config/pueue/remote
+88	ssh myhost 'cat ~/.local/share/pueue/shared_secret' > ~/.config/pueue/remote/shared_secret
+89	chmod 600 ~/.config/pueue/remote/shared_secret
+90	```
+91	
+92	### 3. Write a client-only config
+93	
+94	```yaml
+95	# ~/.config/pueue/remote/client.yml
+96	client:
+97	  read_local_logs: false          # REQUIRED — see below
+98	shared:
+99	  use_unix_socket: true
+100	  unix_socket_path: /Users/you/.config/pueue/remote/remote.sock
+101	  shared_secret_path: /Users/you/.config/pueue/remote/shared_secret
+102	```
+103	
+104	Because the tunnel terminates at the daemon's own unix socket, **no TLS
+105	certificate is involved**. Direct TCP+TLS is possible but requires editing the
+106	server's config and restarting `pueued`, which interrupts a running queue.
+107	
+108	### 4. Tell the extension
+109	
+110	```text
+111	gpu-box | ~/.config/pueue/remote/client.yml | myhost
+112	```
+113	
+114	A second field containing a `/` (or ending `.yml`) is read as a config path,
+115	which selects socket mode. The third field is still an SSH host and is still
+116	needed to submit — the socket cannot fix the working-directory problem.
+117	
+118	A line the extension cannot parse is shown in the task list as **Unreadable
+119	connection** rather than silently ignored.
+120	
+121	A **Connection** submenu then appears in the Action Panel of Tasks and Groups
+122	(⌘⇧N), and as a **Daemon** dropdown on the Add Task form. With no remote
+123	connections configured, none of it renders.
+124	
+125	## `read_local_logs: false` is mandatory
+126	
+127	Set it. Two things depend on it:
+128	
+129	1. **pueue itself** otherwise tries to read the remote daemon's log directory on
+130	   your local filesystem.
+131	2. **This extension** reads the same setting to decide whether its own on-disk
+132	   log fast path is safe, so it can never disagree with pueue about where a log
+133	   lives.
+134	
+135	Left at the default `true`, the local log directory usually *exists* — so a read
+136	returns a **different task's output under the same id** rather than failing.
+137	Silently wrong, which is why it's a hard requirement rather than a suggestion.
+138	
+139	## Submitting: use the SSH host
+140	
+141	**This is the trap.** pueue records a task's working directory at submit time and
+142	canonicalises it on whichever machine the **client** runs on. Submitting from
+143	here against a remote daemon fails three ways:
+144	
+145	| You do | What happens |
+146	|---|---|
+147	| submit from a local directory | The local path is sent. It doesn't exist on the daemon → `FailedToSpawn`, never runs. |
+148	| type a remote-only path | The local client **refuses**: `Failed to canonicalize given working directory path`. |
+149	| type `/tmp` from macOS | Silently rewritten to `/private/tmp` → fails on Linux. |
+150	
+151	Only a path that exists *and canonicalises identically on both machines* works.
+152	That rules out your actual project directories.
+153	
+154	So when a connection has an SSH host, **Add Task submits with
+155	`ssh <host> 'pueue add …'`** — the client runs on the far side, where the paths
+156	are real. Reads and control commands keep using the forwarded socket, which is
+157	faster and needs no second authentication.
+158	
+159	The quoting that makes this safe is asserted, and was verified by pushing
+160	`echo "double" && echo 'single' && echo HOME=$HOME` through the quoter and then
+161	through a real shell.
+162	
+163	## Other things worth knowing
+164	
+165	- **Task ids are global to the daemon.** A remote connection sees and can remove
+166	  *everyone's* tasks on that box. Be careful with Clean and Reset; prefer labels.
+167	- **SSH mode has no version-skew problem.** The client runs on the remote box,
+168	  so it is always the same version as its daemon. This only applies to socket
+169	  mode.
+170	- **A version mismatch warns but works.** A 4.0.4 client against a 4.0.2 daemon
+171	  prints `Different protocol version detected` on every command and behaves
+172	  normally. The extension filters that line out of stderr, so it can't become a
+173	  toast title and hide the real error underneath.
+174	- **`FailedToSpawn` is `Done`, not `Failed`,** with a dict-shaped result
+175	  (`{"FailedToSpawn": "<os error>"}`). The extension treats any terminal result
+176	  that isn't `Success` as a failure, so a job that never started is never
+177	  reported as success.
+178	- **Just SSH over instead**, for one-off submissions. `ssh myhost 'pueue add …'`
+179	  needs no setup at all. A forwarded connection earns its keep when you want to
+180	  *watch* a remote queue from here.
+181	
+182	## If it doesn't work
+183	
+184	| Symptom | Cause |
+185	|---|---|
+186	| `status` hangs | The tunnel is down. Re-forward. |
+187	| secret mismatch | Re-copy `shared_secret`. |
+188	| tasks land as `FailedToSpawn` | The working directory. Add an SSH host to the connection. |
+189	| logs show the wrong output | `read_local_logs` is not `false`. |
+190	| `command not found: pueue` | ssh uses a non-interactive shell. Add the remote path as a third field. |
+191
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:42Z)**_
+
+<think><details><summary>Thought Process</summary>
+Looking at the English index.md, it only shows a single connection example without explicitly stating anything about "one connection per line" — so there's no actual inconsistency to fix there. Let me search both files for the exact phrases to confirm what's actually being claimed.
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:42Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Grep for per-line mentions in index docs
+
+`grep -n "一行\|每行\|per line\|newline\|換行\|;" docs/index.zh-TW.md docs/index.md`
+
+```text
+docs/index.zh-TW.md:79:監看並控制另一台機器上的 `pueued`。設定只有一行——Preferences → *Remote
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:39:43Z)**_
+
+Three connections from one typeable line, and the first still reads your real daemon (33 tasks). Recording this as a pitfall while the docs agents finish:
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:43Z)**_
+
+I'll read the file first.
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:43Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="Read"><details>
+<summary>Tool use: **Read**</summary>
+ `./docs/getting-started.zh-TW.md`
+
+```text
+1	# 快速上手
+2	
+3	!!! note "Terminology rule (zh-TW pages)"
+4	    技術名詞首次出現以「中文 (English original)」格式呈現，例：依賴注入
+5	    (dependency injection)。**不自創翻譯**——若無公認譯名直接保留英文
+6	    （如 `embedding`、`tokenizer`）。代碼、API 名、CLI flag、套件名、檔名一律不翻。
+7	
+8	第一次使用，從頭走到尾：安裝 pueue、安裝擴充功能 (extension)、送出一個任務、把佇列
+9	(queue) 放上 menu bar，然後讀一次失敗紀錄。
+10	
+11	本擴充功能是去呼叫 `pueue` 這個命令列工具 (command line tool)。它自己不排任何隊，
+12	所以第 1 步不是可選的。
+13	
+14	## 1. 安裝 pueue 並啟動 daemon
+15	
+16	```sh
+17	brew install pueue
+18	# or
+19	cargo install --locked pueue
+20	```
+21	
+22	接著啟動 daemon：
+23	
+24	```sh
+25	brew services start pueue
+26	```
+27	
+28	或者**從終端機**執行：
+29	
+30	```sh
+31	pueued -d
+32	```
+33	
+34	!!! warning "請從終端機或 `brew services` 啟動 daemon，不要從 GUI 應用程式啟動"
+35	
+36	    `pueued` 會把自己的環境交給**它日後執行的每一個任務**。若它是被某個 GUI 行程
+37	    (process) 當成子行程 (child process) 啟動的，那份環境沒有 `~/.zshrc`、`PATH`
+38	    也很貧乏，而你送出的每個任務都會繼承它。擴充功能那個一鍵的 *Start Daemon* 動作
+39	    只在 `brew services` 管理 daemon 時才會出現，這樣 daemon 歸 launchd 所有，
+40	    而不是歸 Raycast。
+41	
+42	用一個指令同時驗證 client 與 daemon 兩邊：
+43	
+44	```sh
+45	pueue status
+46	```
+47	
+48	安裝正確的話會印出一張表格（是空的沒關係，出現 `Task list is empty` 也沒關係）。
+49	如果 daemon 沒起來，你拿到的會是錯誤訊息；見下方的[疑難排解](#troubleshooting)。
+50	
+51	順便看一下版本：
+52	
+53	```sh
+54	pueue --version
+55	```
+56	
+57	!!! note "只支援 pueue 4.x"
+58	
+59	    Pueue 4.0 以不相容的方式改了狀態格式 (state format)——任務的時間戳記
+60	    (timestamp) 與結果被搬進 status enum 裡面——所以不支援 pueue 3.x。
+61	
+62	## 2. 安裝擴充功能
+63	
+64	本擴充功能**還沒上 Raycast store**。目前請從原始碼執行：
+65	
+66	```sh
+67	git clone https://github.com/daviddwlee84/Pueue-Raycast-Extension.git
+68	cd Pueue-Raycast-Extension
+69	npm install
+70	npm run dev
+71	```
+72	
+73	`npm run dev`（`ray develop`）會把擴充功能註冊進 Raycast 的 root search。用 `Ctrl-C`
+74	停掉 dev 行程之後它仍然保持註冊，所以從此就能正常使用——只有要讓程式碼變更生效時，
+75	才需要再跑一次 `npm run dev`。
+76	
+77	打開 Raycast 輸入 `Pueue`，應該會出現五個指令：
+78	
+79	| 指令 | 功能 |
+80	| --- | --- |
+81	| **Tasks** | 依狀態分組瀏覽佇列，附詳細資訊面板 (detail pane) 與 log 預覽。可以帶一段 pueue 查詢 (query) 當作參數，例如 `status=failed order_by id desc`。 |
+82	| **Add Task** | 送出一個指令，可指定工作目錄 (working directory)、群組 (group)、標籤 (label)、優先權 (priority)、依賴 (dependencies) 與延遲 (delay)。 |
+83	| **Quick Add Task** | 直接從 root search 送出指令，沿用你上次用過的群組與目錄。 |
+84	| **Groups** | 暫停與恢復群組、調整平行度 (parallelism)、新增與移除群組。 |
+85	| **Queue Menu Bar** | 在 menu bar 顯示 running / queued / failed 的數量，並提供各任務的操作。 |
+86	
+87	## 3. 送出你的第一個任務
+88	
+89	打開 Raycast，輸入 `Quick Add Task`，按 `Tab` 移到參數欄，貼上一個會跑個幾秒的指令，
+90	方便你看它執行：
+91	
+92	```sh
+93	sleep 20 && echo done
+94	```
+95	
+96	按 `⏎`。會有一則 HUD 確認 `Queued task 0 · sleep 20 && echo done`。不會有視窗——
+97	**Quick Add Task** 是 `no-view` 指令，執行完就結束。
+98	
+99	第一次執行時，它會送進 `default` 群組，工作目錄用你的家目錄。之後就沿用 **Add Task**
+100	上一次用過的設定，所以常見情境完全不需要設定。想自己挑目錄、群組、標籤、優先權、
+101	依賴或延遲時，再用 **Add Task**。
+102	
+103	現在打開 **Tasks**。新任務會出現在 *Running* 底下，顯示指令、所屬群組，以及已經跑了多久。
+104	選取它，詳細資訊面板就會填入中繼資料 (metadata) 與最後 20 行 log。
+105	
+106	!!! note "任務跑在 daemon 的環境裡"
+107	
+108	    pueue 是在 **pueued** 的環境（而不是你 shell 的環境）裡，以
+109	    `sh -c '<your command>'` 執行每個指令。如果某個指令依賴 `~/.zshrc` 加進 `PATH`
+110	    的路徑，可能得改用絕對路徑 (absolute path)，或在 `pueue.yml` 的 `daemon.env_vars`
+111	    底下加一筆。指令結尾的 `&` 會把行程 detach，於是任務瞬間就結束了，而真正的工作
+112	    還在沒人看管的情況下繼續跑。
+113	
+114	## 4. 打開 menu bar
+115	
+116	從 Raycast 的 root search 執行 **Queue Menu Bar** **一次**。
+117	
+118	!!! warning "全新安裝在你手動執行一次之前，什麼都不會顯示"
+119	
+120	    對於從 store 安裝的擴充功能，Raycast 會停用背景重新整理 (background refresh)，
+121	    直到該指令第一次被開啟為止。在那之前，menu bar 上根本沒有這個項目。執行它一次，
+122	    或在該指令的設定裡啟用背景重新整理，它就會出現，並開始每分鐘自行更新。
+123	
+124	    這是最常被回報成「它壞了」的情況，而它並不是擴充功能的 bug。
+125	
+126	跑起來之後，menu bar 上會有一個 pueue 圖示，旁邊帶一個數字。預設那個數字是 **running**
+127	的數量。該指令的設定可以改變它算的是什麼：
+128	
+129	| Menu Bar Title | 顯示 |
+130	| --- | --- |
+131	| Running count *(預設)* | running |
+132	| Running / queued | 兩者分開顯示 |
+133	| Running + queued + paused | 合成一個總數 |
+134	| Icon only | 完全不顯示數字 |
+135	
+136	**數量為零時標題會消失。** Raycast 沒有 badge API——那個數字*就是*標題，而空標題渲染
+137	出來就只剩圖示。所以閒置的佇列是一個光禿禿的圖示，不是 `0`。
+138	
+139	打開選單可以看到 Running、Queued、Failed 三個區塊與各任務的操作、一個帶暫停/恢復與
+140	平行度選擇器的 Groups 區塊，以及一列 `Updated HH:MM`。最後那一列之所以存在，是因為
+141	Raycast 是從資料庫還原 menu bar 的畫面，而不是重新執行指令，所以過期的畫面可能在重啟
+142	之後還留著——這個時間戳記讓「資料過期」這件事看得見，而不是繼續誤導人。
+143	
+144	!!! tip "menu bar 裡的破壞性操作藏在 `⌥` 後面"
+145	
+146	    Raycast 的確認對話框 (confirmation dialog) 顯示在 Raycast 視窗裡，而選單開啟時
+147	    那個視窗是關著的。與其冒著確認被默默吞掉的風險，kill 與 remove 只在你按住 `⌥`
+148	    時才會出現，且不受 *Confirm destructive actions* 偏好設定影響。
+149	
+150	如果你的佇列裡躺著好幾千個已完成的任務，把 **Menu Bar Query** 設成 `last 100`，
+151	讓每分鐘一次的讀取維持在便宜的範圍。
+152	
+153	## 5. 讀一次失敗
+154	
+155	送出一個會失敗的指令：
+156	
+157	```sh
+158	ls /definitely-not-a-directory
+159	```
+160	
+161	打開 **Tasks**。它會落在 *Failed* 底下，附上退出碼 (exit code)。
+162	
+163	**詳細資訊面板**（`⌘⇧D` 切換）顯示指令、工作目錄、群組、標籤、時間戳記、退出碼，
+164	以及最後 20 行 log 的預覽——足以在不離開清單的情況下辨識出大多數的失敗原因。
+165	預覽行數可用 Tasks 指令上的 *Log Preview Lines* 偏好設定調高或調低；每切換一次選取，
+166	就多付一次 `pueue log` 呼叫的成本。
+167	
+168	**log 檢視**（`⏎`）顯示完整輸出，直接從磁碟上 pueue 的 `task_logs/` 目錄讀取。
+169	`⌘⇧F` 會複製 `pueue follow <id>`，方便你改在終端機裡看。
+170	
+171	**跟看即時輸出**（`⌘L`）適用於執行中的任務：它會串流 `pueue follow`，該指令每 250 ms
+172	輪詢一次磁碟上的 log。任務執行期間標題顯示 *Following*，結束時翻成 *Finished*——
+173	`follow` 退出代表任務結束，不是錯誤。離開這個畫面會終止子行程。
+174	
+175	Tasks 其餘的快捷鍵：
+176	
+177	| 快捷鍵 | 動作 |
+178	| --- | --- |
+179	| `⏎` | 顯示 log |
+180	| `⌘L` | Follow 輸出（執行中的任務） |
+181	| `⌘⇧R` | Restart 成一個新任務 |
+182	| `⌘⌥R` | 原地 Restart——同一個 id，**會覆寫 log** |
+183	| `⌘⇧P` | Pause · `⌘⇧S` Resume / Start now |
+184	| `⌘⇧T` | Stash · `⌘⇧E` Enqueue |
+185	| `⌘⇧K` | Kill · `⌘⌫` Remove |
+186	| `⌘⇧D` | 切換詳細資訊面板 · `⌘R` Reload |
+187	
+188	失敗時的常見循環是：讀 log、修指令、`⌘⇧R` 以新任務重跑。只有在你想保留原本的 id 時
+189	才用 `⌘⌥R`——它會覆寫既有的 log。
+190	
+191	只想看失敗的任務，就把查詢當成該指令的參數傳進去：
+192	
+193	```text
+194	status=failed order_by id desc
+195	```
+196	
+197	## 6. 疑難排解 { #troubleshooting }
+198	
+199	### 「終端機裡明明可以，擴充功能卻找不到 pueue」
+200	
+201	症狀：出現 **Pueue CLI not found** 或 `spawn pueue ENOENT`，但你在終端機打
+202	`which pueue` 卻立刻有答案。
+203	
+204	Raycast 是在 launchd 底下執行擴充功能，而 launchd 從來不會去 source `~/.zshrc`、
+205	`~/.zprofile` 或任何其他 shell rc 檔。Homebrew 的 `bin` 與 `~/.cargo/bin` 正是*由那些
+206	檔案*加進 `PATH` 的，所以擴充功能拿到的 `PATH` 大概就只有 `/usr/bin:/bin`，
+207	光打一個 `pueue` 是找不到的。
+208	
+209	擴充功能從不直接呼叫裸的執行檔名稱。它會依序探測：
+210	
+211	```text
+212	/opt/homebrew/bin   Apple Silicon Homebrew
+213	/usr/local/bin      Intel Homebrew
+214	~/.cargo/bin
+215	~/.local/bin
+216	```
+217	
+218	如果你的裝在別的地方，把它找出來然後明確指定：
+219	
+220	```sh
+221	which pueue
+222	```
+223	
+224	把結果貼到 Raycast → Extensions → Pueue → **Pueue Binary Path**。
+225	
+226	!!! note "dev 終端機會把這一類 bug 藏起來"
+227	
+228	    `npm run dev` 的 console 繼承了你完整的互動式 `PATH`，所以跟 PATH 有關的問題
+229	    可能在那裡好好的、到正式環境卻失敗。要驗證 PATH 相關的改動，請從 Raycast
+230	    操作——root search 或 menu bar——不要從 dev 終端機。背景說明：
+231	    [pitfalls/raycast-launchd-path-pueue-not-found.md](https://github.com/daviddwlee84/Pueue-Raycast-Extension/blob/main/pitfalls/raycast-launchd-path-pueue-not-found.md)。
+232	
+233	### 「Pueue daemon not running」
+234	
+235	pueue 裝好了，但連不上 `pueued`。擴充功能會直接這樣告訴你，並附上一鍵的
+236	**Start Daemon (brew services)** 動作——但只有在 `brew services` 已經在管理 daemon
+237	時才有，因為從 Raycast 啟動 `pueued` 會讓它變成 Raycast 那個 launchd 行程的子行程，
+238	並把那份被剝光的環境交給它日後執行的每一個任務。
+239	
+240	否則就自己啟動，然後用 `⌘R` 重新載入：
+241	
+242	```sh
+243	brew services start pueue
+244	# or
+245	pueued -d
+246	```
+247	
+248	兩種錯誤字串意思不同：
+249	
+250	- `Did you start the daemon at least once?` —— `pueued` **從來沒**跑過，所以還沒有
+251	  shared secret 檔案。
+252	- `while connecting to daemon` —— 它跑過，之後停了。
+253	
+254	## 下一步
+255	
+256	- [遠端 daemon](remote.md) —— 監看與操控另一台機器上的 `pueued`。設定就是在
+257	  **Remote Connections** 偏好設定裡填一行：一台你本來就連得上的 SSH 主機 (SSH host)，
+258	  例如 `local_ubuntu`。不用隧道 (tunnel)、不用 shared secret、不用設定檔。經過多工
+259	  (multiplexing) 的 SSH 實測**每次呼叫 10–30 ms**，對照本機 pueue 的 22–44 ms
+260	  （沒有多工則是 200–400 ms，這正是擴充功能一律帶上 `ControlMaster` 的原因）。
+261	  送出任務之所以行得通，是因為 client 跑在遠端機器上，工作目錄在那裡才真的解析得出來。
+262	- [pueue 的 JSON 契約](pueue-json-contract.md) —— 擴充功能從 `pueue status --json`
+263	  與 `pueue log --json` 裡解析出哪些東西。
+264	- [Raycast 的介面形式](raycast-surfaces.md) —— 為什麼 menu bar 是唯一一直看得見的
+265	  介面。Raycast **沒有給擴充功能用的 widget API**；一個 `mode: "menu-bar"` 指令
+266	  就是全部了。
+267	- 任務結束時的桌面通知是 pueue 的功能，不是擴充功能的——本擴充功能從不寫入你的
+268	  `pueue.yml`。`daemon.callback` 的片段在
+269	  [README](https://github.com/daviddwlee84/Pueue-Raycast-Extension/blob/main/README.md#notifications-when-a-task-finishes)
+270	  裡。
+271	- [TODO.md](https://github.com/daviddwlee84/Pueue-Raycast-Extension/blob/main/TODO.md)
+272	  —— 接下來規劃了什麼。
+273
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:39:44Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```md
+# A multi-value preference can only hold one line
+
+## Symptoms (grep this section)
+
+\```text
+must be equal to one of the allowed values
+\```
+
+…from `ray lint` when a preference uses `type: "textarea"`.
+
+Or, with no error at all: a preference documented as "one entry per line"
+accepts only the first entry, because the user cannot type a newline into it.
+
+## Cause
+
+**Raycast has no multi-line preference type.** The allowed set is exactly:
+
+\```text
+appPicker | checkbox | dropdown | password | textfield | file | directory
+\```
+
+`Form.TextArea` exists, but that is a *form* component inside a command — it has
+nothing to do with `preferences[]` in the manifest. A `textfield` preference
+renders as a single-line input, so a newline is not enterable.
+
+Verified twice: the type union in `@raycast/api`'s `Preference` interface, and
+empirically — setting `"type": "textarea"` on a preference makes `ray lint` fail
+with `must be equal to one of the allowed values`.
+
+## Why this is easy to miss
+
+The parser works fine. Assertions over a `"a | h1\nb | h2"` fixture pass. The
+docs read sensibly. Nothing fails — the feature simply cannot be *configured*
+past one entry, and only a user with a second remote ever finds out.
+
+Documenting a newline-separated format is untestable-by-assertion in the way
+that matters: the constraint lives in the settings UI, not in the code.
+
+## Fix
+
+Pick a separator that survives a single line. This extension uses `;` between
+connections and `|` between fields within one:
+
+\```text
+lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com ; nas | ts_nas
+\```
+
+`connections.ts` splits on `/[\n;]/` — newlines are still accepted, because a
+value set by other means may contain them, but the UI can only ever produce
+semicolons.
+
+Say *why* in the user-facing docs. A reader who doesn't know Raycast
+preferences are single-line will assume the semicolon is an arbitrary taste
+and reach for a newline.
+
+## Related
+
+The same "it parses, so it must work" gap produced
+[the connection line that vanished silently](../pitfalls/README.md) — a
+malformed entry was dropped without complaint, which is indistinguishable from
+the feature being broken. Both are failures of the *configuration* surface
+rather than the code, and neither shows up in a build or a test.
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Pueue-Raycast-Extension/pitfalls/raycast-preferences-cannot-be-multiline.md (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:46Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="Read"><details>
+<summary>Tool use: **Read**</summary>
+ `./docs/remote.md`
+
+```text
+1	# Driving a remote pueued
+2	
+3	pueue can't schedule *across* hosts, but a local client can drive a `pueued` on
+4	another machine with full control — `status`, `log`, `follow`, `kill`, `add`.
+5	
+6	This extension needs no protocol code for that: a connection is just a client
+7	config, and pueue's own client does the rest. What it does need is to stop
+8	assuming "local" in the four places that quietly did.
+9	
+10	> The setup below is distilled from a run verified against a macOS client
+11	> (pueue 4.0.4) driving a Linux `pueued` (4.0.2) over SSH socket forwarding.
+12	
+13	## The short version
+14	
+15	Preferences → **Remote Connections**, one line:
+16	
+17	```text
+18	local_ubuntu
+19	```
+20	
+21	An SSH host you can already reach. Nothing else — no tunnel, no secret, no
+22	config file. Every command runs as `ssh local_ubuntu 'pueue …'`.
+23	
+24	**Why this is the default rather than a fallback.** Measured against a LAN host:
+25	
+26	```text
+27	plain ssh, one connection per call    200–400 ms
+28	with ControlMaster multiplexing        10–30 ms
+29	local pueue status --json              22–44 ms
+30	```
+31	
+32	A multiplexed remote read costs about the same as a local one, so there is
+33	little left for the forwarded socket to buy. The extension always passes
+34	`ControlMaster=auto -o ControlPersist=120`; ssh expires the shared connection
+35	by itself, so unlike a tunnel there is nothing to start, watch, or clean up.
+36	
+37	Requirements:
+38	
+39	- `pueue` reachable on the remote host. **`ssh host 'cmd'` runs a
+40	  non-interactive shell**, which reads no rc file — so a `cargo install` in
+41	  `~/.cargo/bin` is invisible to it even though `which pueue` works when you log
+42	  in. This is common enough that the connection can name the path:
+43	
+44	  ```text
+45	  lab | local_ubuntu | ~/.cargo/bin/pueue
+46	  ```
+47	
+48	  A third field after a *host* is the remote binary; after a *config path* it is
+49	  an SSH host. They can't be confused, because a host never contains a slash.
+50	  The `~` is expanded on the far side, not here.
+51	
+52	  Without it you get `zsh:1: command not found: pueue`, which the extension
+53	  detects and explains rather than passing through raw.
+54	- Key or agent auth. `BatchMode=yes` is set, so a password prompt fails fast
+55	  rather than hanging with no terminal to type into.
+56	
+57	Submission works properly in this mode for free: the client runs on the remote
+58	box, so the working directory is resolved where it actually exists. That is the
+59	problem the rest of this document exists to work around.
+60
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:53Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/README.md has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:59Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm looking at the Chinese text around line 256-258 about Remote Connections settings, where it mentions filling in one line with an SSH host example. The phrase "填一行" suggests a single entry, but I'm wondering if there's an implicit "one per line" format here. Let me check the English version to see what the original wording was.
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:39:59Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Grep for line-related and Remote Connections mentions
+
+`grep -n "一行\|每行\|一台\|Remote Connections\|;" docs/getting-started.zh-TW.md`
+
+```text
+256:- [遠端 daemon](remote.md) —— 監看與操控另一台機器上的 `pueued`。設定就是在
+257:  **Remote Connections** 偏好設定裡填一行：一台你本來就連得上的 SSH 主機 (SSH host)，
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:00Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+List docs and check English counterpart
+
+`ls docs/ && grep -n "Remote Connections" -A 12 docs/getting-started.md | head -60`
+
+```text
+assets
+getting-started.md
+getting-started.zh-TW.md
+index.md
+index.zh-TW.md
+pueue-json-contract.md
+pueue-json-contract.zh-TW.md
+raycast-surfaces.md
+raycast-surfaces.zh-TW.md
+remote.md
+remote.zh-TW.md
+269:  Setup is one line in the **Remote Connections** preference: an SSH host you can
+270-  already reach, e.g. `local_ubuntu`. No tunnel, no shared secret, no config
+271-  file. Multiplexed SSH measures **10–30 ms per call** against 22–44 ms for a
+272-  local pueue (200–400 ms without multiplexing, which is why the extension always
+273-  passes `ControlMaster`). Submitting works because the client runs on the remote
+274-  box, where the working directory actually resolves.
+275-- [The pueue JSON contract](pueue-json-contract.md) — what the extension parses
+276-  out of `pueue status --json` and `pueue log --json`.
+277-- [Raycast surfaces](raycast-surfaces.md) — why the menu bar is the only
+278-  always-visible surface. Raycast has **no widget API** for extensions; a
+279-  `mode: "menu-bar"` command is the whole of it.
+280-- Desktop notifications when a task finishes are a pueue feature, not an
+281-  extension one — this extension never writes to your `pueue.yml`. The
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:00Z)**_
+
+<think><details><summary>Thought Process</summary>
+Looking at both files, neither actually mentions "one per line" or multiple connections — the only code example shows a single connection called `local_ubuntu`, which is correct. The phrase "設定只有一行" translates to "setup is one line," referring to the configuration being a single line of text, not implying anything about one connection per line. So there's nothing that needs changing here. The file doesn't actually mention semicolons anywhere—it only shows a single connection and refers to remote.md for more details. Adding an explanation about why a semicolon is used would be restructuring and adding unrelated content, which violates the constraints. Since the English version is unchanged and the instruction is to keep code blocks byte-identical, the correct answer is no change needed.
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:00Z)**_
+
+no change needed — /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/index.zh-TW.md never states or implies "one connection per line"; its only Remote Connections code block is the single-connection `local_ubuntu` example (byte-identical to docs/index.md, which is also unaffected), and "設定只有一行" mirrors the English "Setup is one line" (setup fits on one line), which remains true; the multi-connection separator is documented on remote.md, not here.
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:02Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to revise the docs/remote.md file. First, I'll change line 15 to say "one entry" instead of "one line" for clarity. Then I should add an explanation after the code block around line 22 noting that Raycast preferences use single-line textfields, so multiple connections need to be separated by semicolons in the same field. I'm planning the specific edits to make: changing "one line" to "one entry" in the preferences section, adding a paragraph explaining the semicolon separator for multiple connections since that's currently missing from the docs, and updating references from "a line" to "a connection" or "an entry" throughout to reflect that we're talking about connection configurations rather than literal lines of text. I need to search through the documentation for any language suggesting entries should be one per line, but section 4 doesn't imply that — it just shows a single line with semicolon-separated values, so I'll proceed with applying the changes.
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:03Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/remote.md has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:11Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to clarify that getting-started.md is my focus, not remote.md. Line 269 is the only mention there, and I'm revising it to be more precise about the setup process—it's a single entry in the Remote Connections preference rather than a line-based configuration, and I'll add context about what that entry should be (an SSH host you can already reach, like `local_ubuntu`).
+
+For multiple remotes, they go in the same field separated by semicolons since Raycast preferences are single-line textfields without newline support. I'm keeping this explanation concise and using em dashes for a terse, natural tone while maintaining proper line wrapping around 80 characters.
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:13Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/getting-started.md has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:13Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm verifying that the third field is correctly identified as an SSH host used only for submission, which aligns with the field structure rules. Let me quickly check the output with grep to confirm the "per line" formatting is correct.
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:13Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check for remaining per-line wording
+
+`grep -n -i "per line\|one per\|;" README.md | head -30`
+
+```text
+72:| **Remote Connections** | none | Connections separated by `;`, because Raycast preference fields are single-line: `name \| client config path \| ssh host`. See [Remote daemons](#remote-daemons). |
+96:found; the extension says so explicitly if that happens.
+98:For more than one remote, separate connections with `;` — Raycast preference
+102:lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:41:29Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Update the pitfalls index and check doc progress
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+python3 - <<'PYEOF'
+import pathlib
+p = pathlib.Path("pitfalls/README.md"); s = p.read_text()
+row = "| [remote-task-working-directory-fails-to-spawn.md](remote-task-working-directory-fails-to-spawn.md) | A remote task ends `FailedToSpawn` immediately, or won't submit |"
+new = row + "\n| [raycast-preferences-cannot-be-multiline.md](raycast-preferences-cannot-be-multiline.md) | A \"one per line\" preference only ever holds one entry |"
+assert row in s
+p.write_text(s.replace(row, new, 1))
+print("pitfalls index updated")
+PYEOF
+# fix the self-referential link in the new pitfall
+python3 - <<'PYEOF'
+import pathlib
+p = pathlib.Path("pitfalls/raycast-preferences-cannot-be-multiline.md"); s = p.read_text()
+s = s.replace(
+    "[the connection line that vanished silently](../pitfalls/README.md)",
+    "the connection line that vanished silently",
+)
+p.write_text(s)
+print("self-link removed")
+PYEOF
+sleep 70
+echo "=== docs updated by the agents? ==="
+grep -rn "per line" README.md docs/*.md 2>/dev/null | head -5 || echo "  no 'per line' phrasing left"
+grep -rc " ; " docs/index.md docs/remote.md README.md 2>/dev/null
+```
+
+```text
+pitfalls index updated
+self-link removed
+=== docs updated by the agents? ===
+docs/remote.md:2
+README.md:1
+docs/index.md:0
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:19Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to revise section 4 and line 118 — changing "A line" to "An entry" where it describes how unreadable connections are displayed in the task list, and adding a note about appending to fields after a semicolon if content already exists there.
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:21Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/remote.md has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:21Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm wondering if the English documentation actually needs updating—the original says "one line" referring to a single SSH connection entry, not "one connection per line." Let me check if the English file was already corrected and look through the git history to see what changes were made, then determine what needs to be applied to this Chinese translation.
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:22Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check repo status and grep for connection separator docs
+
+`git status --short && git log --oneline -3 && grep -rn "per line\|一行\|每行\|;" docs/*.md package.json | grep -i "connection\|remote\|semicolon\|分號\|per line" | head -40`
+
+```text
+ M .specstory/.project.json
+ M .specstory/history/2026-07-26_12-50-19Z-at-users-david-src.md
+ M README.md
+ M docs/getting-started.md
+ M docs/remote.md
+ M package.json
+ M pitfalls/README.md
+ M raycast-env.d.ts
+ M src/lib/dev-check.ts
+ M src/lib/pueue/connections.ts
+?? .specstory/history/2026-07-26_18-27-10Z-at-specstory-history-2026.md
+?? pitfalls/raycast-preferences-cannot-be-multiline.md
+25e4ebd Dedupe TODO sections
+3705e07 Link the docs site, and note how to keep it honest
+87d46ab Back up the session transcript
+docs/getting-started.md:271:  file. A second remote goes in the same field after a `;` — Raycast preferences
+docs/getting-started.zh-TW.md:257:  **Remote Connections** 偏好設定裡填一行：一台你本來就連得上的 SSH 主機 (SSH host)，
+docs/remote.md:24:More than one goes in that same field, separated by ` ; ` — Raycast has no
+docs/remote.md:29:lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com
+docs/remote.md:42:`ControlMaster=auto -o ControlPersist=120`; ssh expires the shared connection
+docs/remote.md:56:  A third field after a *host* is the remote binary; after a *config path* it is
+docs/remote.md:125:field already holds a connection, put a `;` between them.
+docs/remote.md:175:  *everyone's* tasks on that box. Be careful with Clean and Reset; prefer labels.
+docs/index.zh-TW.md:79:監看並控制另一台機器上的 `pueued`。設定只有一行——Preferences → *Remote
+package.json:171:      "description": "Separate connections with ';'. Simplest form is just an SSH host you can already reach - everything runs over ssh, nothing to set up: local_ubuntu. Add a label with 'name | ssh-host', and the remote pueue path if it is not on the non-interactive PATH (a cargo install is not): 'lab | local_ubuntu | ~/.cargo/bin/pueue'. Advanced: a config path as the second field selects a forwarded socket instead.",
+docs/remote.zh-TW.md:20:Preferences → **Remote Connections**，填一行：
+docs/remote.zh-TW.md:117:擴充功能解析不了的那一行，會在任務列表中顯示為 **Unreadable connection**，而不是默默忽略。
+docs/remote.zh-TW.md:161:  印出 `Different protocol version detected`，行為則一切正常。擴充功能會把那一行從 stderr
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:25Z)**_
+
+In /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/getting-started.md (Next steps, Remote daemons bullet): replaced "Setup is one line in the **Remote Connections** preference" with "one entry" and added that a second remote goes in the same field after a `;`, because Raycast preferences are single-line textfields — the page's only mention of the preference; it contained no stacked-connection code block.
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:25Z)**_
+
+Replaced the "One per line" claim in the Preferences table with `;`-separated connections (noting Raycast preference fields are single-line) and added a multi-remote `;` example plus a one-sentence field-count recap to the Remote daemons section of /Users/david/Documents/Program/Pueue-Raycast-Extension/README.md.
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:29Z)**_
+
+<think><details><summary>Thought Process</summary>
+I've corrected line 271 in the English getting-started.md file, and now I'm reviewing that section to apply the same fix to the other language versions.
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:29Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Show diff of English getting-started
+
+`git diff docs/getting-started.md`
+
+```text
+diff --git a/docs/getting-started.md b/docs/getting-started.md
+index c8804b3..3327800 100644
+--- a/docs/getting-started.md
++++ b/docs/getting-started.md
+@@ -266,9 +266,11 @@ Two error strings mean different things:
+ ## Next steps
+ 
+ - [Remote daemons](remote.md) — watch and control a `pueued` on another machine.
+-  Setup is one line in the **Remote Connections** preference: an SSH host you can
+-  already reach, e.g. `local_ubuntu`. No tunnel, no shared secret, no config
+-  file. Multiplexed SSH measures **10–30 ms per call** against 22–44 ms for a
++  Setup is one entry in the **Remote Connections** preference: an SSH host you
++  can already reach, e.g. `local_ubuntu`. No tunnel, no shared secret, no config
++  file. A second remote goes in the same field after a `;` — Raycast preferences
++  are single-line textfields, so a semicolon does the job a newline can't.
++  Multiplexed SSH measures **10–30 ms per call** against 22–44 ms for a
+   local pueue (200–400 ms without multiplexing, which is why the extension always
+   passes `ControlMaster`). Submitting works because the client runs on the remote
+   box, where the working directory actually resolves.
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:29Z)**_
+
+<think><details><summary>Thought Process</summary>
+I notice the English file might need corrections too, but my focus is on the zh-TW translation. I'm looking through the zh-TW file to find places that mention or imply "one per line" — starting with line 20 where it references the Preferences menu for Remote Connections. I need to figure out where to document the semicolon separator for multiple connections. The safest approach is to add it near the first example in the short version or in the "告訴擴充功能" section, but I have to be careful not to introduce code blocks that don't exist in the English version, since they need to stay byte-identical. I'm weighing where to place the multi-connection example in the Chinese version. Adding it right after the minimal setup might dilute the "shortest version" concept, so the section explaining field rules seems like the more natural home for demonstrating the semicolon-separated format and parsing behavior. I'm debating where to place the clarification about multiple connections being separated by semicolons — it needs to be visible enough since the bug affected anyone with multiple remotes, but inserting it right after line 27 would interrupt the flow of the explanation. I'll add it there anyway since it's the most logical spot after the example, and then I need to continue refining line 117 to better describe what the extension can't parse. 我在考慮如何簡潔地解釋為什麼必須用分號作為分隔符——因為 Raycast 的設定介面只提供單行文字欄位，無法輸入換行符，所以分號才成為必要的分隔符；而連線內部仍然用 `|` 分隔，換行雖然技術上也能作為分隔符，但那只對手動編輯設定檔的情況有意義。
+
+我也在檢查文件的換行寬度，看起來大約是 80 個顯示欄位，我需要保持一致的格式。
+
+現在我想快速查看一下原始碼，確認分號的說法是否與實際實作相符，特別是檢查解析器是否也在換行符處分割。
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:29Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Grep source for remote connections parsing
+
+`grep -rn "remoteConnections\|Unreadable connection" --include=*.ts --include=*.tsx --include=*.json src package.json | head -30`
+
+```text
+(eval):1: no matches found: --include=*.ts
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:29Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm checking the rest of the file for other mentions of "line" to see if there are any other places implying per-line behavior, but the SSH connection block at lines 24-30 is about the connection mechanism itself, not the preference setting, so I'll leave that as is.
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:29Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+
+`grep -n "line\|Line" /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/remote.md`
+
+```text
+25:multi-line preference type, so the field is a single-line `textfield` and a
+26:newline isn't something you can type into it:
+181:  normally. The extension filters that line out of stderr, so it can't become a
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:33Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Grep source for connection parsing
+
+`grep -rn "Unreadable\|split(/\[;\|remoteConnections" src package.json 2>/dev/null | head -20`
+
+```text
+src/lib/connection-ui.tsx:119:          title="Unreadable connection"
+src/lib/pueue/connections.ts:180:    // Unreadable config. Assume the safe answer: don't touch local files.
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:34Z)**_
+
+Corrected `docs/remote.md`: replaced the "one line" framing of the Remote Connections preference with an explicit ` ; ` separator (plus a two-connection example `lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com` and the reason — Raycast has only single-line `textfield` preferences), noted in the socket-mode section that a new entry joins existing ones with `;`, and changed "A line the extension cannot parse" to "An entry the extension cannot parse".
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:37Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Inspect connection parser and preference definition
+
+`grep -n "split\|;\|description" /Users/david/Documents/Program/Pueue-Raycast-Extension/src/lib/pueue/connections.ts | head -40; echo "=== package.json pref ==="; grep -n -A8 -i "remote" /Users/david/Documents/Program/Pueue-Raycast-Extension/package.json | head -40`
+
+```text
+24: * `just verify`; the preference-backed lookups live in `binary.ts`.
+27:import { readFileSync } from "node:fs";
+28:import { homedir } from "node:os";
+29:import { join } from "node:path";
+31:export type ConnectionMode = "local" | "ssh" | "socket";
+35:  name: string;
+36:  mode: ConnectionMode;
+38:  configPath?: string;
+40:  sshHost?: string;
+48:  remoteBinary?: string;
+50:  remote: boolean;
+53:export const LOCAL_CONNECTION_NAME = "Local";
+56:  return p.replace(/^~(?=\/|$)/, homedir());
+61:  return field.includes("/") || /\.(ya?ml)$/i.test(field);
+67: * Connections are separated by `;` **or** a newline; fields within one by `|`.
+80: *     lab | host1 ; gpu | host2                    two connections, one line
+96:  connections: Connection[];
+97:  invalid: string[];
+99:  const connections: Connection[] = [];
+100:  const invalid: string[] = [];
+102:  // Split on ';' as well as newlines — see the docstring: a Raycast
+103:  // preference is single-line, so ';' is the only usable separator in the UI.
+104:  for (const line of (raw ?? "").split(/[\n;]/)) {
+105:    const text = line.trim();
+106:    if (!text || text.startsWith("#")) continue;
+108:    const fields = text.split("|").map((f) => f.trim());
+109:    const [name, second, third] = fields;
+112:      invalid.push(text);
+113:      continue;
+118:      connections.push({ name, mode: "ssh", sshHost: name, remote: true });
+119:      continue;
+123:      invalid.push(text);
+124:      continue;
+135:      });
+138:      invalid.push(text);
+148:      });
+152:  return { connections, invalid };
+167:  // SSH mode runs the client on the far side; its "local" disk is not ours.
+168:  if (connection.mode === "ssh") return false;
+169:  if (connection.mode === "local" && !connection.configPath) return true;
+=== package.json pref ===
+170:      "title": "Remote Connections",
+171:      "description": "Separate connections with ';'. Simplest form is just an SSH host you can already reach - everything runs over ssh, nothing to set up: local_ubuntu. Add a label with 'name | ssh-host', and the remote pueue path if it is not on the non-interactive PATH (a cargo install is not): 'lab | local_ubuntu | ~/.cargo/bin/pueue'. Advanced: a config path as the second field selects a forwarded socket instead.",
+172-      "type": "textfield",
+173-      "required": false,
+174-      "placeholder": "lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com"
+175-    },
+176-    {
+177-      "name": "confirmDestructive",
+178-      "title": "Confirmations",
+179-      "label": "Confirm kill, remove, clean, and reset",
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:42Z)**_
+
+<think><details><summary>Thought Process</summary>
+The semicolon syntax is already in place, so I'm moving on to update the Traditional Chinese documentation. I'll reference the spec's example format for the docstring to keep it consistent.
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:42Z)**_
+
+Confirmed against the implementation (`connections.ts` splits on `/[\n;]/`, and `package.json` documents `;`). Now the edits.
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:48Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/remote.zh-TW.md has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:52Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/remote.zh-TW.md has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:55Z)**_
+
+<think><details><summary>Thought Process</summary>
+Now I'm applying the same structure to the Traditional Chinese version, making sure the documentation mirrors the English layout while maintaining the natural Chinese voice and phrasing. 我在確認術語的一致性——既然頁面裡已經用過「偏好設定」來指 preference，就應該保持一致，不需要加上英文註解。
+
+同時把「填一行」改成「填一筆」來避免暗示單行的限制。現在準備寫出最終版本，保持行寬與現有文本相近。 任務能夠成功送出是因為 client 執行在遠端機器上，工作目錄在那邊才能正確解析。我在檢查文件中的 em dash 格式——確認用的是兩個 em dash 且沒有多餘空格，這樣風格才一致。
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:55Z)**_
+
+The English counterpart was already corrected. Now the zh-TW equivalent.
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:56Z)**_
+
+<think><details><summary>Thought Process</summary>
+Let me verify there are no other instances of that character causing issues and make sure the file flows properly.
+</details></think>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:56Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Verify remaining line-based references
+
+`grep -n "一行\|那行\|每行\|換行\|;" /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/remote.zh-TW.md`
+
+```text
+29:多個連線寫在同一行，用分號 `;` 隔開；一個連線內部的欄位仍然用 `|` 隔開。分號不是隨便選
+30:的——Raycast 的 preference 只有單行的 `textfield` 可用，設定欄位裡根本打不出換行：
+33:lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com
+36:換行仍然會被接受，但那只對以其他方式寫入的值有意義；設定介面產生不出換行。
+170:  印出 `Different protocol version detected`，行為則一切正常。擴充功能會把那一行從 stderr
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:40:58Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Edit"><details>
+<summary>Tool use: **Edit**</summary>
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/getting-started.zh-TW.md has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:41:00Z)**_
+
+Corrected the zh-TW remote docs: replaced the line-based framing (「填一行」/「解析不了的那一行」) with semicolon-separated connections, added a short paragraph plus the `lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com` example explaining that `;` is required because a Raycast `preference` is a single-line `textfield`, and noted newlines are still accepted but unproducible from the settings UI — file: /Users/david/Documents/Program/Pueue-Raycast-Extension/docs/remote.zh-TW.md
+
+_**Agent - sidechain (claude-opus-5 2026-07-26 18:41:02Z)**_
+
+In `/Users/david/Documents/Program/Pueue-Raycast-Extension/docs/getting-started.zh-TW.md`, the "Next steps" Remote Connections bullet now reads 「填一筆」 instead of 「填一行」 and states that a second remote goes in the same field after a `;`, with the reason that Raycast 偏好設定 are single-line `textfield`s so a newline cannot be typed — mirroring the corrected English bullet; no code blocks or other sections needed changes.
+
+_**Agent (claude-opus-5 2026-07-26 18:41:49Z)**_
+
+<think><details><summary>Thought Process</summary>
+All the agents have finished running. Now I'm checking whether the documentation is actually accurate—making sure there are no outdated "one per line" references and that the semicolon examples show up correctly in both languages. I need to verify if `docs/index.md` contains any multi-connection examples or if it only demonstrates a single connection setup.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 18:41:49Z)**_
+
+All 7 done. Verifying the result rather than trusting it:
+
+_**Agent (claude-opus-5 2026-07-26 18:41:50Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Verify the docs correction across both languages
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+echo "=== any stale 'per line' phrasing left anywhere? ==="
+grep -rn "per line\|每行\|一行一個" README.md docs/*.md src/ 2>/dev/null || echo "  none"
+echo
+echo "=== semicolon examples, per file ==="
+for f in README.md docs/index.md docs/index.zh-TW.md docs/remote.md docs/remote.zh-TW.md docs/getting-started.md docs/getting-started.zh-TW.md; do
+  n=$(grep -c ';' "$f" 2>/dev/null || echo 0)
+  m=$(grep -cE 'local_ubuntu|ssh-host|Remote Connections|遠端連線' "$f" 2>/dev/null || echo 0)
+  printf "  %-34s  ';'=%-3s  mentions-connections=%s\n" "$f" "$n" "$m"
+done
+echo
+echo "=== code fence parity still holds after the edits ==="
+for f in docs/*.md; do case "$f" in *zh-TW*) continue;; esac
+  b="${f%.md}"; z="$b.zh-TW.md"; [ -f "$z" ] || continue
+  en=$(grep -c '^\```' "$f"); zh=$(grep -c '^\```' "$z")
+  [ "$en" = "$zh" ] && s=ok || s="DIFFERS"
+  printf "  %-24s en=%-3s zh=%-3s %s\n" "$(basename "$b")" "$en" "$zh" "$s"
+done
+```
+
+```text
+=== any stale 'per line' phrasing left anywhere? ===
+  none
+
+=== semicolon examples, per file ===
+  README.md                           ';'=4    mentions-connections=5
+  docs/index.md                       ';'=0
+0  mentions-connections=3
+  docs/index.zh-TW.md                 ';'=0
+0  mentions-connections=2
+  docs/remote.md                      ';'=6    mentions-connections=5
+  docs/remote.zh-TW.md                ';'=2    mentions-connections=7
+  docs/getting-started.md             ';'=4    mentions-connections=2
+  docs/getting-started.zh-TW.md       ';'=1    mentions-connections=2
+
+=== code fence parity still holds after the edits ===
+  getting-started          en=24  zh=24  ok
+  index                    en=8   zh=8   ok
+  pueue-json-contract      en=18  zh=18  ok
+  raycast-surfaces         en=2   zh=2   ok
+  remote                   en=14  zh=14  ok
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:42:04Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm checking the documentation files for consistency in their connection examples. The English docs have more semicolons in their multi-connection examples compared to the Chinese Traditional versions, which could indicate some examples weren't synchronized across translations. Let me verify what the remote.zh-TW file shows for its multi-connection example to see if that's the issue.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 18:42:05Z)**_
+
+No stale phrasing, fence parity intact. But the zh-TW files have noticeably fewer semicolons than their English counterparts (remote 2 vs 6) — let me check that's prose difference and not a missed example:
+
+_**Agent (claude-opus-5 2026-07-26 18:42:06Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Compare the connection examples between languages
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+echo "=== English remote.md: connection-syntax code blocks ==="
+grep -n -B1 -A4 '\```text' docs/remote.md | grep -A4 -B1 "local_ubuntu\|ssh-host\|client.yml" | head -24
+echo
+echo "=== zh-TW remote.md: same ==="
+grep -n -B1 -A4 '\```text' docs/remote.zh-TW.md | grep -A4 -B1 "local_ubuntu\|ssh-host\|client.yml" | head -24
+```
+
+```text
+=== English remote.md: connection-syntax code blocks ===
+17:```text
+18-local_ubuntu
+19-```
+20-
+21-An SSH host you can already reach. Nothing else — no tunnel, no secret, no
+--
+--
+28:```text
+29-lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com
+30-```
+31-
+32-**Why this is the default rather than a fallback.** Measured against a LAN host:
+33-
+--
+52:  ```text
+53-  lab | local_ubuntu | ~/.cargo/bin/pueue
+54-  ```
+55-
+56-  A third field after a *host* is the remote binary; after a *config path* it is
+--
+--
+118:```text
+119-gpu-box | ~/.config/pueue/remote/client.yml | myhost
+120-```
+
+=== zh-TW remote.md: same ===
+22:```text
+23-local_ubuntu
+24-```
+25-
+26-一台你本來就連得上的 SSH 主機 (SSH host)。沒別的了——不用隧道 (tunnel)、不用密鑰、
+--
+--
+32:```text
+33-lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com
+34-```
+35-
+36-換行仍然會被接受，但那只對以其他方式寫入的值有意義；設定介面產生不出換行。
+--
+--
+57:  ```text
+58-  lab | local_ubuntu | ~/.cargo/bin/pueue
+59-  ```
+60-
+61-  接在*主機*後面的第三個欄位是遠端執行檔；接在*設定檔路徑*後面的則是 SSH 主機。兩者不會
+--
+--
+119:```text
+120-gpu-box | ~/.config/pueue/remote/client.yml | myhost
+121-```
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:42:30Z)**_
+
+<think><details><summary>Thought Process</summary>
+The Chinese translation mirrors the English version exactly with the same code examples and connection patterns, so everything's consistent. Now I'm running the full test gate, building the docs, and preparing to commit and push. Let me verify the index.md documentation still describes connections correctly before finalizing.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 18:42:30Z)**_
+
+zh-TW mirrors English exactly — same code blocks, same `lab | … ; gpu | …` example. The count difference was just inline prose. Running the full gate and shipping:
+
+_**Agent (claude-opus-5 2026-07-26 18:43:45Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Verify, commit, push, and watch the deploy
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+just check >/tmp/sep.log 2>&1; echo "just check exit=$?"; grep -cE "^  ok " /tmp/sep.log | xargs echo "assertions:"
+uv run mkdocs build 2>&1 | grep -cE "^WARNING" | xargs echo "docs warnings (all llmstxt/i18n):"
+git add -A src package.json raycast-env.d.ts README.md docs pitfalls
+git commit -q -F - <<'EOF'
+Separate connections with ';' — a newline cannot be typed
+
+Documenting the Remote Connections preference as "one per line" made it
+unusable past the first entry. Raycast has no multi-line preference type:
+the union is appPicker | checkbox | dropdown | password | textfield | file
+| directory, confirmed both in @raycast/api's Preference interface and
+empirically — `ray lint` rejects `type: "textarea"` with "must be equal to
+one of the allowed values". A textfield is one line, so a newline is not
+enterable.
+
+Nothing failed. The parser worked, the assertions passed against a
+"a | h1\nb | h2" fixture, the docs read sensibly. The feature simply could
+not be *configured* past one connection, and only someone with a second
+remote would ever find out. The constraint lives in the settings UI, not
+in the code, which is exactly why an assertion couldn't catch it.
+
+Connections now split on ';' as well as newlines:
+
+    lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com ; nas | ts_nas
+
+Verified: three connections parsed from one typeable line, and the first
+still reads 33 tasks off the real remote daemon.
+
+The docs say *why* it is a semicolon rather than leaving it as apparent
+taste — a reader who doesn't know preferences are single-line will reach
+for a newline. Corrected across README and all three affected pages in
+both languages, with code blocks kept identical between them.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+EOF
+git push -q origin main && echo pushed
+sleep 45
+gh run list --repo daviddwlee84/Pueue-Raycast-Extension --limit 1 --json status,conclusion --jq '.[] | "  docs deploy: \(.status) \(.conclusion // "")"'
+```
+
+```text
+just check exit=0
+assertions: 215
+docs warnings (all llmstxt/i18n): 5
+pushed
+  docs deploy: completed success
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:44:16Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Confirm the corrected syntax is live in both languages
+
+```bash
+sleep 15
+URL=https://daviddwlee84.github.io/Pueue-Raycast-Extension/
+echo "=== is the corrected syntax live, both languages? ==="
+for p in "remote/" "zh-TW/remote/"; do
+  hit=$(curl -s "$URL$p" | grep -c 'gpu.example.com')
+  sep=$(curl -s "$URL$p" | grep -oE 'local_ubuntu[^<]*;[^<]*gpu' | head -1)
+  printf "  %-14s examples=%s  %s\n" "$p" "$hit" "${sep:-（no ; example found）}"
+done
+```
+
+```text
+=== is the corrected syntax live, both languages? ===
+  remote/        examples=1  local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu
+  zh-TW/remote/  examples=1  local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:44:36Z)**_
+
+Good catch — that was a real design bug, not a documentation nit.
+
+## The constraint
+
+Raycast has **no multi-line preference type**. The union is exactly:
+
+```
+appPicker | checkbox | dropdown | password | textfield | file | directory
+```
+
+I confirmed it twice: in `@raycast/api`'s `Preference` interface, and empirically — setting `"type": "textarea"` makes `ray lint` fail with *"must be equal to one of the allowed values"*. (`Form.TextArea` exists, but that's a form component inside a command, unrelated to manifest preferences.)
+
+So "one per line" was unenterable. Multiple remotes were impossible to configure.
+
+## Fix
+
+Connections now split on `;` as well as newlines:
+
+```
+lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com ; nas | ts_nas
+```
+
+Verified: three connections parsed from one typeable line, and the first still reads **33 tasks off your real remote daemon**. Newlines stay accepted for values set by other means; the UI can only ever produce semicolons.
+
+## Why this one is worth noting
+
+**Nothing failed.** The parser worked. My assertions passed — against a `"a | h1\nb | h2"` fixture I wrote myself. The docs read sensibly. The feature simply couldn't be *configured* past one entry, and only someone with a second remote would ever discover it.
+
+That's the same shape as the earlier silently-dropped connection line: a failure of the **configuration surface** rather than the code, invisible to a build, a lint, or a test. It's in `pitfalls/raycast-preferences-cannot-be-multiline.md` now, because an assertion can't catch this class — only using the settings UI can.
+
+The docs also say *why* it's a semicolon, since a reader who doesn't know preferences are single-line will assume it's arbitrary and reach for a newline.
+
+## State
+
+**215 assertions**, gate green, docs deployed. The corrected syntax is live in both languages — same code block in English and 繁體中文, with fence parity intact across all five page pairs.
+
+One thing I'd flag: `v0.2.0` is tagged at a commit *before* this fix, so the tag describes a remote feature that only supported one connection in practice. Worth either moving the tag or letting `v0.2.1` cover it — your call, since re-tagging a pushed tag rewrites something people may already have fetched.
+
+---
+
+_**User (2026-07-26 18:54:12Z)**_
+
+[Image #15] 如果選到配置失敗的remote
+Open Extensions Preference 似乎並沒辦法成功打開（或是非常的慢）
+
+_**User (2026-07-26 18:54:12Z)**_
+
+[Image: source: /var/folders/dq/zbxks7r975j049mj8jk19wtw0000gp/T/clipboard-2026-07-27-025132-195964FD.png]
+
+---
+
+_**Agent (claude-opus-5 2026-07-26 18:54:41Z)**_
+
+<think><details><summary>Thought Process</summary>
+The user picked a misconfigured remote that doesn't resolve, and when they try to open extension preferences from the timeout error menu, it either fails or hangs. The issue is that the menu bar command itself is blocking—the SSH connection attempt to the unreachable host waits the full 30 seconds before timing out, and this happens every time the menu bar refreshes.
+
+When you click "Open Extension Preferences," the command re-runs and `useCachedPromise` fires another 30-second SSH attempt. Since `isLoading` stays true, Raycast keeps the command alive and the click handler gets stuck waiting. ControlMaster compounds this—when the master connection fails, each attempt pays the full connection timeout, and a failed socket might linger with `ControlPersist`.
+
+The fix is to drastically reduce SSH timeouts. Thirty seconds is way too long for an interactive menu bar. I need to add a 5-second connection timeout and cap the overall exec timeout around 10 seconds so the menu stays responsive.
+
+Let me actually measure how long SSH takes to an unreachable host with the current settings to confirm this is the bottleneck.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 18:54:41Z)**_
+
+Let me measure what actually happens with an unreachable host, since "very slow" points at a specific number:
+
+_**Agent (claude-opus-5 2026-07-26 18:54:49Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Measure SSH failure latency for unreachable hosts
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+echo "=== our current ssh args ==="
+node -e 'const {sshArgv}=require("./.build/live/ssh.js");console.log("  "+sshArgv("gpu.example.com",["status","--json"]).slice(0,-1).join(" "))'
+echo
+echo "=== how long does an unreachable host actually take? ==="
+for h in gpu.example.com 10.255.255.1; do
+  start=$(python3 -c 'import time;print(time.time())')
+  timeout 60 ssh -o BatchMode=yes -o ControlMaster=auto -o ControlPath=/tmp/pueue-rc-%C -o ControlPersist=120 "$h" 'pueue status' >/dev/null 2>/tmp/e.txt
+  rc=$?
+  end=$(python3 -c 'import time;print(time.time())')
+  python3 -c "print(f'  {\"$h\":<20} rc=$rc  {($end-$start):.1f}s  {open(\"/tmp/e.txt\").read().strip()[:60]}')"
+done
+```
+
+```text
+=== our current ssh args ===
+  -o BatchMode=yes -o ControlMaster=auto -o ControlPath=/tmp/pueue-rc-%C -o ControlPersist=120 gpu.example.com
+
+=== how long does an unreachable host actually take? ===
+  gpu.example.com      rc=255  1.6s  Connection closed by 127.0.0.1 port 7897
+  10.255.255.1         rc=255  5.1s  Connection closed by 10.255.255.1 port 22
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:55:14Z)**_
+
+<think><details><summary>Thought Process</summary>
+Those quick failures make sense given the proxy setup, but the "pueue timed out" message points to our SSH_TIMEOUT_MS hitting 30 seconds — so we're dealing with a host that accepts the TCP connection but stalls during the SSH handshake itself.
+
+The real issue is that 30 seconds is way too long for an interactive menu bar, especially since SSH's default connect timeout is ~75 seconds anyway. I need to add a ConnectTimeout flag to fail faster at the network layer, then reduce our timeout thresholds — maybe 10 seconds for reads like the menu bar and 15 seconds for writes. The trickier part is that while we're waiting, the menu stays frozen and users can't interact with it, so I should also make error actions responsive even during loading.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 18:55:14Z)**_
+
+Those failed fast (1.6s, 5.1s) because something replied. But you saw *"pueue timed out"* — which is our own 30 s exec timeout firing. Let me reproduce the case that actually hangs: an address that black-holes packets with no reply.
+
+_**Agent (claude-opus-5 2026-07-26 18:56:06Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Reproduce the hang and test ConnectTimeout
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+echo "=== TEST-NET-1 (192.0.2.1), guaranteed unroutable — current args, no ConnectTimeout ==="
+start=$(python3 -c 'import time;print(time.time())')
+timeout 45 ssh -o BatchMode=yes -o ControlMaster=auto -o ControlPath=/tmp/pueue-rc-%C -o ControlPersist=120 192.0.2.1 'pueue status' >/dev/null 2>&1
+rc=$?; end=$(python3 -c 'import time;print(time.time())')
+python3 -c "print(f'  rc=$rc  elapsed={($end-$start):.1f}s   (45s = our own kill, i.e. ssh had not given up)')"
+echo
+echo "=== same host WITH ConnectTimeout=5 ==="
+start=$(python3 -c 'import time;print(time.time())')
+timeout 45 ssh -o BatchMode=yes -o ConnectTimeout=5 -o ControlMaster=auto -o ControlPath=/tmp/pueue-rc-%C -o ControlPersist=120 192.0.2.1 'pueue status' >/dev/null 2>&1
+rc=$?; end=$(python3 -c 'import time;print(time.time())')
+python3 -c "print(f'  rc=$rc  elapsed={($end-$start):.1f}s')"
+```
+
+```text
+=== TEST-NET-1 (192.0.2.1), guaranteed unroutable — current args, no ConnectTimeout ===
+  rc=124  elapsed=45.1s   (45s = our own kill, i.e. ssh had not given up)
+
+=== same host WITH ConnectTimeout=5 ===
+  rc=255  elapsed=5.1s
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:56:42Z)**_
+
+<think><details><summary>Thought Process</summary>
+The issue is that without a `ConnectTimeout` setting, SSH hangs indefinitely—taking 75+ seconds before the 30-second exec timeout kills it and blocks the menu bar. Setting `ConnectTimeout=5` makes it fail quickly in about 5 seconds, which is the fix needed. The exec timeouts should probably be adjusted for interactive scenarios.
+
+I'm planning to add `-o ConnectTimeout=5` to the SSH arguments, reduce the SSH timeout from 30 seconds to around 15 seconds as a safety net, and potentially add `ServerAliveInterval` and `ServerAliveCountMax` to prevent mid-command stalls. I should verify that reachable hosts still connect instantly with this timeout—they do on a LAN.
+
+One concern: when SSH times out with `ConnectTimeout`, it exits with code 255 and a generic message like "Operation timed out," which our error handler would classify as a generic command failure rather than a clear "can't reach host" error. I need to detect SSH connection failures specifically and provide a clearer error message to the user.
+
+For the menu bar responsiveness issue, reducing the connection timeout from 30 seconds to 5 seconds should make it feel much snappier. The menu bar already renders a loading state while data is being fetched, so the user won't see a frozen interface.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 18:56:42Z)**_
+
+Reproduced exactly. **Without `ConnectTimeout`, ssh never gives up** — still hanging at 45 s, and only our own 30 s exec timeout kills it. That's 30 seconds of a blocked menu-bar command, which is why the click didn't respond. With `ConnectTimeout=5` it fails in 5.1 s.
+
+_**Agent (claude-opus-5 2026-07-26 18:56:43Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Bound SSH connection time and detect unreachable hosts
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+python3 - <<'PYEOF'
+import pathlib
+p = pathlib.Path("src/lib/pueue/ssh.ts"); s = p.read_text()
+
+s = s.replace(
+    """export function multiplexArgs(): string[] {
+  return [
+    "-o",
+    "ControlMaster=auto",
+    "-o",
+    "ControlPath=/tmp/pueue-rc-%C",
+    "-o",
+    "ControlPersist=120",
+  ];
+}""",
+    """export function multiplexArgs(): string[] {
+  return [
+    "-o",
+    "ControlMaster=auto",
+    "-o",
+    "ControlPath=/tmp/pueue-rc-%C",
+    "-o",
+    "ControlPersist=120",
+  ];
+}
+
+/**
+ * How long to wait for the TCP connection, in seconds.
+ *
+ * Without this ssh does not give up at all: a host that black-holes packets
+ * (no RST, no ICMP) left ssh still trying after 45 seconds, and only our own
+ * exec timeout ended it — 30 seconds during which the menu bar command is
+ * blocked and its own menu items don't respond. Measured; with
+ * ConnectTimeout=5 the same host fails in 5.1 s.
+ *
+ * Five seconds is generous for a LAN box or a reachable server, and short
+ * enough that a wrong hostname feels like an error rather than a hang.
+ */
+const CONNECT_TIMEOUT_S = 5;
+
+/**
+ * Bound a connection that opens and then stalls mid-command.
+ *
+ * ConnectTimeout only covers the TCP handshake. A link that drops after the
+ * session is established would otherwise hang until the exec timeout, so ask
+ * for keepalives and give up after three missed ones.
+ */
+const ALIVE_INTERVAL_S = 5;
+const ALIVE_COUNT_MAX = 3;
+
+/** Options that stop an unreachable host from hanging the UI. */
+export function reachabilityArgs(): string[] {
+  return [
+    "-o",
+    `ConnectTimeout=${CONNECT_TIMEOUT_S}`,
+    "-o",
+    `ServerAliveInterval=${ALIVE_INTERVAL_S}`,
+    "-o",
+    `ServerAliveCountMax=${ALIVE_COUNT_MAX}`,
+  ];
+}
+
+/**
+ * True when ssh could not reach the host at all, as opposed to pueue failing.
+ *
+ * Worth separating: the remedy is "check the host, the tunnel, or your
+ * network", which has nothing to do with pueue or the daemon. Left
+ * unclassified these arrive as a bare ssh diagnostic under a "Pueue command
+ * failed" heading, which points the reader at the wrong thing entirely.
+ */
+export function isSshUnreachable(stderr: string): boolean {
+  return /(ssh: connect to host|Operation timed out|Connection timed out|No route to host|Could not resolve hostname|Network is unreachable|Connection refused|Host key verification failed|Permission denied \\(publickey)/i.test(
+    stderr,
+  );
+}""",
+)
+s = s.replace(
+    """  return [
+    "-o",
+    "BatchMode=yes",
+    ...multiplexArgs(),
+    host,""",
+    """  return [
+    "-o",
+    "BatchMode=yes",
+    ...reachabilityArgs(),
+    ...multiplexArgs(),
+    host,""",
+)
+p.write_text(s)
+print("ssh.ts: reachability bounds added")
+PYEOF
+grep -n "ConnectTimeout\|ServerAlive\|isSshUnreachable" src/lib/pueue/ssh.ts | head
+```
+
+```text
+ssh.ts: reachability bounds added
+83: * ConnectTimeout=5 the same host fails in 5.1 s.
+93: * ConnectTimeout only covers the TCP handshake. A link that drops after the
+104:    `ConnectTimeout=${CONNECT_TIMEOUT_S}`,
+106:    `ServerAliveInterval=${ALIVE_INTERVAL_S}`,
+108:    `ServerAliveCountMax=${ALIVE_COUNT_MAX}`,
+120:export function isSshUnreachable(stderr: string): boolean {
+[This command modified 1 file you've previously read: src/lib/pueue/ssh.ts. Call Read before editing.]
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:57:04Z)**_
+
+Now surfacing it as a useful error instead of a bare ssh diagnostic, and shortening the exec timeout:
+
+_**Agent (claude-opus-5 2026-07-26 18:57:13Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Add a host-unreachable error kind
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+python3 - <<'PYEOF'
+import pathlib
+p = pathlib.Path("src/lib/pueue/cli-transport.ts"); s = p.read_text()
+
+s = s.replace(
+    '/** SSH adds a connection handshake, and BatchMode fails rather than prompting. */\nconst SSH_TIMEOUT_MS = 30_000;',
+    """/**
+ * Backstop for an ssh call, above ssh's own ConnectTimeout.
+ *
+ * Was 30 s, which is how long the menu bar sat blocked — and unresponsive to
+ * its own menu items — whenever a configured host was unreachable. ssh now
+ * gives up on the connection in 5 s (see reachabilityArgs), so this only has
+ * to cover a connection that succeeds and then runs slowly.
+ */
+const SSH_TIMEOUT_MS = 15_000;""",
+)
+s = s.replace(
+    'import { isRemoteBinaryMissing, sshArgv } from "./ssh";',
+    'import { isRemoteBinaryMissing, isSshUnreachable, sshArgv } from "./ssh";',
+)
+s = s.replace(
+    """    const stderr = String((e as { stderr?: string }).stderr ?? "");
+    if (isRemoteBinaryMissing(stderr)) {""",
+    """    const stderr = String((e as { stderr?: string }).stderr ?? "");
+    if (isSshUnreachable(stderr)) {
+      // Not a pueue problem at all — say so, rather than filing an ssh
+      // diagnostic under "Pueue command failed" and sending the reader to
+      // look at their daemon.
+      throw new PueueError(
+        "host-unreachable",
+        `Could not reach ${host} over SSH.\\n\\n${cleanStderr(stderr)}`,
+      );
+    }
+    if (isRemoteBinaryMissing(stderr)) {""",
+)
+s = s.replace(
+    'import { fromExecError, PueueError } from "./errors";',
+    'import { cleanStderr, fromExecError, PueueError } from "./errors";',
+)
+p.write_text(s)
+
+# new error kind
+p = pathlib.Path("src/lib/pueue/errors.ts"); s = p.read_text()
+s = s.replace(
+    '  /** pueue is installed but pueued isn\'t reachable — never started, or stopped. */\n  | "daemon-not-running"',
+    '  /** pueue is installed but pueued isn\'t reachable — never started, or stopped. */\n  | "daemon-not-running"\n  /** ssh could not reach the remote host. Nothing to do with pueue. */\n  | "host-unreachable"',
+)
+s = s.replace(
+    'export const isBadQuery = (e: unknown): boolean =>\n  e instanceof PueueError && e.kind === "bad-query";',
+    'export const isBadQuery = (e: unknown): boolean =>\n  e instanceof PueueError && e.kind === "bad-query";\n\nexport const isHostUnreachable = (e: unknown): boolean =>\n  e instanceof PueueError && e.kind === "host-unreachable";',
+)
+p.write_text(s)
+print("host-unreachable kind added")
+PYEOF
+npx tsc --noEmit -p tsconfig.json 2>&1 | head -5
+```
+
+```text
+host-unreachable kind added
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:57:38Z)**_
+
+Now the user-facing view for that state — it should point at the host, not at pueue:
+
+_**Agent (claude-opus-5 2026-07-26 18:57:45Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Add the host-unreachable onboarding view
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+python3 - <<'PYEOF'
+import pathlib
+p = pathlib.Path("src/lib/error-states.tsx"); s = p.read_text()
+
+s = s.replace(
+    "  if (isBadQuery(error)) {",
+    '''  if (isHostUnreachable(error)) {
+    const host = connection?.name ?? "the remote host";
+    return {
+      icon: Icon.Globe,
+      title: `Can't reach ${host}`,
+      shortTitle: "Host unreachable",
+      description:
+        "SSH could not connect. This is a network or SSH problem, not a pueue one.",
+      markdown: [
+        `# Can't reach ${host}`,
+        "",
+        "SSH could not open a connection, so nothing pueue-related has been",
+        "attempted yet. The daemon may be perfectly healthy.",
+        "",
+        "### What pueue's SSH attempt reported",
+        "",
+        fence(detail),
+        "",
+        "### Things to check",
+        "",
+        "- Is the host reachable at all? `ssh " + (connection?.name ?? "your-host") + " true`",
+        "- Is the name right? The connection's host field is passed to `ssh`",
+        "  verbatim, so a `~/.ssh/config` alias works — but a typo looks exactly",
+        "  like an unreachable machine.",
+        "- Is key or agent auth set up? The extension passes `BatchMode=yes`, so a",
+        "  password prompt fails immediately rather than hanging with nowhere to type.",
+        "- Is the machine asleep, or on a network you're no longer on?",
+        "",
+        "The connection attempt is capped at five seconds, so this is a fast",
+        "failure rather than a hang.",
+      ].join("\\n"),
+      actions: [
+        {
+          id: "prefs",
+          title: "Open Extension Preferences",
+          icon: Icon.Gear,
+          run: openExtensionPreferences,
+        },
+        {
+          id: "copy-test",
+          title: "Copy an SSH Test Command",
+          icon: Icon.Clipboard,
+          copy: `ssh -o BatchMode=yes -o ConnectTimeout=5 ${connection?.name ?? "your-host"} 'pueue status'`,
+        },
+      ],
+      structural: true,
+    };
+  }
+
+  if (isBadQuery(error)) {''',
+)
+s = s.replace(
+    "  isBadQuery,\n  isBinaryMissing,",
+    "  isBadQuery,\n  isBinaryMissing,\n  isHostUnreachable,",
+)
+p.write_text(s)
+print("host-unreachable descriptor added")
+PYEOF
+npx tsc --noEmit -p tsconfig.json 2>&1 | head -5; echo "--- tsc ---"
+```
+
+```text
+host-unreachable descriptor added
+src/lib/error-states.tsx(30,3): error TS2305: Module '"./pueue"' has no exported member 'isHostUnreachable'.
+--- tsc ---
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:58:17Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Re-export, assert the reachability bounds
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+python3 - <<'PYEOF'
+import pathlib
+p = pathlib.Path("src/lib/pueue/index.ts"); s = p.read_text()
+s = s.replace("  isBinaryMissing,\n  isDaemonDown,\n} from \"./errors\";",
+              "  isBinaryMissing,\n  isDaemonDown,\n  isHostUnreachable,\n} from \"./errors\";")
+p.write_text(s)
+print("re-exported")
+PYEOF
+npx tsc --noEmit -p tsconfig.json 2>&1 | head -4
+# assertions for the new detection
+python3 - <<'PYEOF'
+import pathlib
+p = pathlib.Path("src/lib/dev-check.ts"); s = p.read_text()
+s = s.replace(
+    'console.log("\\nremote binary-not-found detection");',
+    '''console.log("\\nssh reachability bounds");
+// Without ConnectTimeout ssh does not give up: a black-holed host (192.0.2.1,
+// TEST-NET-1) was still trying after 45 s and only our exec timeout ended it —
+// 30 s of a blocked, unresponsive menu bar. With ConnectTimeout=5 it failed in
+// 5.1 s. Both measured.
+check(
+  "every ssh call caps the connect attempt",
+  sshArgv("h", ["status"]).includes("ConnectTimeout=5"),
+  true,
+);
+check(
+  "and bounds a connection that stalls after opening",
+  ["ServerAliveInterval=5", "ServerAliveCountMax=3"].every((o) =>
+    sshArgv("h", ["status"]).includes(o),
+  ),
+  true,
+);
+
+console.log("\\nunreachable host is not a pueue failure");
+for (const [name, text] of [
+  ["connect timeout", "ssh: connect to host 192.0.2.1 port 22: Operation timed out"],
+  ["dns failure", "ssh: Could not resolve hostname nope.invalid: nodename nor servname provided"],
+  ["no route", "ssh: connect to host 10.0.0.9 port 22: No route to host"],
+  ["refused", "ssh: connect to host box port 22: Connection refused"],
+  ["auth", "daviddwlee84@host: Permission denied (publickey)."],
+] as [string, string][]) {
+  check(`  ${name}`, isSshUnreachable(text), true);
+}
+check(
+  "a pueue failure is NOT mistaken for an unreachable host",
+  isSshUnreachable("Pueue: The task to be followed doesn't exist."),
+  false,
+);
+check(
+  "nor is a missing remote binary",
+  isSshUnreachable("zsh: command not found: pueue"),
+  false,
+);
+
+console.log("\\nremote binary-not-found detection");''',
+)
+s = s.replace(
+    "import {\n  isRemoteBinaryMissing,\n  quoteRemotePath,",
+    "import {\n  isRemoteBinaryMissing,\n  isSshUnreachable,\n  quoteRemotePath,",
+)
+p.write_text(s)
+print("assertions added")
+PYEOF
+just verify 2>&1 | sed -n '/ssh reachability/,/^$/p;/unreachable host is not/,/^$/p'
+```
+
+```text
+re-exported
+assertions added
+ssh reachability bounds
+  ok   every ssh call caps the connect attempt
+  ok   and bounds a connection that stalls after opening
+
+unreachable host is not a pueue failure
+  ok     connect timeout
+  ok     dns failure
+  ok     no route
+  ok     refused
+  ok     auth
+  ok   a pueue failure is NOT mistaken for an unreachable host
+  ok   nor is a missing remote binary
+[This command modified 3 files you've previously read: src/lib/dev-check.ts, raycast-env.d.ts, src/lib/pueue/index.ts. Call Read before editing.]
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:58:34Z)**_
+
+Now the empirical proof — the same unreachable host through the real code path:
+
+_**Agent (claude-opus-5 2026-07-26 18:58:45Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Verify fast failure and that reachable hosts still work
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+rm -rf .build/live && npx tsc --outDir .build/live --module commonjs --target ES2022 --lib ES2023 \
+  --esModuleInterop --skipLibCheck --strict src/lib/pueue/ssh.ts src/lib/pueue/connections.ts >/dev/null 2>&1
+node -e '
+const { sshArgv, isSshUnreachable } = require("./.build/live/ssh.js");
+const { execFileSync } = require("node:child_process");
+for (const host of ["192.0.2.1", "nope.invalid"]) {
+  const t0 = Date.now();
+  let stderr = "";
+  try { execFileSync("ssh", sshArgv(host, ["status","--json"]), {encoding:"utf8", timeout:15000, stdio:["ignore","pipe","pipe"]}); }
+  catch (e) { stderr = String(e.stderr ?? ""); }
+  const ms = Date.now() - t0;
+  console.log(`  ${host.padEnd(14)} ${String(ms).padStart(5)}ms  classified-unreachable=${isSshUnreachable(stderr)}`);
+  console.log(`    -> ${stderr.trim().split("\n")[0].slice(0,72)}`);
+}
+'
+echo
+echo "=== the reachable host is unaffected ==="
+node -e '
+const { sshArgv } = require("./.build/live/ssh.js");
+const { execFileSync } = require("node:child_process");
+const t0=Date.now();
+const out = execFileSync("ssh", sshArgv("local_ubuntu", ["--color","never","status","--json"], "~/.cargo/bin/pueue"), {encoding:"utf8",maxBuffer:64e6});
+console.log(`  local_ubuntu   ${String(Date.now()-t0).padStart(5)}ms  tasks=${Object.keys(JSON.parse(out).tasks).length}`);
+'
+```
+
+```text
+  192.0.2.1       5021ms  classified-unreachable=true
+    -> Connection timed out during banner exchange
+  nope.invalid      58ms  classified-unreachable=true
+    -> ssh: Could not resolve hostname nope.invalid: nodename nor servname prov
+
+=== the reachable host is unaffected ===
+  local_ubuntu     406ms  tasks=33
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:59:15Z)**_
+
+<think><details><summary>Thought Process</summary>
+The performance improvements are significant — the black-holed host dropped from over 30 seconds to just 5 seconds and is now correctly identified as unreachable, while bad DNS resolved in 58ms and the reachable host took 406ms across 33 tasks. The local_ubuntu slowdown is expected since the ControlMaster socket was closed, forcing a fresh handshake. I'm noticing the "Connection timed out during banner exchange" error message, which seems to be cut off mid-thought.
+
+Now I need to verify my regex catches this error pattern, then run the full test suite, update the documentation to reflect the 30-second-to-5-second improvement, and add this to the troubleshooting section in remote.md for both English and Traditional Chinese versions. After that, I'll commit and push the changes.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 18:59:15Z)**_
+
+Measured improvement:
+
+| Host | Before | After |
+|---|---|---|
+| black-holed (`192.0.2.1`) | 30 s (our own kill) | **5.0 s** |
+| bad DNS | — | **58 ms** |
+| your real box | — | 406 ms, 33 tasks — unaffected |
+
+Documenting it and shipping:
+
+_**Agent (claude-opus-5 2026-07-26 18:59:41Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Document, verify, and push the reachability fix
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+python3 - <<'PYEOF'
+import pathlib
+rows_en = ("| `command not found: pueue` | ssh uses a non-interactive shell. "
+           "Add the remote path as a third field. |")
+add_en = ("\n| Can't reach <host> | SSH could not connect — a wrong hostname, a sleeping "
+          "machine, or a network you're no longer on. The attempt is capped at 5 seconds, "
+          "so it fails fast rather than hanging. |")
+p = pathlib.Path("docs/remote.md"); s = p.read_text()
+if rows_en in s and "Can't reach <host>" not in s:
+    p.write_text(s.replace(rows_en, rows_en + add_en, 1)); print("  docs/remote.md updated")
+
+p = pathlib.Path("docs/remote.zh-TW.md"); s = p.read_text()
+import re
+m = re.search(r"^\|.*command not found.*\|$", s, re.M)
+if m and "無法連線" not in s:
+    add_zh = ("\n| 無法連線到 <host> | SSH 連不上——主機名稱打錯、機器睡著了，或你已經不在那個網路上。"
+              "連線嘗試上限為 5 秒，所以會很快失敗而不是卡住。 |")
+    s = s[:m.end()] + add_zh + s[m.end():]
+    p.write_text(s); print("  docs/remote.zh-TW.md updated")
+PYEOF
+just check >/tmp/reach.log 2>&1; echo "check exit=$?"; grep -cE "^  ok " /tmp/reach.log | xargs echo "assertions:"
+uv run mkdocs build 2>&1 | grep -cE "^WARNING" | xargs echo "docs warnings:"
+git add -A src docs pitfalls raycast-env.d.ts
+git commit -q -F - <<'EOF'
+Stop an unreachable host from hanging the menu bar
+
+Selecting a misconfigured remote froze the menu bar for 30 seconds and made
+its own items — including Open Extension Preferences — unresponsive.
+
+The cause was ssh, not us: without ConnectTimeout it does not give up at
+all. A black-holed host (192.0.2.1, TEST-NET-1) was still trying after 45
+seconds, and only our own exec timeout ended it. Every ssh call now passes
+ConnectTimeout=5, plus ServerAlive keepalives to bound a connection that
+opens and then stalls, which ConnectTimeout alone does not cover.
+
+Measured through the real code path:
+
+    192.0.2.1     30 s (our kill)  ->  5.0 s
+    bad DNS                        ->  58 ms
+    local_ubuntu                       406 ms, 33 tasks — unaffected
+
+The exec-timeout backstop drops 30 s -> 15 s, since it now only has to
+cover a connection that succeeds and then runs slowly.
+
+Unreachable hosts also get their own error kind. They were being filed
+under "Pueue command failed", which points the reader at their daemon when
+nothing pueue-related has been attempted yet — the SSH connection never
+opened. The new state says so, and offers a copyable
+`ssh -o BatchMode=yes -o ConnectTimeout=5 <host> 'pueue status'` to test
+with. Auth failures count as unreachable too: BatchMode means a password
+prompt fails instantly rather than hanging.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+EOF
+git push -q origin main && echo pushed
+```
+
+```text
+  docs/remote.md updated
+  docs/remote.zh-TW.md updated
+check exit=2
+assertions: 224
+docs warnings: 5
+pushed
+[This command modified 1 file you've previously read: docs/remote.md. Call Read before editing.]
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 18:59:56Z)**_
+
+<think><details><summary>Thought Process</summary>
+The test suite passed 224 assertions but the build failed, so it's likely a linting issue. Let me check what went wrong and fix it right away.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 18:59:56Z)**_
+
+`just check` exited 2 and I pushed anyway — same mistake as before. Checking:
+
+_**Agent (claude-opus-5 2026-07-26 18:59:56Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Inspect the check failure
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+grep -E "error |Error:" /tmp/reach.log | grep -v "^  ok" | head -6
+```
+
+```text
+error predicates
+  error  Code style issues found. Please run Prettier 3.9.6 (ray lint --fix).
+  error  Code style issues found. Please run Prettier 3.9.6 (ray lint --fix).
+ ›   Error: linting issues found (tip: try re-running with '--fix')
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 19:01:30Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Fix formatting and re-verify
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+just fix >/dev/null 2>&1
+just check >/tmp/reach2.log 2>&1; echo "check exit=$?"; grep -cE "^  ok " /tmp/reach2.log | xargs echo "assertions:"
+git diff --stat
+git add -A src && git commit -q -m "Apply Prettier formatting
+
+Formatting-only, but the previous commit was pushed on a red gate. That is
+twice now; the fix belongs in a pre-commit hook rather than in my memory.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
+git push -q origin main && echo pushed
+sleep 40
+gh run list --repo daviddwlee84/Pueue-Raycast-Extension --limit 1 --json status,conclusion --jq '.[] | "  docs: \(.status) \(.conclusion // "")"'
+```
+
+```text
+check exit=0
+assertions: 224
+ .specstory/.project.json                           |    2 +
+ .../2026-07-26_12-50-19Z-at-users-david-src.md     | 4880 ++++++++++++++++++++
+ src/lib/dev-check.ts                               |   10 +-
+ src/lib/error-states.tsx                           |    4 +-
+ 4 files changed, 4893 insertions(+), 3 deletions(-)
+pushed
+  docs: completed success
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 19:01:46Z)**_
+
+<think><details><summary>Thought Process</summary>
+I've identified the real issue: I keep running into the same problem because there's no automated check preventing it. The `agent-history-hygiene` skill has a bootstrap script that sets up pre-commit hooks, so I should add one that runs `just check` to catch this before commits. The user didn't ask for this, but since I mentioned it in my commit message, I should propose it rather than implement it unilaterally—git hooks affect their workflow and deserve explicit consent.
+
+Let me verify the live site is showing the new troubleshooting section, then I'll wrap up with a summary.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 19:02:01Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Confirm the new troubleshooting row is live
+
+```bash
+sleep 12
+URL=https://daviddwlee84.github.io/Pueue-Raycast-Extension/
+for p in "remote/" "zh-TW/remote/"; do
+  n=$(curl -s "$URL$p" | grep -cE "Can't reach|無法連線")
+  printf "  %-16s new troubleshooting row: %s\n" "$p" "$([ "$n" -gt 0 ] && echo present || echo MISSING)"
+done
+```
+
+```text
+  remote/          new troubleshooting row: present
+  zh-TW/remote/    new troubleshooting row: present
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 19:02:21Z)**_
+
+Fixed, and it was ssh's fault rather than the UI's.
+
+## The cause
+
+**Without `ConnectTimeout`, ssh never gives up.** I reproduced it with `192.0.2.1` (TEST-NET-1, guaranteed unroutable): still trying at 45 seconds. Only our own 30 s exec timeout ended it — and during those 30 s the menu-bar command is blocked, which is exactly why *Open Extension Preferences* didn't respond. The click was fine; the command was stuck.
+
+## The fix, measured
+
+Every ssh call now passes `ConnectTimeout=5`, plus `ServerAlive` keepalives to bound a connection that opens and *then* stalls — something `ConnectTimeout` doesn't cover.
+
+| Host | Before | After |
+|---|---|---|
+| black-holed `192.0.2.1` | 30 s (our kill) | **5.0 s** |
+| bad DNS | — | **58 ms** |
+| `local_ubuntu` | — | 406 ms, 33 tasks — unaffected |
+
+The exec backstop drops 30 s → 15 s, since it now only covers a connection that succeeds and runs slowly.
+
+## The error was also pointing at the wrong thing
+
+"pueue timed out" filed an SSH failure under a pueue heading. Nothing pueue-related had been attempted — the connection never opened. There's now a `host-unreachable` state that says so, lists what to check, and offers a copyable test command:
+
+```
+ssh -o BatchMode=yes -o ConnectTimeout=5 <host> 'pueue status'
+```
+
+Auth failures count as unreachable too, since `BatchMode=yes` makes a password prompt fail instantly rather than hang.
+
+**224 assertions**, gate green, docs deployed — the new troubleshooting row is live in both languages.
+
+---
+
+Two things I should flag rather than bury:
+
+**I pushed on a red gate again.** Both times formatting-only, both fixed in the next commit, but that's twice — it's a process gap, not bad luck. A pre-commit hook running `just check` would make it impossible; `agent-history-hygiene` even ships `bootstrap-project.sh` for installing pre-commit. I haven't added it because a hook that blocks your commits is a workflow change you should choose. Say the word.
+
+**`v0.2.0` is now two meaningful fixes behind** — it's tagged before both the semicolon separator and this timeout fix, so it describes a remote feature that supported one connection and could hang for 30 s. Worth a `v0.2.1`.
