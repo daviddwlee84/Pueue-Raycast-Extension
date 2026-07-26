@@ -36,9 +36,21 @@ by itself, so unlike a tunnel there is nothing to start, watch, or clean up.
 
 Requirements:
 
-- `pueue` on the remote host's **non-interactive** PATH. `ssh host 'cmd'` does
-  not read your shell rc, so a `~/.cargo/bin` install is invisible to it — the
-  extension detects this specifically and says so.
+- `pueue` reachable on the remote host. **`ssh host 'cmd'` runs a
+  non-interactive shell**, which reads no rc file — so a `cargo install` in
+  `~/.cargo/bin` is invisible to it even though `which pueue` works when you log
+  in. This is common enough that the connection can name the path:
+
+  ```text
+  lab | local_ubuntu | ~/.cargo/bin/pueue
+  ```
+
+  A third field after a *host* is the remote binary; after a *config path* it is
+  an SSH host. They can't be confused, because a host never contains a slash.
+  The `~` is expanded on the far side, not here.
+
+  Without it you get `zsh:1: command not found: pueue`, which the extension
+  detects and explains rather than passing through raw.
 - Key or agent auth. `BatchMode=yes` is set, so a password prompt fails fast
   rather than hanging with no terminal to type into.
 
@@ -152,6 +164,9 @@ through a real shell.
 
 - **Task ids are global to the daemon.** A remote connection sees and can remove
   *everyone's* tasks on that box. Be careful with Clean and Reset; prefer labels.
+- **SSH mode has no version-skew problem.** The client runs on the remote box,
+  so it is always the same version as its daemon. This only applies to socket
+  mode.
 - **A version mismatch warns but works.** A 4.0.4 client against a 4.0.2 daemon
   prints `Different protocol version detected` on every command and behaves
   normally. The extension filters that line out of stderr, so it can't become a
@@ -172,3 +187,4 @@ through a real shell.
 | secret mismatch | Re-copy `shared_secret`. |
 | tasks land as `FailedToSpawn` | The working directory. Add an SSH host to the connection. |
 | logs show the wrong output | `read_local_logs` is not `false`. |
+| `command not found: pueue` | ssh uses a non-interactive shell. Add the remote path as a third field. |

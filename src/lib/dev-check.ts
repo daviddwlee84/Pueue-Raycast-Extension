@@ -61,7 +61,12 @@ import {
   runsOverSsh,
   submitsOverSsh,
 } from "./pueue/connections";
-import { isRemoteBinaryMissing, shellQuote, sshArgv } from "./pueue/ssh";
+import {
+  isRemoteBinaryMissing,
+  quoteRemotePath,
+  shellQuote,
+  sshArgv,
+} from "./pueue/ssh";
 
 /**
  * The live `--help` check needs a real binary. binary.ts can't be imported here
@@ -797,6 +802,47 @@ check(
   "order is preserved",
   parse("a | h1\nb | h2").connections.map((c) => c.name),
   ["a", "b"],
+);
+
+check(
+  "host plus a path is the remote pueue binary, not a config",
+  parse("lab | local_ubuntu | ~/.cargo/bin/pueue").connections,
+  [
+    {
+      name: "lab",
+      mode: "ssh",
+      sshHost: "local_ubuntu",
+      remoteBinary: "~/.cargo/bin/pueue",
+      remote: true,
+    },
+  ],
+);
+check(
+  "a remote binary path is NOT expanded against our home directory",
+  parse("lab | h | ~/.cargo/bin/pueue").connections[0].remoteBinary,
+  "~/.cargo/bin/pueue",
+);
+check(
+  "host plus a non-path third field is still ambiguous",
+  parse("lab | h | nonsense").invalid.length,
+  1,
+);
+
+console.log("\nremote binary quoting — ~ must survive to the far side");
+check(
+  "a tilde becomes $HOME in double quotes, which the remote shell expands",
+  quoteRemotePath("~/.cargo/bin/pueue"),
+  '"$HOME/.cargo/bin/pueue"',
+);
+check(
+  "an absolute path is single-quoted like anything else",
+  quoteRemotePath("/usr/local/bin/pueue"),
+  "'/usr/local/bin/pueue'",
+);
+check(
+  "the full remote line, as verified against a real host",
+  sshArgv("h", ["status", "--json"], "~/.cargo/bin/pueue").at(-1),
+  `"$HOME/.cargo/bin/pueue" 'status' '--json'`,
 );
 
 console.log("\nwhich transport a connection uses");

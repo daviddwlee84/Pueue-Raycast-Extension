@@ -38,6 +38,14 @@ export interface Connection {
   configPath?: string;
   /** SSH destination — anything `ssh` accepts, including a ~/.ssh/config alias. */
   sshHost?: string;
+  /**
+   * Path to `pueue` on the remote host.
+   *
+   * Needed more often than you'd hope: `ssh host 'cmd'` runs a *non-interactive*
+   * shell, which reads no rc file, so a cargo install in ~/.cargo/bin is
+   * invisible even though `which pueue` works when you log in.
+   */
+  remoteBinary?: string;
   /** True for anything that isn't this machine's own daemon. */
   remote: boolean;
 }
@@ -56,14 +64,20 @@ function looksLikePath(field: string): boolean {
 /**
  * Parse the `connections` preference. One connection per line.
  *
- *     local_ubuntu                              ssh, host = the name itself
- *     gpu-box | gpu.example.com                 ssh
- *     gpu-box | ~/pueue/client.yml              socket
- *     gpu-box | ~/pueue/client.yml | gpu-host   socket for reads, ssh to submit
+ *     local_ubuntu                                 ssh, host = the name itself
+ *     lab | gpu.example.com                        ssh
+ *     lab | gpu.example.com | ~/.cargo/bin/pueue   ssh, explicit remote binary
+ *     lab | ~/pueue/client.yml                     socket
+ *     lab | ~/pueue/client.yml | gpu-host          socket for reads, ssh to submit
  *
  * The bare form is the point: the simplest thing a person can type — the SSH
  * host they already have in `~/.ssh/config` — is also a complete, working
- * configuration. Field two is told apart by whether it looks like a path.
+ * configuration.
+ *
+ * Field two is told apart by whether it looks like a path, and field three
+ * follows from that: after a config it is an SSH host, after a host it is the
+ * remote pueue binary. Both are unambiguous, because a host never contains a
+ * slash and a path always does.
  *
  * Blank lines and `#` comments are ignored so the field can be annotated.
  * Unparseable lines are returned as `invalid` rather than dropped, because
@@ -100,6 +114,7 @@ export function parseConnections(raw: string | undefined): {
     }
 
     if (looksLikePath(second)) {
+      // A config path — socket mode. Any third field is an SSH host for submits.
       connections.push({
         name,
         mode: "socket",
@@ -107,11 +122,19 @@ export function parseConnections(raw: string | undefined): {
         sshHost: third || undefined,
         remote: true,
       });
-    } else if (third) {
-      // Two non-path fields plus a third is ambiguous — say so rather than guess.
+    } else if (third && !looksLikePath(third)) {
+      // Host plus a non-path third field means nothing. Say so rather than guess.
       invalid.push(text);
     } else {
-      connections.push({ name, mode: "ssh", sshHost: second, remote: true });
+      connections.push({
+        name,
+        mode: "ssh",
+        sshHost: second,
+        // NOT expandTilde'd: this path lives on the *remote* filesystem, and
+        // expanding it against our home directory would be actively wrong.
+        remoteBinary: third || undefined,
+        remote: true,
+      });
     }
   }
 

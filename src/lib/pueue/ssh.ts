@@ -30,6 +30,20 @@ export function shellQuote(s: string): string {
   return `'${s.replaceAll("'", `'\\''`)}'`;
 }
 
+/**
+ * Quote a path that must be interpreted on the *remote* host.
+ *
+ * `~` and `$HOME` have to survive to the far side, and single quotes would kill
+ * both. Double quotes keep the expansion while still protecting spaces —
+ * verified against a real host, where `"$HOME/.cargo/bin/pueue" --version`
+ * answered correctly. Anything without a leading ~ or $ is quoted normally.
+ */
+export function quoteRemotePath(p: string): string {
+  if (p.startsWith("~/")) return `"$HOME/${p.slice(2)}"`;
+  if (p.startsWith("$")) return `"${p}"`;
+  return shellQuote(p);
+}
+
 /** Quote an argv into one command line for a remote shell. */
 export function shellJoin(argv: readonly string[]): string {
   return argv.map(shellQuote).join(" ");
@@ -69,18 +83,22 @@ export function multiplexArgs(): string[] {
 export function sshArgv(
   host: string,
   pueueArgv: readonly string[],
-  remoteBinary = "pueue",
+  remoteBinary?: string,
 ): string[] {
+  // Unqualified by default: the remote box's own PATH resolves it, and we
+  // cannot know where it lives there. But `ssh host 'cmd'` runs a
+  // *non-interactive* shell, which reads no rc file — so a cargo install in
+  // ~/.cargo/bin is invisible, and the connection can name the path instead.
+  const binary = remoteBinary
+    ? quoteRemotePath(remoteBinary)
+    : shellQuote("pueue");
+
   return [
     "-o",
     "BatchMode=yes",
     ...multiplexArgs(),
     host,
-    // Unqualified by default: the remote box's own PATH resolves it, and we
-    // cannot know where it lives there. Note that `ssh host 'cmd'` uses a
-    // non-interactive shell, so a cargo-installed pueue in ~/.cargo/bin will
-    // NOT be found — hence `remoteBinary`.
-    shellJoin([remoteBinary, ...pueueArgv]),
+    [binary, shellJoin(pueueArgv)].filter(Boolean).join(" "),
   ];
 }
 

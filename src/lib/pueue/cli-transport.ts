@@ -102,6 +102,7 @@ async function run(args: string[], o: RunOptions = {}): Promise<string> {
       timeout: o.timeout,
       maxBuffer: o.maxBuffer,
       signal: o.signal,
+      remoteBinary: connection.remoteBinary,
     });
   }
 
@@ -136,9 +137,14 @@ async function run(args: string[], o: RunOptions = {}): Promise<string> {
 async function runOverSsh(
   host: string,
   pueueArgs: readonly string[],
-  o: { timeout?: number; maxBuffer?: number; signal?: AbortSignal } = {},
+  o: {
+    timeout?: number;
+    maxBuffer?: number;
+    signal?: AbortSignal;
+    remoteBinary?: string;
+  } = {},
 ): Promise<string> {
-  const argv = sshArgv(host, pueueArgs);
+  const argv = sshArgv(host, pueueArgs, o.remoteBinary);
   try {
     const { stdout } = await pexecFile("ssh", argv, {
       timeout: o.timeout ?? SSH_TIMEOUT_MS,
@@ -254,7 +260,9 @@ export function createCliTransport(): PueueTransport {
       // connection that needs submission — and only submission — sent remotely.
       const stdout =
         submitsOverSsh(connection) && !runsOverSsh(connection)
-          ? await runOverSsh(connection.sshHost as string, argvFor(m))
+          ? await runOverSsh(connection.sshHost as string, argvFor(m), {
+              remoteBinary: connection.remoteBinary,
+            })
           : await run(argvFor(m), {
               timeout: WRITE_TIMEOUT_MS,
               connection,
@@ -280,7 +288,11 @@ export function createCliTransport(): PueueTransport {
         // ssh streams the remote pueue's stdout straight through, so a live
         // tail needs nothing special beyond the same multiplexed connection.
         bin = "ssh";
-        argv = sshArgv(connection.sshHost as string, followArgs);
+        argv = sshArgv(
+          connection.sshHost as string,
+          followArgs,
+          connection.remoteBinary,
+        );
       } else {
         try {
           bin = resolvePueue();
