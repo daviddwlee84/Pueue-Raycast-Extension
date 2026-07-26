@@ -6,12 +6,21 @@ shape isn't decided yet and there's a note in [`backlog/`](backlog/).
 ## Next
 
 - `[S]` **Screenshots for the store** — 5 at 2000×1250, captured with Raycast's
-  own *Save Screenshot* in dev mode so the chrome is right. The last unchecked
-  store requirement.
-- `[S]` **Interactive pass** — the paths that need a real keypress rather than a
-  deeplink: kill/restart from the Tasks action panel, the log and follow views,
-  the Add Task form, the Groups action panel, and clicking the menu bar item.
-  See the checklist at the end of the build notes.
+  **Window Capture** + "Save to Metadata". The last unchecked store requirement.
+  See [`metadata/README.md`](metadata/README.md).
+- `[S]` **Remaining interactive pass** — paths needing a real keypress rather
+  than a deeplink, not yet exercised: submitting the **Add Task** form, the
+  **Groups** action panel and its two confirmations, **Quick Add** from root
+  search, and firing an action from the **menu bar**.
+
+  Verified interactively already: `⌘⇧K` kill and `⌘⇧R` restart in the Tasks view
+  (the optimistic update holds through the reconcile — no flicker), `⏎` log view,
+  and `⌘L` live follow. The menu bar's rendering, title-at-zero, failure tint,
+  and self-refresh on its interval are verified too.
+- `[S]` **Verify remote against a real second machine** — the plumbing is
+  asserted and was exercised against a second client config, but never against
+  an actual remote `pueued` over a forwarded socket. See
+  [`docs/remote.md`](docs/remote.md).
 - `[S]` **`pueue send`** — a form to send input to a running task. Inherently
   best-effort: there is no way to know whether the process is reading stdin.
 - `[S]` **Dependency graph in the task detail** — render `dependencies[]` as

@@ -67,11 +67,37 @@ This is the single most likely "it's broken" report, and it isn't a bug in the e
 | --- | --- | --- |
 | **Pueue Binary Path** | auto-probe | Empty probes `/opt/homebrew/bin`, `/usr/local/bin`, `~/.cargo/bin`, `~/.local/bin`. |
 | **Pueue Config Path** | pueue's default | Passed as `--config`, and used to locate `task_logs/`. |
+| **Remote Connections** | none | One per line: `name \| client config path \| ssh host`. See [Remote daemons](#remote-daemons). |
 | **Confirm destructive actions** | on | Kill, remove, clean, and reset ask first. Menu bar destructive actions are always behind `⌥`. |
 
 ### "It works in my terminal but the extension can't find pueue"
 
 Raycast runs extensions under launchd, which never sources your shell rc — so Homebrew and `~/.cargo/bin` are **not** on its `PATH` even though they are in your terminal. The extension always invokes an absolute path and probes the directories above. If yours lives somewhere else, set **Pueue Binary Path**.
+
+## Remote daemons
+
+A local client can drive a `pueued` on another machine. Point a connection at a
+client config and it works — pueue's own client does the transport.
+
+```text
+Preferences → Remote Connections
+gpu-box | ~/.config/pueue/remote/client.yml | myhost
+```
+
+A **Connection** submenu then appears in Tasks and Groups (`⌘⇧N`), and as a
+**Daemon** dropdown on Add Task.
+
+Two requirements, both of which fail *silently* if you skip them:
+
+- **`client: read_local_logs: false`** in the remote config. Otherwise log reads
+  return a local task's output under the same id instead of failing.
+- **An SSH host on the connection**, if you want to submit tasks. pueue resolves
+  a task's working directory on whichever machine the client runs on, so
+  submitting from here lands the task in a directory that doesn't exist on the
+  daemon. With an SSH host, Add Task submits with `ssh host 'pueue add …'` and
+  the paths are resolved where they're real.
+
+Full setup, including SSH socket forwarding: **[docs/remote.md](docs/remote.md)**.
 
 ## Tasks inherit the daemon's environment
 

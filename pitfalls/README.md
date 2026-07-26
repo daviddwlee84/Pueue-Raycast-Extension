@@ -15,3 +15,4 @@ verbatim error text, so `grep -r` over this directory finds it.
 | [daemon-state-lags-one-poll-after-a-mutation.md](daemon-state-lags-one-poll-after-a-mutation.md) | A killed task flips back to Running, then to Done a moment later |
 | [ray-build-does-not-typecheck.md](ray-build-does-not-typecheck.md) | `ray build` succeeds on code `tsc` rejects |
 | [cached-list-renders-a-dead-queue-as-live.md](cached-list-renders-a-dead-queue-as-live.md) | Tasks shown as Running after the daemon stopped |
+| [remote-task-working-directory-fails-to-spawn.md](remote-task-working-directory-fails-to-spawn.md) | A remote task ends `FailedToSpawn` immediately, or won't submit |

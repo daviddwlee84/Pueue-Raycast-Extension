@@ -1,11 +1,18 @@
 # Store screenshots
 
-Raycast requires **3–6 PNGs at 2000×1250** here before publishing.
+Raycast requires **3–6 PNGs at 2000×1250** (16:10) here before publishing.
 
-Capture them with Raycast's own **Save Screenshot** action while the extension
-is running under `just dev` — open the command, then use the action from the
-Action Panel. It frames the window correctly and excludes the rest of your
-desktop, which a plain `screencapture` does not.
+Use Raycast's **Window Capture**, which writes correctly-sized files straight
+into this folder — don't use `screencapture`, which photographs your whole
+desktop.
+
+1. Give Window Capture a hotkey: Raycast Settings → Advanced → Window Capture
+   (the docs suggest `⌘⇧⌥M`), or set a hotkey on the **Capture Window** command.
+2. Open the extension command you want to shoot, under `just dev`.
+3. Press the hotkey, **tick "Save to Metadata"**, then click the camera button.
+
+The "Save to Metadata" option only appears when a `metadata` folder already
+exists — it does, because of this file.
 
 Suggested set:
 
