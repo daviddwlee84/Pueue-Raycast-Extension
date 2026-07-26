@@ -1,0 +1,76 @@
+# The extension gate, in CI.
+#
+# Until now `just check` and `just ci` were local-only and the single workflow in
+# this repo built the docs site. That meant nothing enforced `tsc --noEmit` on a
+# push — and `ray build` in its default dev environment does not typecheck, so an
+# ungated push could carry a type error to main and nobody would learn about it
+# until `ray build -e dist` at publish time.
+#
+# macOS runner on purpose: the toolchain is macOS-shaped (a menu-bar command,
+# `platforms: ["macOS"]`, Homebrew path probing) and the extension is not
+# expected to be exercised anywhere else.
+name: extension
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "assets/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "eslint.config.mjs"
+      - "raycast-env.d.ts"
+      - "Justfile"
+      - ".github/workflows/extension.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "assets/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "eslint.config.mjs"
+      - "raycast-env.d.ts"
+      - "Justfile"
+      - ".github/workflows/extension.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extension-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Raycast's runtime is Node 22. Building against a newer one would let
+          # an API through here that throws inside Raycast.
+          node-version: "22"
+          cache: npm
+
+      # `just` rather than inlining the four commands, so CI and the local gate
+      # cannot drift apart.
+      - name: Install just
+        run: brew install just
+
+      # ci, not install — this is also the proof that the committed lockfile
+      # still resolves from a clean checkout, which the store requires.
+      - name: Install dependencies
+        run: npm ci
+
+      # typecheck -> verify -> ray lint -> ray build
+      - name: Gate
+        run: just check
+
+      # The distribution build, which additionally runs tsc. Never exercised by
+      # `npm run build` (that is `ray build`, i.e. -e dev).
+      - name: Distribution build
+        run: just dist

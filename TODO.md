@@ -5,9 +5,16 @@ shape isn't decided yet and there's a note in [`backlog/`](backlog/).
 
 ## Next
 
-- `[S]` **Screenshots for the store** — 5 at 2000×1250, captured with Raycast's
-  **Window Capture** + "Save to Metadata". The last unchecked store requirement.
-  See [`metadata/README.md`](metadata/README.md).
+- `[S]` **Screenshots for the store** — the last unchecked store requirement, and
+  the only one that cannot be automated: Window Capture needs a GUI hotkey and a
+  ticked "Save to Metadata". Run `just shots`, which seeds the queue and walks
+  the four view commands by deeplink so all that is left is the keypress; the
+  menu bar shot is manual because a `menu-bar` command cannot be deeplinked.
+  Then `just preflight` to confirm 3–6 files at exactly 2000×1250. See
+  [`metadata/README.md`](metadata/README.md).
+- `[S]` **De-stale the "not on the store yet" copy** after publishing — it is in
+  both [`docs/getting-started.md`](docs/getting-started.md) and its zh-TW sibling,
+  and `fallback_to_default: true` will not surface the drift.
 - `[S]` **Remaining interactive pass** — paths needing a real keypress rather
   than a deeplink, not yet exercised: submitting the **Add Task** form, the
   **Groups** action panel and its two confirmations, **Quick Add** from root
