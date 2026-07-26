@@ -10,7 +10,43 @@ assuming "local" in the four places that quietly did.
 > The setup below is distilled from a run verified against a macOS client
 > (pueue 4.0.4) driving a Linux `pueued` (4.0.2) over SSH socket forwarding.
 
-## Setting it up
+## The short version
+
+Preferences → **Remote Connections**, one line:
+
+```text
+local_ubuntu
+```
+
+An SSH host you can already reach. Nothing else — no tunnel, no secret, no
+config file. Every command runs as `ssh local_ubuntu 'pueue …'`.
+
+**Why this is the default rather than a fallback.** Measured against a LAN host:
+
+```text
+plain ssh, one connection per call    200–400 ms
+with ControlMaster multiplexing        10–30 ms
+local pueue status --json              22–44 ms
+```
+
+A multiplexed remote read costs about the same as a local one, so there is
+little left for the forwarded socket to buy. The extension always passes
+`ControlMaster=auto -o ControlPersist=120`; ssh expires the shared connection
+by itself, so unlike a tunnel there is nothing to start, watch, or clean up.
+
+Requirements:
+
+- `pueue` on the remote host's **non-interactive** PATH. `ssh host 'cmd'` does
+  not read your shell rc, so a `~/.cargo/bin` install is invisible to it — the
+  extension detects this specifically and says so.
+- Key or agent auth. `BatchMode=yes` is set, so a password prompt fails fast
+  rather than hanging with no terminal to type into.
+
+Submission works properly in this mode for free: the client runs on the remote
+box, so the working directory is resolved where it actually exists. That is the
+problem the rest of this document exists to work around.
+
+## Advanced: reading through a forwarded socket
 
 ### 1. Forward the daemon's socket
 
@@ -59,14 +95,16 @@ server's config and restarting `pueued`, which interrupts a running queue.
 
 ### 4. Tell the extension
 
-Extension preferences → **Remote Connections**, one per line:
-
 ```text
 gpu-box | ~/.config/pueue/remote/client.yml | myhost
 ```
 
-The third field is an SSH destination and is optional — but see *Submitting*.
-Anything `ssh` accepts works, including a `~/.ssh/config` alias.
+A second field containing a `/` (or ending `.yml`) is read as a config path,
+which selects socket mode. The third field is still an SSH host and is still
+needed to submit — the socket cannot fix the working-directory problem.
+
+A line the extension cannot parse is shown in the task list as **Unreadable
+connection** rather than silently ignored.
 
 A **Connection** submenu then appears in the Action Panel of Tasks and Groups
 (⌘⇧N), and as a **Daemon** dropdown on the Add Task form. With no remote

@@ -128,11 +128,22 @@ export function connections(): Connection[] {
   return [
     {
       name: LOCAL_CONNECTION_NAME,
+      mode: "local",
       configPath: configPath(),
       remote: false,
     },
-    ...parseConnections(prefs().connections),
+    ...parseConnections(prefs().connections).connections,
   ];
+}
+
+/**
+ * Lines of the `connections` preference we could not parse.
+ *
+ * Surfaced in the UI rather than swallowed: a typed line that produces nothing
+ * and says nothing is indistinguishable from the feature being broken.
+ */
+export function invalidConnectionLines(): string[] {
+  return parseConnections(prefs().connections).invalid;
 }
 
 export function defaultConnection(): Connection {

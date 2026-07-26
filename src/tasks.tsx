@@ -40,6 +40,7 @@ import { ALL_GROUPS, GroupDropdown } from "./lib/group-dropdown";
 import {
   ConnectionBannerItem,
   ConnectionSubmenu,
+  InvalidConnectionItems,
   useConnection,
   type ConnectionState,
 } from "./lib/connection-ui";
@@ -204,7 +205,7 @@ export default function Command(
         />
       }
     >
-      {stale || conn.connection.remote ? (
+      {stale || conn.connection.remote || conn.invalid.length > 0 ? (
         <List.Section title="Connection">
           {stale ? (
             <StaleBannerItem
@@ -214,6 +215,7 @@ export default function Command(
             />
           ) : null}
           <ConnectionBannerItem state={conn} />
+          <InvalidConnectionItems state={conn} />
         </List.Section>
       ) : null}
       {tasks.length === 0 ? (

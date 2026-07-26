@@ -2,11 +2,15 @@
 
 ## [Remote Daemons] - {PR_MERGE_DATE}
 
-- Drive a `pueued` on another machine by pointing a connection at a client
-  config. A Connection submenu appears in Tasks and Groups, and a Daemon
-  dropdown on Add Task; nothing renders when no remote connection is configured.
-- Tasks are submitted over SSH when a connection has a host, because pueue
-  resolves a task's working directory on whichever machine the client runs on.
+- Watch and control a `pueued` on another machine. Setup is one line: an SSH
+  host you can already reach. No tunnel, no shared secret, no config file —
+  every command runs over ssh, multiplexed so a remote read costs about the same
+  as a local one. A forwarded-socket mode remains available for those already
+  maintaining a tunnel.
+- A Connection submenu appears in Tasks and Groups, and a Daemon dropdown on
+  Add Task; nothing renders when no remote connection is configured.
+- Tasks submit over SSH, because pueue resolves a task's working directory on
+  whichever machine the client runs on.
 - Log reads never touch local disk for a connection whose logs live elsewhere.
 - pueue's per-command protocol-version warning no longer masks real errors.
 

@@ -32,6 +32,7 @@ import { groupIcon } from "./lib/format";
 import {
   ConnectionBannerItem,
   ConnectionSubmenu,
+  InvalidConnectionItems,
   useConnection,
   type ConnectionState,
 } from "./lib/connection-ui";
@@ -113,7 +114,7 @@ export default function Command() {
       isLoading={groupState.isLoading || state.isLoading}
       searchBarPlaceholder={`Search ${entries.length} group${entries.length === 1 ? "" : "s"}…`}
     >
-      {stale || conn.connection.remote ? (
+      {stale || conn.connection.remote || conn.invalid.length > 0 ? (
         <List.Section title="Connection">
           {stale ? (
             <StaleBannerItem
@@ -123,6 +124,7 @@ export default function Command() {
             />
           ) : null}
           <ConnectionBannerItem state={conn} />
+          <InvalidConnectionItems state={conn} />
         </List.Section>
       ) : null}
 

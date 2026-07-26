@@ -7,12 +7,20 @@
  * nothing to switch between, so a local-only setup sees no new UI.
  */
 
-import { Action, ActionPanel, Color, Icon, List } from "@raycast/api";
+import {
+  Action,
+  ActionPanel,
+  Color,
+  Icon,
+  List,
+  openExtensionPreferences,
+} from "@raycast/api";
 import { useCachedState } from "@raycast/utils";
 
 import {
   connectionByName,
   connections,
+  invalidConnectionLines,
   LOCAL_CONNECTION_NAME,
   type Connection,
 } from "./pueue";
@@ -20,6 +28,8 @@ import {
 export interface ConnectionState {
   connection: Connection;
   all: Connection[];
+  /** Preference lines we couldn't parse. Shown rather than swallowed. */
+  invalid: string[];
   setName: (name: string) => void;
   /** True when there is more than one to choose from. */
   switchable: boolean;
@@ -38,6 +48,7 @@ export function useConnection(key = "connection.name"): ConnectionState {
   return {
     connection: connectionByName(name),
     all,
+    invalid: invalidConnectionLines(),
     setName,
     switchable: all.length > 1,
   };
@@ -82,6 +93,42 @@ export function ConnectionSubmenu({ state }: { state: ConnectionState }) {
  * the expensive mistake here — task ids are global to a daemon, so a `clean`
  * aimed at the wrong queue takes someone else's history with it.
  */
+/**
+ * A row for every connection line we couldn't parse.
+ *
+ * The alternative — the line silently producing nothing — is exactly how this
+ * feature first failed: a plausible-looking entry that just never appeared, with
+ * no way to tell a typo from a broken extension.
+ */
+export function InvalidConnectionItems({ state }: { state: ConnectionState }) {
+  return (
+    <>
+      {state.invalid.map((line) => (
+        <List.Item
+          key={line}
+          icon={{ source: Icon.Warning, tintColor: Color.Red }}
+          title="Unreadable connection"
+          subtitle={line}
+          accessories={[{ text: "check preferences" }]}
+          actions={
+            <ActionPanel>
+              <Action
+                title="Open Extension Preferences"
+                icon={Icon.Gear}
+                onAction={openExtensionPreferences}
+              />
+              <Action.CopyToClipboard
+                title="Copy the Expected Format"
+                content="myhost\nname | myhost\nname | ~/pueue/client.yml | myhost"
+              />
+            </ActionPanel>
+          }
+        />
+      ))}
+    </>
+  );
+}
+
 export function ConnectionBannerItem({ state }: { state: ConnectionState }) {
   const c = state.connection;
   if (!c.remote) return null;
@@ -89,7 +136,13 @@ export function ConnectionBannerItem({ state }: { state: ConnectionState }) {
     <List.Item
       icon={connectionIcon(c)}
       title={c.name}
-      subtitle={c.sshHost ? `submits via ssh ${c.sshHost}` : "remote daemon"}
+      subtitle={
+        c.mode === "ssh"
+          ? `everything over ssh ${c.sshHost}`
+          : c.sshHost
+            ? `socket · submits via ssh ${c.sshHost}`
+            : "socket · reads only, submitting will fail"
+      }
       accessories={[{ tag: { value: "remote", color: Color.Blue } }]}
       actions={
         <ActionPanel>

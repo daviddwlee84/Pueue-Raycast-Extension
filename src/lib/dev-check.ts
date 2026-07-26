@@ -55,8 +55,13 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { readLogTail } from "./pueue/logfile";
-import { parseConnections, readsLocalLogs } from "./pueue/connections";
-import { shellQuote, sshArgv } from "./pueue/ssh";
+import {
+  parseConnections,
+  readsLocalLogs,
+  runsOverSsh,
+  submitsOverSsh,
+} from "./pueue/connections";
+import { isRemoteBinaryMissing, shellQuote, sshArgv } from "./pueue/ssh";
 
 /**
  * The live `--help` check needs a real binary. binary.ts can't be imported here
@@ -725,62 +730,123 @@ check(
 );
 
 console.log("\nconnection parsing");
-check("empty means no remote connections", parseConnections(""), []);
-check("undefined is fine", parseConnections(undefined), []);
+const parse = (raw: string | undefined) => parseConnections(raw);
+
+check("empty means no connections", parse("").connections, []);
+check("undefined is fine", parse(undefined).connections, []);
 check(
-  "name | config | ssh host",
-  parseConnections(
-    "gpu-box | ~/.config/pueue/remote/client.yml | gpu.example.com",
-  ),
+  "a bare name is an ssh host that labels itself — the zero-setup form",
+  parse("local_ubuntu").connections,
   [
     {
-      name: "gpu-box",
-      configPath: `${homedir()}/.config/pueue/remote/client.yml`,
-      sshHost: "gpu.example.com",
+      name: "local_ubuntu",
+      mode: "ssh",
+      sshHost: "local_ubuntu",
+      remote: true,
+    },
+  ],
+);
+check("name | host is ssh mode", parse("gpu | gpu.example.com").connections, [
+  { name: "gpu", mode: "ssh", sshHost: "gpu.example.com", remote: true },
+]);
+check(
+  "a second field containing a slash is a config, so socket mode",
+  parse("gpu | ~/pueue/client.yml").connections[0].mode,
+  "socket",
+);
+check(
+  "and a bare .yml counts as a path too",
+  parse("gpu | client.yml").connections[0].mode,
+  "socket",
+);
+check(
+  "config plus host: socket for reads, ssh to submit",
+  parse("gpu | /tmp/c.yml | myhost").connections,
+  [
+    {
+      name: "gpu",
+      mode: "socket",
+      configPath: "/tmp/c.yml",
+      sshHost: "myhost",
       remote: true,
     },
   ],
 );
 check(
-  "the ssh host is optional",
-  parseConnections("laptop | /tmp/client.yml")[0].sshHost,
-  undefined,
+  "tilde is expanded",
+  parse("gpu | ~/c.yml").connections[0].configPath,
+  `${homedir()}/c.yml`,
 );
 check(
-  "blank lines and # comments are skipped",
-  parseConnections("\n# a comment\n\nbox | /tmp/c.yml\n").length,
+  "blank lines and # comments are skipped silently",
+  parse("\n# note\n\nbox | h\n").connections.length,
   1,
 );
 check(
-  "a line without a config path is ignored rather than half-parsed",
-  parseConnections("just-a-name"),
-  [],
+  "a malformed line is REPORTED, not dropped",
+  parse("gpu | not-a-path | also-not | extra").invalid,
+  ["gpu | not-a-path | also-not | extra"],
 );
 check(
-  "several connections, order preserved",
-  parseConnections("a | /tmp/a.yml\nb | /tmp/b.yml | h").map((c) => c.name),
+  "two non-path fields plus a third is ambiguous, so reported",
+  parse("gpu | hostish | third").invalid.length,
+  1,
+);
+check("an empty second field is reported", parse("gpu |").invalid, ["gpu |"]);
+check(
+  "order is preserved",
+  parse("a | h1\nb | h2").connections.map((c) => c.name),
   ["a", "b"],
+);
+
+console.log("\nwhich transport a connection uses");
+const localConn = {
+  name: "Local",
+  mode: "local" as const,
+  remote: false,
+};
+const sshConn = parse("box").connections[0];
+const socketConn = parse("box | /tmp/nope.yml").connections[0];
+const socketPlusSsh = parse("box | /tmp/nope.yml | h").connections[0];
+
+check("ssh mode runs everything over ssh", runsOverSsh(sshConn), true);
+check("socket mode does not", runsOverSsh(socketConn), false);
+check("local does not", runsOverSsh(localConn), false);
+check("ssh mode submits over ssh", submitsOverSsh(sshConn), true);
+check(
+  "a socket connection with a host submits over ssh but reads over the socket",
+  [submitsOverSsh(socketPlusSsh), runsOverSsh(socketPlusSsh)],
+  [true, false],
+);
+check(
+  "a socket connection without a host cannot fix the cwd problem",
+  submitsOverSsh(socketConn),
+  false,
 );
 
 console.log("\nlocal log reads are refused for anything remote");
 check(
   "a plain local connection reads local logs",
-  readsLocalLogs({ name: "Local", remote: false }),
+  readsLocalLogs(localConn),
   true,
 );
 check(
-  "an ssh-backed connection never does",
-  readsLocalLogs({
-    name: "gpu",
-    remote: true,
-    configPath: "/tmp/nope.yml",
-    sshHost: "h",
-  }),
+  "ssh mode never does — that disk is not ours",
+  readsLocalLogs(sshConn),
   false,
 );
 check(
-  "nor does a remote one whose config we cannot read",
-  readsLocalLogs({ name: "gpu", remote: true, configPath: "/tmp/nope.yml" }),
+  "nor does a socket connection whose config we cannot read",
+  readsLocalLogs(socketConn),
+  false,
+);
+
+console.log("\nremote binary-not-found detection");
+check("bash", isRemoteBinaryMissing("bash: pueue: command not found"), true);
+check("zsh", isRemoteBinaryMissing("zsh: command not found: pueue"), true);
+check(
+  "an unrelated failure is not mistaken for it",
+  isRemoteBinaryMissing("Pueue: The task to be followed doesn't exist."),
   false,
 );
 
@@ -799,8 +865,18 @@ check(
 );
 check(
   "the whole pueue command becomes one ssh argument",
-  sshArgv("myhost", ["add", "--", "echo hi"]),
-  ["-o", "BatchMode=yes", "myhost", "'pueue' 'add' '--' 'echo hi'"],
+  sshArgv("myhost", ["add", "--", "echo hi"]).at(-1),
+  "'pueue' 'add' '--' 'echo hi'",
+);
+check(
+  "and every call is multiplexed — 200-400 ms becomes 10-30 ms",
+  sshArgv("myhost", ["status"]).includes("ControlMaster=auto"),
+  true,
+);
+check(
+  "the control socket path is short enough for a unix socket",
+  sshArgv("myhost", ["status"]).some((a) => a.startsWith("ControlPath=/tmp/")),
+  true,
 );
 
 async function checkLogTail() {

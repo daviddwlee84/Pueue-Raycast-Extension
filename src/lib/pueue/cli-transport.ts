@@ -27,8 +27,13 @@ import {
   resolvePueue,
   taskLogPath,
 } from "./binary";
-import { readsLocalLogs, type Connection } from "./connections";
-import { sshArgv } from "./ssh";
+import {
+  readsLocalLogs,
+  runsOverSsh,
+  submitsOverSsh,
+  type Connection,
+} from "./connections";
+import { isRemoteBinaryMissing, sshArgv } from "./ssh";
 import { fromExecError, PueueError } from "./errors";
 import { readLogTail, type LogTail } from "./logfile";
 import type {
@@ -82,9 +87,24 @@ interface RunOptions {
   connection?: Connection;
 }
 
-/** Every subprocess call funnels through here so failures classify uniformly. */
+/**
+ * Every subprocess call funnels through here so failures classify uniformly.
+ *
+ * In ssh mode the *whole* command runs on the remote box — there is no local
+ * pueue involved at all, which is why nothing here resolves a local binary in
+ * that branch.
+ */
 async function run(args: string[], o: RunOptions = {}): Promise<string> {
   const connection = o.connection ?? defaultConnection();
+
+  if (runsOverSsh(connection)) {
+    return runOverSsh(connection.sshHost as string, args, {
+      timeout: o.timeout,
+      maxBuffer: o.maxBuffer,
+      signal: o.signal,
+    });
+  }
+
   const bin = resolvePueue();
   const argv = [...globalArgs(connection), ...args];
   try {
@@ -116,16 +136,27 @@ async function run(args: string[], o: RunOptions = {}): Promise<string> {
 async function runOverSsh(
   host: string,
   pueueArgs: readonly string[],
+  o: { timeout?: number; maxBuffer?: number; signal?: AbortSignal } = {},
 ): Promise<string> {
   const argv = sshArgv(host, pueueArgs);
   try {
     const { stdout } = await pexecFile("ssh", argv, {
-      timeout: SSH_TIMEOUT_MS,
-      maxBuffer: 1024 * 1024,
+      timeout: o.timeout ?? SSH_TIMEOUT_MS,
+      maxBuffer: o.maxBuffer ?? 1024 * 1024,
       env: baseEnv(),
+      signal: o.signal,
     });
     return stdout;
   } catch (e) {
+    const stderr = String((e as { stderr?: string }).stderr ?? "");
+    if (isRemoteBinaryMissing(stderr)) {
+      throw new PueueError(
+        "binary-not-found",
+        `pueue is not on ${host}'s PATH. Note that ssh runs a non-interactive ` +
+          "shell, so a cargo install in ~/.cargo/bin will not be found — " +
+          "install it system-wide, or add it to the non-interactive PATH.",
+      );
+    }
     throw fromExecError(e, ["ssh", ...argv]);
   }
 }
@@ -219,12 +250,15 @@ export function createCliTransport(): PueueTransport {
 
     async mutate(m: Mutation, o?: ConnectionOption): Promise<number | void> {
       const connection = connectionOf(o);
-      const stdout = connection.sshHost
-        ? await runOverSsh(connection.sshHost, argvFor(m))
-        : await run(argvFor(m), {
-            timeout: WRITE_TIMEOUT_MS,
-            connection,
-          });
+      // In ssh mode run() already goes over ssh; this branch is for a socket
+      // connection that needs submission — and only submission — sent remotely.
+      const stdout =
+        submitsOverSsh(connection) && !runsOverSsh(connection)
+          ? await runOverSsh(connection.sshHost as string, argvFor(m))
+          : await run(argvFor(m), {
+              timeout: WRITE_TIMEOUT_MS,
+              connection,
+            });
       if (m.op !== "add") return;
       // --print-task-id makes stdout just the integer.
       const id = Number.parseInt(stdout.trim(), 10);
@@ -238,27 +272,26 @@ export function createCliTransport(): PueueTransport {
       o?: ConnectionOption,
     ): () => void {
       const connection = connectionOf(o);
+      const followArgs = ["follow", String(id), "--lines", String(lines)];
+
       let bin: string;
-      try {
-        bin = resolvePueue();
-      } catch (e) {
-        h.onError(e as Error);
-        return () => {};
+      let argv: string[];
+      if (runsOverSsh(connection)) {
+        // ssh streams the remote pueue's stdout straight through, so a live
+        // tail needs nothing special beyond the same multiplexed connection.
+        bin = "ssh";
+        argv = sshArgv(connection.sshHost as string, followArgs);
+      } else {
+        try {
+          bin = resolvePueue();
+        } catch (e) {
+          h.onError(e as Error);
+          return () => {};
+        }
+        argv = [...globalArgs(connection), ...followArgs];
       }
 
-      const child = spawn(
-        bin,
-        [
-          ...globalArgs(connection),
-          "follow",
-          String(id),
-          "--lines",
-          String(lines),
-        ],
-        {
-          env: baseEnv(),
-        },
-      );
+      const child = spawn(bin, argv, { env: baseEnv() });
       let stderr = "";
 
       child.stdout?.setEncoding("utf8");
@@ -270,7 +303,7 @@ export function createCliTransport(): PueueTransport {
         // `follow` exits by itself when the task stops — that is completion,
         // not failure. Only a non-zero code (bad id) is an error.
         if (code && code !== 0)
-          h.onError(fromExecError({ code, stderr }, [bin, "follow"]));
+          h.onError(fromExecError({ code, stderr }, [bin, ...argv]));
         h.onDone(code);
       });
 

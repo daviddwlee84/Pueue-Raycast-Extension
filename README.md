@@ -76,28 +76,45 @@ Raycast runs extensions under launchd, which never sources your shell rc — so 
 
 ## Remote daemons
 
-A local client can drive a `pueued` on another machine. Point a connection at a
-client config and it works — pueue's own client does the transport.
+Watch and control a `pueued` on another machine. **Setup is one line** —
+Preferences → *Remote Connections*, an SSH host you can already reach:
 
 ```text
-Preferences → Remote Connections
-gpu-box | ~/.config/pueue/remote/client.yml | myhost
+local_ubuntu
 ```
 
+That's it. No tunnel to keep alive, no shared secret to copy, no config file.
+Every command runs as `ssh local_ubuntu 'pueue …'`, and SSH connection
+multiplexing keeps it fast — measured at **10–30 ms per call**, against 22–44 ms
+for a *local* pueue. (Without multiplexing it would be 200–400 ms, which is why
+the extension always passes `ControlMaster`.)
+
+The only requirement is that `pueue` is on that host's **non-interactive** PATH.
+`ssh host 'cmd'` doesn't read your shell rc, so a `~/.cargo/bin` install won't be
+found; the extension says so explicitly if that happens.
+
 A **Connection** submenu then appears in Tasks and Groups (`⌘⇧N`), and as a
-**Daemon** dropdown on Add Task.
+**Daemon** dropdown on Add Task. Submitting works properly too, because the
+client runs on the remote box — pueue resolves a task's working directory
+wherever the client is, which is the thing that makes naive remote submission
+fail.
 
-Two requirements, both of which fail *silently* if you skip them:
+<details>
+<summary>Advanced: reading through a forwarded socket</summary>
 
-- **`client: read_local_logs: false`** in the remote config. Otherwise log reads
-  return a local task's output under the same id instead of failing.
-- **An SSH host on the connection**, if you want to submit tasks. pueue resolves
-  a task's working directory on whichever machine the client runs on, so
-  submitting from here lands the task in a directory that doesn't exist on the
-  daemon. With an SSH host, Add Task submits with `ssh host 'pueue add …'` and
-  the paths are resolved where they're real.
+Marginally faster, but needs a tunnel kept alive, the daemon's shared secret
+copied over, and a client config written:
 
-Full setup, including SSH socket forwarding: **[docs/remote.md](docs/remote.md)**.
+```text
+gpu-box | ~/.config/pueue/remote/client.yml | gpu-host
+```
+
+The third field is still an SSH host, used only for submission. The config
+**must** set `client: read_local_logs: false`, or log reads return a *local*
+task's output under the same id instead of failing.
+
+Full setup: **[docs/remote.md](docs/remote.md)**.
+</details>
 
 ## Tasks inherit the daemon's environment
 

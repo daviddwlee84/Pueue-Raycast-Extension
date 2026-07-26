@@ -151,10 +151,10 @@
     {
       "name": "connections",
       "title": "Remote Connections",
-      "description": "One per line: name | client config path | ssh host (optional). The SSH host is used only to submit tasks, because pueue resolves a task's working directory on whichever machine the client runs on. Example: gpu-box | ~/.config/pueue/remote/client.yml | gpu.example.com",
+      "description": "One per line. Simplest form is just an SSH host you can already reach — everything runs over ssh, nothing to set up: \"local_ubuntu\". Or \"name | ssh-host\" to label it. Advanced: \"name | ~/pueue/client.yml | ssh-host\" reads through a forwarded socket and submits over ssh.",
       "type": "textfield",
       "required": false,
-      "placeholder": "gpu-box | ~/.config/pueue/remote/client.yml | gpu.example.com"
+      "placeholder": "local_ubuntu"
     },
     {
       "name": "confirmDestructive",

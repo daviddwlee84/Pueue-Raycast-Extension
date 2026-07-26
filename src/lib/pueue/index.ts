@@ -38,6 +38,7 @@ export {
   connectionByName,
   connections,
   defaultConnection,
+  invalidConnectionLines,
   isBrewManagedDaemon,
   pueueDirectory,
   resolveBrew,
