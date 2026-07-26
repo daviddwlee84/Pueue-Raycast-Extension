@@ -17,7 +17,7 @@ pueue 無法*跨主機*排程，但本機的 client 可以完整操控另一台�
 
 ## 最短版本
 
-Preferences → **Remote Connections**，填一行：
+Preferences → **Remote Connections**，填入：
 
 ```text
 local_ubuntu
@@ -25,6 +25,15 @@ local_ubuntu
 
 一台你本來就連得上的 SSH 主機 (SSH host)。沒別的了——不用隧道 (tunnel)、不用密鑰、
 不用設定檔。每個指令都以 `ssh local_ubuntu 'pueue …'` 執行。
+
+多個連線寫在同一行，用分號 `;` 隔開；一個連線內部的欄位仍然用 `|` 隔開。分號不是隨便選
+的——Raycast 的 preference 只有單行的 `textfield` 可用，設定欄位裡根本打不出換行：
+
+```text
+lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com
+```
+
+換行仍然會被接受，但那只對以其他方式寫入的值有意義；設定介面產生不出換行。
 
 **為什麼這是預設做法，而不是退路。** 對區域網路內的主機實測：
 
@@ -114,7 +123,7 @@ gpu-box | ~/.config/pueue/remote/client.yml | myhost
 第二個欄位如果含有 `/`（或以 `.yml` 結尾），會被視為設定檔路徑，也就選擇了 socket 模式。
 第三個欄位仍然是 SSH 主機，而且仍然必要——送出任務時，socket 解決不了工作目錄的問題。
 
-擴充功能解析不了的那一行，會在任務列表中顯示為 **Unreadable connection**，而不是默默忽略。
+擴充功能解析不了的那一段連線，會在任務列表中顯示為 **Unreadable connection**，而不是默默忽略。
 
 接著 Tasks 與 Groups 的 Action Panel 中會出現 **Connection** 子選單 (submenu)（⌘⇧N），
 Add Task 表單上則會出現 **Daemon** 下拉選單 (dropdown)。若沒有設定任何遠端連線，這些介面

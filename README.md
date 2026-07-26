@@ -69,7 +69,7 @@ This is the single most likely "it's broken" report, and it isn't a bug in the e
 | --- | --- | --- |
 | **Pueue Binary Path** | auto-probe | Empty probes `/opt/homebrew/bin`, `/usr/local/bin`, `~/.cargo/bin`, `~/.local/bin`. |
 | **Pueue Config Path** | pueue's default | Passed as `--config`, and used to locate `task_logs/`. |
-| **Remote Connections** | none | One per line: `name \| client config path \| ssh host`. See [Remote daemons](#remote-daemons). |
+| **Remote Connections** | none | Connections separated by `;`, because Raycast preference fields are single-line: `name \| client config path \| ssh host`. See [Remote daemons](#remote-daemons). |
 | **Confirm destructive actions** | on | Kill, remove, clean, and reset ask first. Menu bar destructive actions are always behind `⌥`. |
 
 ### "It works in my terminal but the extension can't find pueue"
@@ -94,6 +94,17 @@ the extension always passes `ControlMaster`.)
 The only requirement is that `pueue` is on that host's **non-interactive** PATH.
 `ssh host 'cmd'` doesn't read your shell rc, so a `~/.cargo/bin` install won't be
 found; the extension says so explicitly if that happens.
+
+For more than one remote, separate connections with `;` — Raycast preference
+fields are single-line, so a newline isn't something you can type into settings:
+
+```text
+lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com
+```
+
+Within a connection, `|` separates the fields: a lone field is an SSH host that
+doubles as its label, two are `name | ssh host`, and a third after a host is the
+**remote** pueue binary path.
 
 A **Connection** submenu then appears in Tasks and Groups (`⌘⇧N`), and as a
 **Daemon** dropdown on Add Task. Submitting works properly too, because the

@@ -266,9 +266,11 @@ Two error strings mean different things:
 ## Next steps
 
 - [Remote daemons](remote.md) — watch and control a `pueued` on another machine.
-  Setup is one line in the **Remote Connections** preference: an SSH host you can
-  already reach, e.g. `local_ubuntu`. No tunnel, no shared secret, no config
-  file. Multiplexed SSH measures **10–30 ms per call** against 22–44 ms for a
+  Setup is one entry in the **Remote Connections** preference: an SSH host you
+  can already reach, e.g. `local_ubuntu`. No tunnel, no shared secret, no config
+  file. A second remote goes in the same field after a `;` — Raycast preferences
+  are single-line textfields, so a semicolon does the job a newline can't.
+  Multiplexed SSH measures **10–30 ms per call** against 22–44 ms for a
   local pueue (200–400 ms without multiplexing, which is why the extension always
   passes `ControlMaster`). Submitting works because the client runs on the remote
   box, where the working directory actually resolves.

@@ -804,6 +804,47 @@ check(
   ["a", "b"],
 );
 
+// Raycast has no multi-line preference type — `ray lint` rejects anything
+// outside appPicker|checkbox|dropdown|password|textfield|file|directory — so a
+// newline cannot be typed into the settings field at all. ';' is the only
+// separator a user can actually enter, which makes these the load-bearing cases.
+check(
+  "';' separates connections, because a newline cannot be typed",
+  parse("lab | host1 ; gpu | host2").connections.map((c) => c.name),
+  ["lab", "gpu"],
+);
+check(
+  "whitespace around ';' is tolerated",
+  parse("lab|host1;gpu|host2").connections.map((c) => c.sshHost),
+  ["host1", "host2"],
+);
+check(
+  "';' mixes with newlines",
+  parse("a | h1 ; b | h2\nc | h3").connections.map((c) => c.name),
+  ["a", "b", "c"],
+);
+check(
+  "a trailing ';' does not create an empty connection",
+  parse("lab | host1 ;").connections.length,
+  1,
+);
+check(
+  "bare names separated by ';'",
+  parse("local_ubuntu ; gpu-box").connections.map((c) => c.sshHost),
+  ["local_ubuntu", "gpu-box"],
+);
+check(
+  "a full three-field record survives ';' splitting",
+  parse("lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | h2").connections[0],
+  {
+    name: "lab",
+    mode: "ssh",
+    sshHost: "local_ubuntu",
+    remoteBinary: "~/.cargo/bin/pueue",
+    remote: true,
+  },
+);
+
 check(
   "host plus a path is the remote pueue binary, not a config",
   parse("lab | local_ubuntu | ~/.cargo/bin/pueue").connections,

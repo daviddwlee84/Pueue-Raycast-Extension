@@ -62,13 +62,22 @@ function looksLikePath(field: string): boolean {
 }
 
 /**
- * Parse the `connections` preference. One connection per line.
+ * Parse the `connections` preference.
+ *
+ * Connections are separated by `;` **or** a newline; fields within one by `|`.
+ *
+ * The semicolon is not a stylistic choice. Raycast has no multi-line preference
+ * type — the union is appPicker | checkbox | dropdown | password | textfield |
+ * file | directory, and `ray lint` rejects anything else — so a `textfield` is
+ * the only option and there is no way to type a newline into it. Newlines are
+ * still accepted for anyone editing the stored value by other means.
  *
  *     local_ubuntu                                 ssh, host = the name itself
  *     lab | gpu.example.com                        ssh
  *     lab | gpu.example.com | ~/.cargo/bin/pueue   ssh, explicit remote binary
  *     lab | ~/pueue/client.yml                     socket
  *     lab | ~/pueue/client.yml | gpu-host          socket for reads, ssh to submit
+ *     lab | host1 ; gpu | host2                    two connections, one line
  *
  * The bare form is the point: the simplest thing a person can type — the SSH
  * host they already have in `~/.ssh/config` — is also a complete, working
@@ -90,7 +99,9 @@ export function parseConnections(raw: string | undefined): {
   const connections: Connection[] = [];
   const invalid: string[] = [];
 
-  for (const line of (raw ?? "").split(/\r?\n/)) {
+  // Split on ';' as well as newlines — see the docstring: a Raycast
+  // preference is single-line, so ';' is the only usable separator in the UI.
+  for (const line of (raw ?? "").split(/[\n;]/)) {
     const text = line.trim();
     if (!text || text.startsWith("#")) continue;
 

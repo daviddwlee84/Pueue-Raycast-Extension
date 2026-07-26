@@ -6,8 +6,13 @@
   "icon": "extension-icon.png",
   "author": "da-wei_lee",
   "license": "MIT",
-  "categories": ["Developer Tools", "Productivity"],
-  "platforms": ["macOS"],
+  "categories": [
+    "Developer Tools",
+    "Productivity"
+  ],
+  "platforms": [
+    "macOS"
+  ],
   "commands": [
     {
       "name": "tasks",
@@ -27,7 +32,7 @@
           "name": "showDetail",
           "title": "Detail Pane",
           "label": "Show the detail pane by default",
-          "description": "Show task metadata and a log preview beside the list. Toggle at any time with ⌘⇧D.",
+          "description": "Show task metadata and a log preview beside the list. Toggle at any time with \u2318\u21e7D.",
           "type": "checkbox",
           "required": false,
           "default": true
@@ -97,16 +102,28 @@
           "required": false,
           "default": "running",
           "data": [
-            { "title": "Running count", "value": "running" },
-            { "title": "Running / queued", "value": "running-queued" },
-            { "title": "Running + queued + paused", "value": "active" },
-            { "title": "Icon only", "value": "none" }
+            {
+              "title": "Running count",
+              "value": "running"
+            },
+            {
+              "title": "Running / queued",
+              "value": "running-queued"
+            },
+            {
+              "title": "Running + queued + paused",
+              "value": "active"
+            },
+            {
+              "title": "Icon only",
+              "value": "none"
+            }
           ]
         },
         {
           "name": "maxItemsPerSection",
           "title": "Items per Section",
-          "description": "How many tasks to list under Running / Queued / Failed before collapsing into an \"…and N more\" item. Keeps a large queue from rendering hundreds of menu items every minute.",
+          "description": "How many tasks to list under Running / Queued / Failed before collapsing into an \"\u2026and N more\" item. Keeps a large queue from rendering hundreds of menu items every minute.",
           "type": "textfield",
           "required": false,
           "default": "7"
@@ -151,16 +168,16 @@
     {
       "name": "connections",
       "title": "Remote Connections",
-      "description": "One per line. Simplest form is just an SSH host you can already reach — everything runs over ssh, nothing to set up: \"local_ubuntu\". Or \"name | ssh-host\" to label it. Advanced: \"name | ~/pueue/client.yml | ssh-host\" reads through a forwarded socket and submits over ssh.",
+      "description": "Separate connections with ';'. Simplest form is just an SSH host you can already reach - everything runs over ssh, nothing to set up: local_ubuntu. Add a label with 'name | ssh-host', and the remote pueue path if it is not on the non-interactive PATH (a cargo install is not): 'lab | local_ubuntu | ~/.cargo/bin/pueue'. Advanced: a config path as the second field selects a forwarded socket instead.",
       "type": "textfield",
       "required": false,
-      "placeholder": "local_ubuntu"
+      "placeholder": "lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com"
     },
     {
       "name": "confirmDestructive",
       "title": "Confirmations",
       "label": "Confirm kill, remove, clean, and reset",
-      "description": "Ask before destructive actions in the view commands. Menu bar destructive actions are always behind ⌥ regardless of this setting.",
+      "description": "Ask before destructive actions in the view commands. Menu bar destructive actions are always behind \u2325 regardless of this setting.",
       "type": "checkbox",
       "required": false,
       "default": true

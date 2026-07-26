@@ -12,7 +12,7 @@ assuming "local" in the four places that quietly did.
 
 ## The short version
 
-Preferences → **Remote Connections**, one line:
+Preferences → **Remote Connections**, one entry:
 
 ```text
 local_ubuntu
@@ -20,6 +20,14 @@ local_ubuntu
 
 An SSH host you can already reach. Nothing else — no tunnel, no secret, no
 config file. Every command runs as `ssh local_ubuntu 'pueue …'`.
+
+More than one goes in that same field, separated by ` ; ` — Raycast has no
+multi-line preference type, so the field is a single-line `textfield` and a
+newline isn't something you can type into it:
+
+```text
+lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com
+```
 
 **Why this is the default rather than a fallback.** Measured against a LAN host:
 
@@ -113,9 +121,10 @@ gpu-box | ~/.config/pueue/remote/client.yml | myhost
 
 A second field containing a `/` (or ending `.yml`) is read as a config path,
 which selects socket mode. The third field is still an SSH host and is still
-needed to submit — the socket cannot fix the working-directory problem.
+needed to submit — the socket cannot fix the working-directory problem. If the
+field already holds a connection, put a `;` between them.
 
-A line the extension cannot parse is shown in the task list as **Unreadable
+An entry the extension cannot parse is shown in the task list as **Unreadable
 connection** rather than silently ignored.
 
 A **Connection** submenu then appears in the Action Panel of Tasks and Groups

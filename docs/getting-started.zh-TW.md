@@ -254,11 +254,13 @@ pueued -d
 ## 下一步
 
 - [遠端 daemon](remote.md) —— 監看與操控另一台機器上的 `pueued`。設定就是在
-  **Remote Connections** 偏好設定裡填一行：一台你本來就連得上的 SSH 主機 (SSH host)，
-  例如 `local_ubuntu`。不用隧道 (tunnel)、不用 shared secret、不用設定檔。經過多工
-  (multiplexing) 的 SSH 實測**每次呼叫 10–30 ms**，對照本機 pueue 的 22–44 ms
-  （沒有多工則是 200–400 ms，這正是擴充功能一律帶上 `ControlMaster` 的原因）。
-  送出任務之所以行得通，是因為 client 跑在遠端機器上，工作目錄在那裡才真的解析得出來。
+  **Remote Connections** 偏好設定裡填一筆：一台你本來就連得上的 SSH 主機 (SSH host)，
+  例如 `local_ubuntu`。不用隧道 (tunnel)、不用 shared secret、不用設定檔。第二台遠端
+  就接在同一個欄位裡，中間放一個 `;`——Raycast 的偏好設定只有單行的 textfield，
+  換行根本打不進去，分號就是來做換行做不到的那件事。經過多工 (multiplexing) 的 SSH
+  實測**每次呼叫 10–30 ms**，對照本機 pueue 的 22–44 ms（沒有多工則是 200–400 ms，
+  這正是擴充功能一律帶上 `ControlMaster` 的原因）。送出任務之所以行得通，是因為
+  client 跑在遠端機器上，工作目錄在那裡才真的解析得出來。
 - [pueue 的 JSON 契約](pueue-json-contract.md) —— 擴充功能從 `pueue status --json`
   與 `pueue log --json` 裡解析出哪些東西。
 - [Raycast 的介面形式](raycast-surfaces.md) —— 為什麼 menu bar 是唯一一直看得見的
