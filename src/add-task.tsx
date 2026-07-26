@@ -26,7 +26,9 @@ import { useCachedPromise } from "@raycast/utils";
 import { homedir } from "node:os";
 
 import { ErrorDetail } from "./lib/error-states";
+import { connectionIcon, useConnection } from "./lib/connection-ui";
 import {
+  connectionByName,
   groups as readGroups,
   isBinaryMissing,
   isDaemonDown,
@@ -49,7 +51,11 @@ export default function Command(
   props: LaunchProps<{ arguments: Arguments.AddTask }>,
 ) {
   const { pop } = useNavigation();
+  const conn = useConnection();
+  const remote = conn.connection.remote;
   const [command, setCommand] = useState(props.arguments?.command ?? "");
+  // A remote path can't be browsed to, so it is typed rather than picked.
+  const [remoteDirectory, setRemoteDirectory] = useState("");
   const [group, setGroup] = useState<string>("default");
   const [workingDirectory, setWorkingDirectory] = useState<string[]>([]);
   const [label, setLabel] = useState("");
@@ -61,12 +67,18 @@ export default function Command(
   const [priorityError, setPriorityError] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
 
-  const groupState = useCachedPromise(() => readGroups(), [], {
-    keepPreviousData: true,
-  });
-  const state = useCachedPromise(() => readStatus(), [], {
-    keepPreviousData: true,
-  });
+  const groupState = useCachedPromise(
+    (connectionName: string) =>
+      readGroups({ connection: connectionByName(connectionName) }),
+    [conn.connection.name],
+    { keepPreviousData: true },
+  );
+  const state = useCachedPromise(
+    (connectionName: string) =>
+      readStatus({ connection: connectionByName(connectionName) }),
+    [conn.connection.name],
+    { keepPreviousData: true },
+  );
 
   // Seed the group and directory from the last submission, so the common case
   // of "same project, same queue" is one keystroke.
@@ -123,18 +135,23 @@ export default function Command(
       title: "Queueing…",
     });
     try {
-      const id = await mutate({
-        op: "add",
-        command: trimmed,
-        group: group === "default" ? undefined : group,
-        label: label.trim() || undefined,
-        priority: priority.trim() ? Number(priority.trim()) : undefined,
-        workingDirectory: workingDirectory[0],
-        after: dependencies.map(Number),
-        delay: delay.trim() || undefined,
-        stashed: startMode === "stashed",
-        immediate: startMode === "immediate",
-      });
+      const id = await mutate(
+        {
+          op: "add",
+          command: trimmed,
+          group: group === "default" ? undefined : group,
+          label: label.trim() || undefined,
+          priority: priority.trim() ? Number(priority.trim()) : undefined,
+          workingDirectory: remote
+            ? remoteDirectory.trim() || undefined
+            : workingDirectory[0],
+          after: dependencies.map(Number),
+          delay: delay.trim() || undefined,
+          stashed: startMode === "stashed",
+          immediate: startMode === "immediate",
+        },
+        { connection: conn.connection },
+      );
 
       toast.style = Toast.Style.Success;
       toast.title = id === undefined ? "Queued" : `Queued task ${id}`;
@@ -188,6 +205,29 @@ export default function Command(
         </ActionPanel>
       }
     >
+      {conn.switchable ? (
+        <Form.Dropdown
+          id="connection"
+          title="Daemon"
+          value={conn.connection.name}
+          onChange={conn.setName}
+          info={
+            remote
+              ? "Submitted over SSH so the working directory is resolved on the remote host."
+              : "This machine's pueue daemon."
+          }
+        >
+          {conn.all.map((c) => (
+            <Form.Dropdown.Item
+              key={c.name}
+              value={c.name}
+              title={c.sshHost ? `${c.name} (${c.sshHost})` : c.name}
+              icon={connectionIcon(c)}
+            />
+          ))}
+        </Form.Dropdown>
+      ) : null}
+
       <Form.TextArea
         id="command"
         title="Command"
@@ -212,15 +252,34 @@ export default function Command(
         ) : null}
       </Form.Dropdown>
 
-      <Form.FilePicker
-        id="workingDirectory"
-        title="Working Directory"
-        allowMultipleSelection={false}
-        canChooseDirectories
-        canChooseFiles={false}
-        value={workingDirectory}
-        onChange={setWorkingDirectory}
-      />
+      {remote ? (
+        // A picker would browse *this* machine, and pueue canonicalises the
+        // working directory on whichever host the client runs on. Since this
+        // submission goes over SSH, the path is resolved on the remote box —
+        // so it must be typed, and it must exist there.
+        <Form.TextField
+          id="remoteDirectory"
+          title="Working Directory"
+          placeholder="/home/you/project"
+          value={remoteDirectory}
+          onChange={setRemoteDirectory}
+          info={
+            conn.connection.sshHost
+              ? `A path on ${conn.connection.sshHost}. Left empty, the task runs in your SSH login directory.`
+              : "This connection has no SSH host, so the path is resolved on THIS machine and almost certainly won't exist on the remote daemon. Add an ssh host to the connection to submit properly."
+          }
+        />
+      ) : (
+        <Form.FilePicker
+          id="workingDirectory"
+          title="Working Directory"
+          allowMultipleSelection={false}
+          canChooseDirectories
+          canChooseFiles={false}
+          value={workingDirectory}
+          onChange={setWorkingDirectory}
+        />
+      )}
 
       <Form.Dropdown
         id="startMode"

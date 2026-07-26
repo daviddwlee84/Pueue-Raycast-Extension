@@ -22,12 +22,16 @@ import { useCachedPromise } from "@raycast/utils";
 import { ErrorDetail } from "./error-states";
 import { statusTag } from "./format";
 import {
+  connectionByName,
+  defaultConnection,
   follow,
   hasEverRun,
   isRunning,
   readLogText,
+  readsLocalLogs,
   taskLogPath,
   oneline,
+  type Connection,
   type Task,
 } from "./pueue";
 
@@ -43,8 +47,14 @@ function asCodeBlock(text: string): string {
 // Typed as an element rather than ReactNode: @raycast/api bundles its own
 // copy of @types/react, so the root React.ReactNode is a structurally
 // different type and won't assign to ActionPanel's children.
-function logActions(task: Task, extra?: React.JSX.Element | null) {
-  const path = taskLogPath(task.id);
+function logActions(
+  task: Task,
+  connection: Connection,
+  extra?: React.JSX.Element | null,
+) {
+  // A remote task's log is not on this disk, so offering to reveal a local
+  // path would open some unrelated file that happens to share the id.
+  const path = readsLocalLogs(connection) ? taskLogPath(task.id) : undefined;
   return (
     <ActionPanel>
       {extra}
@@ -66,13 +76,26 @@ function logActions(task: Task, extra?: React.JSX.Element | null) {
 
 /* -- static ---------------------------------------------------------------- */
 
-export function TaskLogView({ task }: { task: Task }) {
+export function TaskLogView({
+  task,
+  connection = defaultConnection(),
+}: {
+  task: Task;
+  connection?: Connection;
+}) {
   const [full, setFull] = useState(false);
 
   const log = useCachedPromise(
-    (id: number, wantFull: boolean) =>
-      readLogText(id, wantFull ? { full: true } : { lines: 200 }),
-    [task.id, full],
+    (id: number, wantFull: boolean, connectionName: string) => {
+      const c = connectionByName(connectionName);
+      return readLogText(
+        id,
+        wantFull
+          ? { full: true, connection: c }
+          : { lines: 200, connection: c },
+      );
+    },
+    [task.id, full, connection.name],
     { execute: hasEverRun(task), keepPreviousData: true },
   );
 
@@ -108,6 +131,7 @@ export function TaskLogView({ task }: { task: Task }) {
       markdown={markdown}
       actions={logActions(
         task,
+        connection,
         <>
           {log.data ? (
             <Action.CopyToClipboard
@@ -155,7 +179,13 @@ const FLUSH_MS = 200;
  */
 const MAX_BUFFER_CHARS = 200_000;
 
-export function TaskFollowView({ task }: { task: Task }) {
+export function TaskFollowView({
+  task,
+  connection = defaultConnection(),
+}: {
+  task: Task;
+  connection?: Connection;
+}) {
   const [text, setText] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [finished, setFinished] = useState(false);
@@ -170,27 +200,32 @@ export function TaskFollowView({ task }: { task: Task }) {
 
     const flush = setInterval(() => setText(buffer.current), FLUSH_MS);
 
-    const cancel = follow(task.id, 200, {
-      onData: (chunk) => {
-        buffer.current += chunk;
-        if (buffer.current.length > MAX_BUFFER_CHARS) {
-          buffer.current =
-            "…earlier output trimmed…\n" +
-            buffer.current.slice(-MAX_BUFFER_CHARS);
-        }
+    const cancel = follow(
+      task.id,
+      200,
+      {
+        onData: (chunk) => {
+          buffer.current += chunk;
+          if (buffer.current.length > MAX_BUFFER_CHARS) {
+            buffer.current =
+              "…earlier output trimmed…\n" +
+              buffer.current.slice(-MAX_BUFFER_CHARS);
+          }
+        },
+        onDone: () => {
+          clearInterval(flush);
+          setText(buffer.current);
+          setFinished(true);
+          setIsLoading(false);
+        },
+        onError: (e) => {
+          clearInterval(flush);
+          setError(e);
+          setIsLoading(false);
+        },
       },
-      onDone: () => {
-        clearInterval(flush);
-        setText(buffer.current);
-        setFinished(true);
-        setIsLoading(false);
-      },
-      onError: (e) => {
-        clearInterval(flush);
-        setError(e);
-        setIsLoading(false);
-      },
-    });
+      { connection },
+    );
 
     // Leaving the view must kill the child, or a spawned `pueue follow` keeps
     // tailing for as long as Raycast lives.
@@ -198,7 +233,7 @@ export function TaskFollowView({ task }: { task: Task }) {
       clearInterval(flush);
       cancel();
     };
-  }, [task.id]);
+  }, [task.id, connection.name]);
 
   if (error) return <ErrorDetail error={error} />;
 
@@ -239,6 +274,7 @@ export function TaskFollowView({ task }: { task: Task }) {
       }
       actions={logActions(
         task,
+        connection,
         text ? (
           <Action.CopyToClipboard title="Copy Output" content={text} />
         ) : null,

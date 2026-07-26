@@ -38,12 +38,19 @@ import { actOnTasks, type ActOptions } from "./lib/actions";
 import { canFollow, TaskFollowView, TaskLogView } from "./lib/task-log";
 import { ALL_GROUPS, GroupDropdown } from "./lib/group-dropdown";
 import {
+  ConnectionBannerItem,
+  ConnectionSubmenu,
+  useConnection,
+  type ConnectionState,
+} from "./lib/connection-ui";
+import {
   describeError,
   ErrorEmptyView,
   StaleBannerItem,
 } from "./lib/error-states";
 import {
   cleanLogOutput,
+  connectionByName,
   endedAt,
   enqueuedAt,
   exitCode,
@@ -89,6 +96,7 @@ export default function Command(
     prefs.showDetail,
   );
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const conn = useConnection();
 
   // Separate controllers: a superseded state read must not cancel an in-flight
   // group read, and vice versa.
@@ -96,19 +104,27 @@ export default function Command(
   const groupsAbort = useRef<AbortController>(null);
 
   const state = useCachedPromise(
-    (g: string, q: string) =>
+    // The connection is an argument rather than a closure capture so that
+    // useCachedPromise keys its cache on it — switching daemons must not show
+    // the previous one's tasks.
+    (g: string, q: string, connectionName: string) =>
       readStatus({
         group: g === ALL_GROUPS ? undefined : g,
         query: q,
         signal: stateAbort.current?.signal,
+        connection: connectionByName(connectionName),
       }),
-    [group, query],
+    [group, query, conn.connection.name],
     { keepPreviousData: true, abortable: stateAbort },
   );
 
   const groupState = useCachedPromise(
-    () => readGroups({ signal: groupsAbort.current?.signal }),
-    [],
+    (connectionName: string) =>
+      readGroups({
+        signal: groupsAbort.current?.signal,
+        connection: connectionByName(connectionName),
+      }),
+    [conn.connection.name],
     {
       keepPreviousData: true,
       abortable: groupsAbort,
@@ -125,12 +141,15 @@ export default function Command(
   // Only the selected row, and only when the pane is open — one `pueue log`
   // per selection change is fine, one per row would not be.
   const preview = useCachedPromise(
-    async (id: string | null) => {
+    async (id: string | null, connectionName: string) => {
       if (!id) return undefined;
-      const map = await readLogs([Number(id)], { lines: logLines });
+      const map = await readLogs([Number(id)], {
+        lines: logLines,
+        connection: connectionByName(connectionName),
+      });
       return cleanLogOutput(map[id]?.output);
     },
-    [selectedId],
+    [selectedId, conn.connection.name],
     { execute: showDetail && canHaveLog, keepPreviousData: false },
   );
 
@@ -156,7 +175,11 @@ export default function Command(
   if (error && !state.data) {
     return (
       <List searchBarPlaceholder="Search tasks…">
-        <ErrorEmptyView error={error} onRetry={reload} />
+        <ErrorEmptyView
+          error={error}
+          onRetry={reload}
+          connection={conn.connection}
+        />
       </List>
     );
   }
@@ -164,7 +187,8 @@ export default function Command(
   // With cached data we keep rendering it — but a structural failure means that
   // data is not merely a moment old, it is a snapshot of a queue we can no
   // longer see. Say so in the list itself rather than trusting a toast.
-  const stale = error !== undefined && describeError(error).structural;
+  const stale =
+    error !== undefined && describeError(error, conn.connection).structural;
 
   return (
     <List
@@ -180,9 +204,16 @@ export default function Command(
         />
       }
     >
-      {stale ? (
+      {stale || conn.connection.remote ? (
         <List.Section title="Connection">
-          <StaleBannerItem error={error} onRetry={reload} />
+          {stale ? (
+            <StaleBannerItem
+              error={error}
+              onRetry={reload}
+              connection={conn.connection}
+            />
+          ) : null}
+          <ConnectionBannerItem state={conn} />
         </List.Section>
       ) : null}
       {tasks.length === 0 ? (
@@ -229,8 +260,12 @@ export default function Command(
                   onToggleDetail={() => setShowDetail((v) => !v)}
                   onReload={reload}
                   onAct={(mutation, options) =>
-                    actOnTasks(mutation, state, options)
+                    actOnTasks(mutation, state, {
+                      ...options,
+                      connection: conn.connection,
+                    })
                   }
+                  connection={conn}
                 />
               ))}
             </List.Section>
@@ -250,6 +285,7 @@ function TaskItem(props: {
   onToggleDetail: () => void;
   onReload: () => void;
   onAct: (mutation: Mutation, options: ActOptions) => Promise<boolean>;
+  connection: ConnectionState;
 }) {
   const { task, onAct } = props;
   const duration = durationAccessory(task);
@@ -293,7 +329,12 @@ function TaskItem(props: {
               <Action.Push
                 title="Show Log"
                 icon={Icon.Text}
-                target={<TaskLogView task={task} />}
+                target={
+                  <TaskLogView
+                    task={task}
+                    connection={props.connection.connection}
+                  />
+                }
               />
             ) : null}
             {canFollow(task) ? (
@@ -301,7 +342,12 @@ function TaskItem(props: {
                 title="Follow Output"
                 icon={Icon.Livestream}
                 shortcut={{ modifiers: ["cmd"], key: "l" }}
-                target={<TaskFollowView task={task} />}
+                target={
+                  <TaskFollowView
+                    task={task}
+                    connection={props.connection.connection}
+                  />
+                }
               />
             ) : null}
             <Action.CopyToClipboard
@@ -497,6 +543,7 @@ function TaskItem(props: {
               shortcut={Keyboard.Shortcut.Common.Refresh}
               onAction={props.onReload}
             />
+            <ConnectionSubmenu state={props.connection} />
           </ActionPanel.Section>
         </ActionPanel>
       }

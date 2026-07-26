@@ -23,6 +23,7 @@ import {
   firstLine,
   mutate as runMutation,
   PueueError,
+  type Connection,
   type GroupMap,
   type Mutation,
   type State,
@@ -87,6 +88,8 @@ export interface ActOptions {
     /** Offers "Do not show this message again". Omit for genuinely rare, costly actions. */
     rememberChoice?: boolean;
   };
+  /** Which daemon to act on. Omitted means the default connection. */
+  connection?: Connection;
 }
 
 /**
@@ -127,12 +130,15 @@ export async function act<T>(
   });
 
   try {
-    await state.mutate(runMutation(mutation), {
-      optimisticUpdate: (data) => optimistic(data, mutation),
-      rollbackOnError: true,
-      // The load-bearing line. See the module comment.
-      shouldRevalidateAfter: false,
-    });
+    await state.mutate(
+      runMutation(mutation, { connection: options.connection }),
+      {
+        optimisticUpdate: (data) => optimistic(data, mutation),
+        rollbackOnError: true,
+        // The load-bearing line. See the module comment.
+        shouldRevalidateAfter: false,
+      },
+    );
 
     toast.style = Toast.Style.Success;
     toast.title = options.done;

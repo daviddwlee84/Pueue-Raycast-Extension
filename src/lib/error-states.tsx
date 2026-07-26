@@ -100,7 +100,10 @@ function fence(text: string): string {
     : "";
 }
 
-export function describeError(error: unknown): ErrorDescriptor {
+export function describeError(
+  error: unknown,
+  connection?: { remote: boolean; name: string },
+): ErrorDescriptor {
   const detail =
     error instanceof PueueError
       ? error.detail
@@ -166,13 +169,17 @@ export function describeError(error: unknown): ErrorDescriptor {
   }
 
   if (isDaemonDown(error)) {
-    const brewManaged = isBrewManagedDaemon();
+    // Never offer to start a daemon we aren't running. `brew services start`
+    // would start the *local* one, which is not the daemon that just failed.
+    const remote = connection?.remote === true;
+    const brewManaged = !remote && isBrewManagedDaemon();
     return {
       icon: Icon.Plug,
       title: "Pueue daemon not running",
       shortTitle: "Daemon not running",
-      description:
-        "pueue is installed but pueued isn't reachable. Start the daemon, then reload.",
+      description: remote
+        ? `Couldn't reach ${connection?.name ?? "the remote daemon"}. Check the SSH tunnel, then reload.`
+        : "pueue is installed but pueued isn't reachable. Start the daemon, then reload.",
       markdown: [
         "# Pueue daemon not running",
         "",
@@ -325,11 +332,13 @@ function renderActions(d: ErrorDescriptor, onRetry?: () => void) {
 export function ErrorEmptyView({
   error,
   onRetry,
+  connection,
 }: {
   error: unknown;
   onRetry?: () => void;
+  connection?: { remote: boolean; name: string };
 }) {
-  const d = describeError(error);
+  const d = describeError(error, connection);
   return (
     <List.EmptyView
       icon={d.icon}
@@ -353,11 +362,13 @@ export function ErrorEmptyView({
 export function StaleBannerItem({
   error,
   onRetry,
+  connection,
 }: {
   error: unknown;
   onRetry?: () => void;
+  connection?: { remote: boolean; name: string };
 }) {
-  const d = describeError(error);
+  const d = describeError(error, connection);
   return (
     <List.Item
       icon={{ source: Icon.Warning, tintColor: Color.Red }}
@@ -371,10 +382,12 @@ export function StaleBannerItem({
 export function ErrorDetail({
   error,
   onRetry,
+  connection,
 }: {
   error: unknown;
   onRetry?: () => void;
+  connection?: { remote: boolean; name: string };
 }) {
-  const d = describeError(error);
+  const d = describeError(error, connection);
   return <Detail markdown={d.markdown} actions={renderActions(d, onRetry)} />;
 }

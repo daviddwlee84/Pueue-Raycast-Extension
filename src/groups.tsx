@@ -30,6 +30,13 @@ import {
 } from "./lib/error-states";
 import { groupIcon } from "./lib/format";
 import {
+  ConnectionBannerItem,
+  ConnectionSubmenu,
+  useConnection,
+  type ConnectionState,
+} from "./lib/connection-ui";
+import {
+  connectionByName,
   groups as readGroups,
   isPaused,
   isQueued,
@@ -44,6 +51,7 @@ import {
 const PARALLEL_CHOICES = [1, 2, 3, 4, 6, 8, 12, 0];
 
 export default function Command() {
+  const conn = useConnection();
   const groupsAbort = useRef<AbortController>(null);
   const stateAbort = useRef<AbortController>(null);
 
@@ -51,16 +59,24 @@ export default function Command() {
   // supplies the per-group task counts. Separate controllers so a superseded
   // read of one can't cancel the other.
   const groupState = useCachedPromise(
-    () => readGroups({ signal: groupsAbort.current?.signal }),
-    [],
+    (connectionName: string) =>
+      readGroups({
+        signal: groupsAbort.current?.signal,
+        connection: connectionByName(connectionName),
+      }),
+    [conn.connection.name],
     {
       keepPreviousData: true,
       abortable: groupsAbort,
     },
   );
   const state = useCachedPromise(
-    () => readStatus({ signal: stateAbort.current?.signal }),
-    [],
+    (connectionName: string) =>
+      readStatus({
+        signal: stateAbort.current?.signal,
+        connection: connectionByName(connectionName),
+      }),
+    [conn.connection.name],
     {
       keepPreviousData: true,
       abortable: stateAbort,
@@ -76,12 +92,17 @@ export default function Command() {
   if (error && !groupState.data) {
     return (
       <List searchBarPlaceholder="Search groups…">
-        <ErrorEmptyView error={error} onRetry={reload} />
+        <ErrorEmptyView
+          error={error}
+          onRetry={reload}
+          connection={conn.connection}
+        />
       </List>
     );
   }
 
-  const stale = error !== undefined && describeError(error).structural;
+  const stale =
+    error !== undefined && describeError(error, conn.connection).structural;
   const tasks = taskList(state.data?.tasks ?? {});
   const entries = Object.entries(groupState.data ?? {}).sort(([a], [b]) =>
     a.localeCompare(b),
@@ -92,9 +113,16 @@ export default function Command() {
       isLoading={groupState.isLoading || state.isLoading}
       searchBarPlaceholder={`Search ${entries.length} group${entries.length === 1 ? "" : "s"}…`}
     >
-      {stale ? (
+      {stale || conn.connection.remote ? (
         <List.Section title="Connection">
-          <StaleBannerItem error={error} onRetry={reload} />
+          {stale ? (
+            <StaleBannerItem
+              error={error}
+              onRetry={reload}
+              connection={conn.connection}
+            />
+          ) : null}
+          <ConnectionBannerItem state={conn} />
         </List.Section>
       ) : null}
 
@@ -114,8 +142,12 @@ export default function Command() {
             total={tasks.filter((t) => t.group === name).length}
             onReload={reload}
             onAct={(mutation, options) =>
-              actOnGroups(mutation, groupState, options)
+              actOnGroups(mutation, groupState, {
+                ...options,
+                connection: conn.connection,
+              })
             }
+            connection={conn}
           />
         ))
       )}
@@ -132,6 +164,7 @@ function GroupItem(props: {
   total: number;
   onReload: () => void;
   onAct: (mutation: Mutation, options: ActOptions) => Promise<boolean>;
+  connection: ConnectionState;
 }) {
   const { push } = useNavigation();
   const { name, group, onAct } = props;
@@ -331,6 +364,7 @@ function GroupItem(props: {
               shortcut={Keyboard.Shortcut.Common.Refresh}
               onAction={props.onReload}
             />
+            <ConnectionSubmenu state={props.connection} />
           </ActionPanel.Section>
         </ActionPanel>
       }
