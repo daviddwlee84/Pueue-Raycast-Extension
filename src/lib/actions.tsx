@@ -67,7 +67,9 @@ function nudgeMenuBar(): void {
   // Give the daemon's update loop the same head start the reconcile gets, so
   // the menu bar doesn't re-read the pre-change state we just worked around.
   setTimeout(() => {
-    launchCommand({ name: "queue-menu", type: LaunchType.Background }).catch(() => {});
+    launchCommand({ name: "queue-menu", type: LaunchType.Background }).catch(
+      () => {},
+    );
   }, RECONCILE_DELAY_MS);
 }
 
