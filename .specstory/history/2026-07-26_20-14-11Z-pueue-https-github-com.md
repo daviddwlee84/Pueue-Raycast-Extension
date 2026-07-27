@@ -49730,7 +49730,7 @@ Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
 ```
 </details></tool-use>
 
-_**Agent (claude-opus-5 2026-07-27 05:28:03Z)**_
+_**Agent (claude-opus-5 2026-07-27 05:29:21Z)**_
 
 <tool-use data-tool-type="shell" data-tool-name="Bash"><details>
 <summary>Tool use: **Bash**</summary>
@@ -49807,4 +49807,165 @@ print("index updated")
 PY
 just check 2>&1 | grep -E "error|FAIL|checks passed|built extension" | tail -5
 ```
+
+```text
+index updated
+— errors: absent is not broken
+383/383 checks passed
+error  - run Prettier 3.9.6
+  error  Code style issues found. Please run Prettier 3.9.6 (ray lint --fix).
+error: Recipe `lint` failed on line 20 with exit code 2
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
 </details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:30:58Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Fix formatting and rerun gate
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && npx ray lint --fix >/dev/null 2>&1 && just check 2>&1 | grep -E "error|FAIL|checks passed|built extension" | tail -4`
+
+```text
+— errors: absent is not broken
+383/383 checks passed
+ready  - built extension successfully
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+[This command modified 1 file you've previously read: ../Agent-Deck-Raycast-Extension/src/lib/dev-check.ts. Call Read before editing.]
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:31:25Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Update README and commit the AI tools
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PY'
+import pathlib
+p = pathlib.Path("README.md")
+t = p.read_text()
+t = t.replace('''| **Focus Agent** | Type a name, land in the terminal. No window |''',
+'''| **Focus Agent** | Type a name, land in the terminal. No window |
+
+## Ask Raycast
+
+Four AI tools, so you can ask in words instead of remembering a query:
+
+> *"which session was the one about the retry loop"*
+> *"remind me how I fixed the rsync thing"*
+> *"is anything waiting on me?"*
+> *"take me to the agent in agent-deck"*
+
+`search-sessions` searches what was said. `read-session` quotes the passages
+back. `list-agents` reports what is running — as **detected**, since herdr
+infers it from the terminal screen. `focus-agent` switches terminals, and is
+confirmed, and refuses rather than guessing when more than one agent matches.''')
+p.write_text(t)
+print("README updated")
+PY
+git add -A && git -c user.name="Da-Wei Lee" commit -q -F - <<'MSG'
+Let the AI answer from the same place the commands do
+
+Four tools — search-sessions, read-session, list-agents, focus-agent — so
+"which session was that thing about the retry loop" is a question rather
+than a query. 383 checks.
+
+The trap that shaped all of this was already written down in the sibling
+Pueue extension: **Raycast passes extension preferences to commands, not to
+tools.** getPreferenceValues() returns {} inside src/tools/, and nothing
+throws. Here it would mostly appear to work — the probe finds herdr and
+sqlite3 wherever they are, and the default database paths are right on a
+normal machine — right up until someone configures something. Then the
+tool answers from the default while the commands answer from the
+configured path, and only the user can see they disagree.
+
+So the commands mirror their preferences into LocalStorage and the tools
+prefer the real ones, falling back to the mirror. Three details are
+load-bearing: the write is guarded on having read something, or a tool's
+own empty read erases the mirror permanently; setPreferenceOverride()
+invalidates the wiring cache, or a tool reads whatever the last caller
+resolved; and the liveSource enum is narrowed on read rather than cast, so
+a stale mirror cannot smuggle an unhandled value into the switch.
+
+What the tools tell the model is a projection, not the domain type.
+undefined vanishes from JSON, and a field a model sees only sometimes
+reads as a field that does not exist — so an unknown date is null rather
+than absent, and `runningNow` is a 0 rather than a missing key. An agent
+with no pane reports `pane: null` and says which source saw it, because a
+model told otherwise will confidently offer to focus something that cannot
+be focused. herdr's status carries statusIsDetected: true; the registry's
+does not.
+
+Every tool that can return less than the user expects says so. Without
+that note, "no sessions found" is what a model reports when the truth is
+"the full-text index is not installed" — and the user goes hunting for a
+session that is right there.
+
+statusLabel and friends moved to a pure labels.ts, so the list and the
+model cannot drift on what "blocked" is called. format.tsx re-exports them.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+MSG
+git log --oneline | head -3
+```
+
+```text
+README updated
+91d01b9 Let the AI answer from the same place the commands do
+efab5bb Quote the conversation instead of a fragment of its index
+54dec64 Write down what each trap cost, while the error text is still in scrollback
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:31:32Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #9 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:31:59Z)**_
+
+兩個都做完了，`just check` 全綠（383 checks）。
+
+## Preview
+
+我沒用 fts5 的 `snippet()`，改成**直接讀 session 自己的 transcript**。原因是量出來的：
+
+| | fts5 `snippet()` | 讀 transcript |
+|---|---|---|
+| 7.36 MB body | **1144 ms** | — |
+| 34 MB transcript，前 5 個 hit | — | **15 ms** |
+| 34 MB，完全沒中（封頂） | — | **230 ms** |
+| 真實 1.3 MB session + 真實 query | — | **26 ms**，5 段 |
+
+快的關鍵是**在 `JSON.parse` 之前先對原始行做 substring 測試**，大部分行只花一次 lowercase + indexOf。
+
+而且 `snippet()` 只給**一段** 12 個 token 的碎片，而且只對 SpecStory 索引過的 session 有效——OpenCode 完全沒有。讀 transcript 三個問題都解決，所以 preference 預設翻成**開**。
+
+兩個實作上的坑：token 是**逐行 AND** 而非逐檔（不然「raycast」在一則訊息、「extension」在另一則，秀出兩段不相干的東西當「match」是誤導），另外 escape 要在 mark 之前、然後 mark 要認得自己插入的 backslash——transcript 裡到處是 backtick 和底線，一個沒配對的標記會吞掉整段。
+
+## AI Tools
+
+四個：`search-sessions` / `read-session` / `list-agents` / `focus-agent`（有 confirmation）。
+
+**你 memory 裡那條 trap 直接命中了**——Raycast 不把 extension preferences 傳給 tools，`getPreferenceValues()` 回 `{}`。這裡特別陰險：大部分情況**看起來是好的**，因為 probe 找得到 herdr 和 sqlite3、預設 DB 路徑在正常機器上也對——直到有人真的改了設定，然後 tool 從預設位置回答、command 從設定位置回答，只有你看得出它們不一致。
+
+所以 command 把 preferences 鏡射進 LocalStorage，tool 優先讀真的、讀不到才用鏡射。三個關鍵細節：寫入要 guard「真的讀到東西」（否則 tool 自己的空讀會永久抹掉鏡射）、`setPreferenceOverride()` 要 invalidate wiring cache、enum 要 narrow 不能 cast。
+
+給 model 的是 projection 不是 domain type——`undefined` 在 JSON 裡會消失，model 看到「時有時無的欄位」會當成「這欄位不存在」，所以未知日期是 `null` 而不是缺席。沒有 pane 的 agent 回報 `pane: null`，不然 model 會很有自信地說要幫你跳過去然後失敗。herdr 的狀態帶 `statusIsDetected: true`。
+
+`statusLabel` 那些搬到純的 `labels.ts`，`format.tsx` re-export——列表和 model 不能對「blocked」叫什麼有不同說法。
+
+---
+
+新增兩篇 pitfall：`an-ai-tool-cannot-read-extension-preferences.md`、`the-match-preview-is-not-fts5-snippet.md`。
+
+重新 `npm run dev` 後 AI tools 才會註冊。可以試試 **Ask Raycast**：「哪個 session 在講 herdr 的 pane？」
