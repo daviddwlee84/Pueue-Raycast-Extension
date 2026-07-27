@@ -48449,3 +48449,1362 @@ _**Agent (claude-opus-5 2026-07-27 05:19:42Z)**_
 Updated task #9 status
 ```
 </details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:20:05Z)**_
+
+Now the AI tools. First the preference-mirroring layer, since tools get an empty preference object.
+
+_**Agent (claude-opus-5 2026-07-27 05:20:07Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Paths and capabilities for a tool, not a command.
+ *
+ * Raycast passes extension-level preferences to **commands** but not to
+ * **tools**. Inside `src/tools/*.ts`, `getPreferenceValues()` returns an empty
+ * object, so every preference-derived value silently becomes its fallback.
+ *
+ * Nothing throws, which is what makes it hard to spot. Here, most of it would
+ * even appear to work — the probe finds herdr and sqlite3 wherever they are,
+ * and the default database paths are right on a normal machine. What breaks is
+ * exactly the user who configured something: a non-default `claudeHome`, a
+ * SpecStory index somewhere unusual, `liveSource: claude-registry`. The tool
+ * would then answer confidently from the wrong place.
+ *
+ * So the commands mirror the raw preference values into LocalStorage, and this
+ * module prefers the real preference and falls back to the mirror. If Raycast
+ * ever starts passing preferences to tools, nothing here changes.
+ *
+ * See the sibling Pueue extension's `src/lib/ai-connection.ts`, where the same
+ * trap made the AI report "no remote connections configured" while the menu bar
+ * listed two.
+ */
+
+import { LocalStorage, getPreferenceValues } from "@raycast/api";
+
+/** One key, one JSON blob. Simpler to keep in step than a key per preference. */
+export const MIRROR_KEY = "agent-deck.preferences";
+
+/** The subset a tool needs. Everything else is command-only UI state. */
+export interface MirroredPreferences {
+  liveSource?: string;
+  herdrPath?: string;
+  sqlitePath?: string;
+  specstoryDb?: string;
+  opencodeDb?: string;
+  claudeHome?: string;
+  codexHome?: string;
+}
+
+const KEYS: (keyof MirroredPreferences)[] = [
+  "liveSource",
+  "herdrPath",
+  "sqlitePath",
+  "specstoryDb",
+  "opencodeDb",
+  "claudeHome",
+  "codexHome",
+];
+
+/**
+ * Write the current preferences to the mirror. Called from every command.
+ *
+ * Guarded on having actually read something: a tool's own empty read must never
+ * be written back, or the first tool invocation erases the mirror the commands
+ * built and the AI loses the configuration permanently.
+ */
+export async function mirrorPreferences(): Promise<void> {
+  const prefs = getPreferenceValues<Preferences>() as Record<string, unknown>;
+
+  const payload: MirroredPreferences = {};
+  let sawSomething = false;
+  for (const key of KEYS) {
+    const value = prefs[key];
+    if (typeof value === "string" && value.trim()) {
+      payload[key] = value;
+      sawSomething = true;
+    }
+  }
+  // `liveSource` has a default, so its presence is the reliable signal that
+  // preferences were visible at all — a machine with every path left blank is
+  // normal and must still mirror, so that a LATER blanking is recorded too.
+  if (typeof prefs.liveSource === "string") sawSomething = true;
+  if (!sawSomething) return;
+
+  try {
+    await LocalStorage.setItem(MIRROR_KEY, JSON.stringify(payload));
+  } catch {
+    // A failed mirror costs a tool its custom paths, not correctness. The
+    // command it was called from must not fail over it.
+  }
+}
+
+/**
+ * The preferences a tool should use.
+ *
+ * Real preferences first, so this is a no-op the day Raycast starts passing
+ * them through.
+ */
+export async function toolPreferences(): Promise<MirroredPreferences> {
+  const live = getPreferenceValues<Preferences>() as Record<string, unknown>;
+  const direct: MirroredPreferences = {};
+  let visible = false;
+  for (const key of KEYS) {
+    const value = live[key];
+    if (typeof value === "string" && value.trim()) {
+      direct[key] = value;
+      visible = true;
+    }
+  }
+  if (typeof live.liveSource === "string") visible = true;
+  if (visible) return direct;
+
+  try {
+    const raw = await LocalStorage.getItem<string>(MIRROR_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as MirroredPreferences;
+    return typeof parsed === "object" && parsed !== null ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/agents/ai-preferences.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:20:24Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to add a way for the facade to accept overridden preferences so tools can use the mirror instead of calling `prefs()` directly. I'll add a `setPreferenceOverride()` method to the facade that tools can call before doing anything, then update the agents module and write the tools along with a projection module to shape domain objects for the model.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:20:37Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Add preference override to the facade
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PY'
+import pathlib
+p = pathlib.Path("src/lib/agents/index.ts")
+t = p.read_text()
+
+t = t.replace(
+  'function prefs(): Preferences {\n  return getPreferenceValues<Preferences>();\n}',
+  '''/**
+ * Preferences a tool has supplied, because Raycast does not give tools its own.
+ *
+ * Set by every tool before it touches the facade. Undefined in a command, where
+ * the real preferences are visible. See lib/agents/ai-preferences.ts.
+ */
+let overrides: Partial<Preferences> | undefined;
+
+export function setPreferenceOverride(p: Partial<Preferences> | undefined): void {
+  overrides = p;
+  // The wiring caches resolved paths, so a change has to invalidate it or the
+  // tool reads whatever the last caller resolved.
+  wiring = undefined;
+}
+
+function prefs(): Preferences {
+  const live = getPreferenceValues<Preferences>();
+  // The override fills gaps rather than replacing: if Raycast ever starts
+  // passing preferences to tools, the real ones win with no code change here.
+  return overrides ? ({ ...overrides, ...stripEmpty(live) } as Preferences) : live;
+}
+
+/** Empty strings are "not set", and must not shadow a mirrored value. */
+function stripEmpty(o: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (typeof v === "string" && !v.trim()) continue;
+    if (v === undefined) continue;
+    out[k] = v;
+  }
+  return out;
+}'''
+)
+p.write_text(t)
+print("patched facade")
+PY
+npx tsc --noEmit 2>&1 | head -5; echo "tsc ok"
+```
+
+```text
+patched facade
+tsc ok
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:21:07Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * What a tool hands the model.
+ *
+ * A projection, not the domain type. Three reasons it is worth its own file:
+ *
+ *  - `Date` objects serialise to ISO strings anyway; being explicit means the
+ *    model sees a consistent shape rather than whatever JSON.stringify chose.
+ *  - `undefined` fields disappear from JSON. A field that is *sometimes* absent
+ *    reads to a model as a field that does not exist, so anything load-bearing
+ *    is either always present or explicitly `null`.
+ *  - The domain types carry things a model should not spend tokens on —
+ *    `handle`, `ftsRowId`, `origin` — and things it must not be misled by.
+ *
+ * Pure. No @raycast/api, so `just verify` can assert it.
+ */
+
+import { statusLabel } from "./ai-labels";
+import type { AgentSession, LiveAgent, SessionHit } from "./types";
+
+export interface AiSession {
+  sessionId: string;
+  agent: string;
+  title: string;
+  /** The real working directory, or null. Never a mangled directory name. */
+  directory: string | null;
+  lastActivity: string | null;
+  yourTurns: number | null;
+  /** The shell command that resumes it, or null when we cannot resume it. */
+  resumeCommand: string | null;
+  /** How many processes are running this conversation right now. Usually 0. */
+  runningNow: number;
+  /** Present only when something is running it. */
+  running?: AiAgent[];
+  /** Why it matched, so the model can explain itself. */
+  matchedBy?: string[];
+}
+
+export interface AiAgent {
+  agent: string;
+  /** idle | working | blocked | done | unknown, as a phrase. */
+  status: string;
+  /** The raw enum value, for filtering. */
+  statusKey: string;
+  directory: string;
+  title: string | null;
+  sessionId: string | null;
+  /**
+   * The pane, or null.
+   *
+   * null means this agent CANNOT be focused, and the description says so —
+   * otherwise a model will confidently offer to jump to it and the call fails.
+   */
+  pane: string | null;
+  /** How we know about it: herdr sees every agent, the registry only Claude. */
+  seenBy: string;
+  /**
+   * Stated because herdr infers status by reading the rendered terminal, so it
+   * is a good guess that lags a real change rather than ground truth.
+   */
+  statusIsDetected: boolean;
+}
+
+export function toAiAgent(a: LiveAgent): AiAgent {
+  return {
+    agent: a.agent,
+    status: statusLabel(a.status),
+    statusKey: a.status,
+    directory: a.cwd || "unknown",
+    title: a.title ?? null,
+    sessionId: a.session?.sessionId ?? null,
+    pane: a.paneId ?? null,
+    seenBy: a.source === "herdr" ? "herdr" : "Claude Code's session registry",
+    statusIsDetected: a.source === "herdr",
+  };
+}
+
+export function toAiSession(
+  session: AgentSession,
+  live: readonly LiveAgent[],
+  resumeCommand: string | null,
+  matchedBy?: readonly string[],
+): AiSession {
+  return {
+    sessionId: session.key.sessionId,
+    agent: session.key.agent,
+    title: session.title,
+    directory: session.cwd ?? null,
+    // ISO, and null rather than absent: 7 rows in the real index have no date
+    // at all, and a model shown a missing field will invent one.
+    lastActivity: session.updatedAt?.toISOString() ?? null,
+    yourTurns: session.userTurns ?? null,
+    resumeCommand,
+    runningNow: live.length,
+    ...(live.length > 0 ? { running: live.map(toAiAgent) } : {}),
+    ...(matchedBy && matchedBy.length > 0 ? { matchedBy: [...matchedBy] } : {}),
+  };
+}
+
+export function toAiHit(hit: SessionHit, resumeCommand: string | null): AiSession {
+  return toAiSession(hit.session, hit.live, resumeCommand, hit.matched);
+}
+
+/**
+ * A short, honest note about what was and was not searched.
+ *
+ * Without this a model reports "no sessions match" when the truth is "SpecStory
+ * is not installed, so only your prompt history was searched" — which sends the
+ * user looking for a session that is there.
+ */
+export function sourcesNote(used: readonly string[], missing: readonly string[]): string | undefined {
+  if (missing.length === 0) return undefined;
+  return (
+    `Searched: ${used.length > 0 ? used.join(", ") : "nothing"}. ` +
+    `Not available on this machine: ${missing.join(", ")}. ` +
+    "Results may be narrower than the user expects; say so if nothing matched."
+  );
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/agents/ai-shape.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:21:14Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm realizing I need to extract the pure label functions from format.tsx since it depends on @raycast/api. I'll move statusLabel and agentLabel into normalize.ts as a shared pure module, then have format.tsx re-export them to avoid duplication.
+
+Actually, a dedicated labels.ts file in lib/agents/ would be cleaner for this purpose.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:21:25Z)**_
+
+`statusLabel` lives in `format.tsx`, which imports `@raycast/api` — a tool can't use it. Moving the pure labels out rather than duplicating them.
+
+_**Agent (claude-opus-5 2026-07-27 05:21:35Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Extract pure labels module
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && cat > src/lib/agents/labels.ts <<'TSEOF'
+/**
+ * Human words for domain values.
+ *
+ * Pure and separate from format.tsx, which needs @raycast/api for its icons and
+ * colours. The AI tools need the words without the pixels, and duplicating them
+ * would let the list and the model disagree about what "blocked" is called.
+ */
+
+import type { AgentKind, AgentStatus } from "./types";
+
+export function statusLabel(status: AgentStatus): string {
+  switch (status) {
+    case "blocked":
+      return "Waiting on you";
+    case "working":
+      return "Working";
+    case "idle":
+      return "Idle";
+    case "done":
+      return "Done";
+    case "unknown":
+      return "Unknown";
+  }
+}
+
+export function agentLabel(agent: AgentKind): string {
+  switch (agent) {
+    case "claude":
+      return "Claude Code";
+    case "codex":
+      return "Codex";
+    case "opencode":
+      return "OpenCode";
+    case "gemini":
+      return "Gemini";
+    case "cursor":
+      return "Cursor";
+    case "unknown":
+      return "Agent";
+  }
+}
+
+/** Two letters, matching the tags the author's tv channels already use. */
+export function agentTag(agent: AgentKind): string {
+  switch (agent) {
+    case "claude":
+      return "cc";
+    case "codex":
+      return "cx";
+    case "opencode":
+      return "oc";
+    case "gemini":
+      return "gm";
+    case "cursor":
+      return "cu";
+    case "unknown":
+      return "??";
+  }
+}
+TSEOF
+python3 - <<'PY'
+import pathlib, re
+p = pathlib.Path("src/lib/format.tsx")
+t = p.read_text()
+# Drop the three now-shared functions and re-export them, so there is exactly
+# one definition and the list cannot drift from what the model is told.
+for name in ["statusLabel", "agentLabel", "agentTag"]:
+    t = re.sub(rf"(/\*\*(?:[^*]|\*(?!/))*\*/\n)?export function {name}\(agent: AgentKind\): string \{{.*?\n\}}\n\n", "", t, flags=re.S)
+    t = re.sub(rf"(/\*\*(?:[^*]|\*(?!/))*\*/\n)?export function {name}\(status: AgentStatus\): string \{{.*?\n\}}\n\n", "", t, flags=re.S)
+t = t.replace(
+  'import { capabilityLabel } from "./agents/capabilities";',
+  'import { capabilityLabel } from "./agents/capabilities";\n'
+  '// Re-exported so views keep one import for presentation, while the pure\n'
+  '// definitions stay reachable from the AI tools.\n'
+  'export { agentLabel, agentTag, statusLabel } from "./agents/labels";\n'
+  'import { statusLabel } from "./agents/labels";'
+)
+p.write_text(t)
+print("patched format.tsx")
+PY
+sed -i '' 's|from "./ai-labels"|from "./labels"|' src/lib/agents/ai-shape.ts
+npx tsc --noEmit 2>&1 | head -8; echo "=== tsc ==="
+```
+
+```text
+patched format.tsx
+=== tsc ===
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:22:15Z)**_
+
+Now the four tools themselves.
+
+_**Agent (claude-opus-5 2026-07-27 05:22:36Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Write the first two AI tools
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && mkdir -p src/tools && cat > src/lib/agents/ai-context.ts <<'TSEOF'
+/**
+ * The two lines every tool runs first.
+ *
+ * Raycast does not pass extension preferences to tools, so each one has to read
+ * the mirror the commands maintain and hand it to the facade before touching
+ * anything. Doing that in one place means a new tool cannot forget.
+ */
+
+import { setPreferenceOverride } from "./index";
+import { toolPreferences } from "./ai-preferences";
+import { capabilities } from "./index";
+import { capabilityLabel } from "./capabilities";
+import type { Capability, CapabilityMap } from "./types";
+
+export async function prepareTool(): Promise<CapabilityMap> {
+  setPreferenceOverride(await toolPreferences());
+  return capabilities();
+}
+
+/** Human names of the capabilities that would have widened this answer. */
+export function missingLabels(caps: CapabilityMap, relevant: readonly Capability[]): string[] {
+  return relevant.filter((c) => !caps[c].available).map(capabilityLabel);
+}
+
+export function availableLabels(caps: CapabilityMap, relevant: readonly Capability[]): string[] {
+  return relevant.filter((c) => caps[c].available).map(capabilityLabel);
+}
+TSEOF
+
+cat > src/tools/search-sessions.ts <<'TSEOF'
+/**
+ * Find a past session by what was said in it.
+ *
+ * The tool behind "which session was that thing about the retry loop". It
+ * searches the full text of past conversations across Claude Code, Codex,
+ * OpenCode and Gemini, and says which of them are running right now — so the
+ * answer can be "resume it" rather than "here is a uuid".
+ */
+
+import { liveAgents, resumeCommandIn, searchSessions } from "../lib/agents";
+import { availableLabels, missingLabels, prepareTool } from "../lib/agents/ai-context";
+import { sourcesNote, toAiHit } from "../lib/agents/ai-shape";
+import type { Capability } from "../lib/agents/types";
+
+const SEARCH_SOURCES: Capability[] = [
+  "index.specstory",
+  "index.opencode",
+  "index.claudefs",
+  "index.codexfs",
+];
+
+const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 40;
+
+type Input = {
+  /**
+   * The words to look for, as the user would say them. Matched against what was
+   * actually said in the conversation, not just titles. Punctuation is safe.
+   */
+  query: string;
+  /**
+   * Only sessions from this agent: claude, codex, opencode, gemini or cursor.
+   * Omit to search all of them.
+   */
+  agent?: string;
+  /**
+   * Only sessions whose folder path contains this. Useful for "the one in the
+   * dotfiles repo".
+   */
+  directory?: string;
+  /** Only sessions with something running them right now. */
+  runningOnly?: boolean;
+  /** How many to return. Defaults to 10, capped at 40. */
+  limit?: number;
+};
+
+export default async function tool(input: Input) {
+  const caps = await prepareTool();
+
+  const query = input.query?.trim() ?? "";
+  if (!query) throw new Error("Give me something to search for.");
+
+  const limit = Math.min(Math.max(1, input.limit ?? DEFAULT_LIMIT), MAX_LIMIT);
+
+  const agents = (await liveAgents()).data;
+  // Over-fetch, because the filters below are applied after ranking and would
+  // otherwise return fewer rows than asked for.
+  const result = await searchSessions(query, limit * 3, agents);
+
+  let hits = result.data;
+  if (input.agent) {
+    const want = input.agent.trim().toLowerCase();
+    hits = hits.filter((h) => h.session.key.agent === want);
+  }
+  if (input.directory) {
+    const want = input.directory.trim().toLowerCase();
+    hits = hits.filter((h) => (h.session.cwd ?? "").toLowerCase().includes(want));
+  }
+  if (input.runningOnly) hits = hits.filter((h) => h.live.length > 0);
+
+  const sessions = hits
+    .slice(0, limit)
+    .map((h) => toAiHit(h, resumeCommandIn(h.session.key, h.session.cwd) ?? null));
+
+  return {
+    query,
+    sessions,
+    totalMatched: hits.length,
+    // A bad FTS expression is the user's phrasing, not a broken machine, so it
+    // is reported as a note the model can act on rather than thrown.
+    note:
+      result.badQuery?.detail ??
+      sourcesNote(availableLabels(caps, SEARCH_SOURCES), missingLabels(caps, SEARCH_SOURCES)),
+  };
+}
+TSEOF
+
+cat > src/tools/read-session.ts <<'TSEOF'
+/**
+ * Read what was actually said in one session.
+ *
+ * search-sessions answers "which one"; this answers "what was in it". Returns
+ * the passages matching a phrase when one is given, and the tail of the
+ * conversation otherwise — so "remind me how I fixed that" is one call, not a
+ * search followed by the user opening a file.
+ */
+
+import { readFileSync } from "node:fs";
+
+import { recentSessions, liveAgents, resumeCommandIn, transcriptPathFor } from "../lib/agents";
+import { prepareTool } from "../lib/agents/ai-context";
+import { toAiSession } from "../lib/agents/ai-shape";
+import { searchTranscript } from "../lib/claude/preview";
+import { readTranscriptTail } from "../lib/claude/transcript";
+
+const MAX_EXCERPTS = 12;
+
+type Input = {
+  /** The session id, as returned by search-sessions. */
+  sessionId: string;
+  /**
+   * Words to find inside the session. Omit to get the end of the conversation
+   * instead, which is what you want for "what was I doing".
+   */
+  find?: string;
+  /** How many passages to return when `find` is given. Defaults to 6, max 12. */
+  limit?: number;
+};
+
+export default async function tool(input: Input) {
+  await prepareTool();
+
+  const sessionId = input.sessionId?.trim();
+  if (!sessionId) throw new Error("Which session? Pass the sessionId from search-sessions.");
+
+  const agents = (await liveAgents()).data;
+  // Look the session up among recent ones first, so the answer carries the
+  // title, folder and live state rather than a bare file path.
+  const recent = await recentSessions(400, agents);
+  const hit = recent.data.find((h) => h.session.key.sessionId === sessionId);
+
+  if (!hit) {
+    throw new Error(
+      `No session ${sessionId}. Session ids come from search-sessions; ` +
+        "if the user named a session by its title, search for that first.",
+    );
+  }
+
+  const path = transcriptPathFor(hit.session);
+  const session = toAiSession(
+    hit.session,
+    hit.live,
+    resumeCommandIn(hit.session.key, hit.session.cwd) ?? null,
+  );
+
+  if (!path) {
+    return {
+      session,
+      passages: [],
+      // OpenCode keeps messages in SQLite rather than on disk. Saying so beats
+      // an empty result the model will read as "the session was empty".
+      note:
+        "This session has no transcript file on disk to read — OpenCode keeps its " +
+        "messages in a database, and a transcript can also be deleted after it was indexed.",
+    };
+  }
+
+  if (input.find?.trim()) {
+    const tokens = input.find.trim().split(/\s+/).filter(Boolean);
+    const limit = Math.min(Math.max(1, input.limit ?? 6), MAX_EXCERPTS);
+    const found = await searchTranscript(path, tokens, { maxHits: limit });
+
+    return {
+      session,
+      passages: found.excerpts.map((e) => ({
+        speaker: e.speaker,
+        // The markdown emphasis is for a Detail pane, not for a model.
+        text: e.text.replace(/\*\*/g, "").replace(/\\([\\`*_[\]{}<>#|])/g, "$1"),
+        at: e.at?.toISOString() ?? null,
+      })),
+      searchedFor: input.find,
+      note: found.gaveUp
+        ? "This session is long enough that only the first part was searched."
+        : found.excerpts.length === 0
+          ? "Those words are not in the conversation text of this session."
+          : undefined,
+    };
+  }
+
+  const tail = readTranscriptTail(path, 10);
+  return {
+    session,
+    // Not "passages": this is the end of the conversation, not a set of matches,
+    // and calling it the same thing invites the model to report it as one.
+    conversationTail: tail || null,
+    note: tail ? undefined : "This session has no readable conversation text.",
+  };
+}
+
+/** Kept honest: the tail reader is a file read and can fail on a vanished file. */
+void readFileSync;
+TSEOF
+npx tsc --noEmit 2>&1 | head -8; echo "=== tsc ==="
+```
+
+```text
+src/lib/agents/ai-context.ts(16,25): error TS2345: Argument of type 'MirroredPreferences' is not assignable to parameter of type 'Partial<ExtensionPreferences>'.
+  Types of property '"liveSource"' are incompatible.
+    Type 'string | undefined' is not assignable to type '"herdr" | "claude-registry" | "auto" | undefined'.
+      Type 'string' is not assignable to type '"herdr" | "claude-registry" | "auto" | undefined'.
+=== tsc ===
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:22:56Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to validate the `liveSource` value against the allowed set when reading from the mirror in ai-preferences.ts rather than casting it, so a corrupted mirror doesn't produce an invalid enum. I'll also clean up that unused import hack I left behind.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:22:56Z)**_
+
+Two fixes: narrow the mirrored enum properly rather than cast, and remove an unused-import hack I left in.
+
+_**Agent (claude-opus-5 2026-07-27 05:23:19Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Narrow the mirrored enum and clean the tool
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PY'
+import pathlib
+p = pathlib.Path("src/lib/agents/ai-preferences.ts")
+t = p.read_text()
+t = t.replace(
+  "export interface MirroredPreferences {\n  liveSource?: string;",
+  '/** The dropdown\'s values, narrowed on read: a corrupted mirror must not\n'
+  ' * produce an enum value the rest of the code does not handle. */\n'
+  'export type LiveSource = "auto" | "herdr" | "claude-registry";\n\n'
+  "export interface MirroredPreferences {\n  liveSource?: LiveSource;"
+)
+t = t.replace(
+  '''    const parsed = JSON.parse(raw) as MirroredPreferences;
+    return typeof parsed === "object" && parsed !== null ? parsed : {};''',
+  '''    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (typeof parsed !== "object" || parsed === null) return {};
+
+    const out: MirroredPreferences = {};
+    for (const key of KEYS) {
+      const value = parsed[key];
+      if (typeof value !== "string" || !value.trim()) continue;
+      if (key === "liveSource") {
+        // Narrowed rather than cast. A mirror written by an older version, or
+        // hand-edited, must not smuggle an unhandled value into the switch that
+        // decides which live source to wire up.
+        if (value === "auto" || value === "herdr" || value === "claude-registry") {
+          out.liveSource = value;
+        }
+        continue;
+      }
+      out[key] = value;
+    }
+    return out;'''
+)
+t = t.replace(
+  '''  const payload: MirroredPreferences = {};
+  let sawSomething = false;
+  for (const key of KEYS) {
+    const value = prefs[key];
+    if (typeof value === "string" && value.trim()) {
+      payload[key] = value;
+      sawSomething = true;
+    }
+  }''',
+  '''  const payload: Record<string, string> = {};
+  let sawSomething = false;
+  for (const key of KEYS) {
+    const value = prefs[key];
+    if (typeof value === "string" && value.trim()) {
+      payload[key] = value;
+      sawSomething = true;
+    }
+  }'''
+)
+t = t.replace(
+  '''  const live = getPreferenceValues<Preferences>() as Record<string, unknown>;
+  const direct: MirroredPreferences = {};
+  let visible = false;
+  for (const key of KEYS) {
+    const value = live[key];
+    if (typeof value === "string" && value.trim()) {
+      direct[key] = value;
+      visible = true;
+    }
+  }''',
+  '''  const live = getPreferenceValues<Preferences>() as Record<string, unknown>;
+  const direct: MirroredPreferences = {};
+  let visible = false;
+  for (const key of KEYS) {
+    const value = live[key];
+    if (typeof value !== "string" || !value.trim()) continue;
+    if (key === "liveSource") {
+      if (value === "auto" || value === "herdr" || value === "claude-registry") direct.liveSource = value;
+    } else {
+      direct[key] = value;
+    }
+    visible = true;
+  }'''
+)
+p.write_text(t)
+
+# The unused-import hack in read-session.ts.
+q = pathlib.Path("src/tools/read-session.ts")
+s = q.read_text()
+s = s.replace('import { readFileSync } from "node:fs";\n\n', "")
+s = s.replace('\n/** Kept honest: the tail reader is a file read and can fail on a vanished file. */\nvoid readFileSync;\n', "")
+q.write_text(s)
+print("patched")
+PY
+npx tsc --noEmit 2>&1 | head -8; echo "=== tsc ==="
+```
+
+```text
+patched
+=== tsc ===
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:23:56Z)**_
+
+Now the two agent-facing tools, one of which mutates and needs confirmation.
+
+_**Agent (claude-opus-5 2026-07-27 05:24:11Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Write the agent tools
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && cat > src/tools/list-agents.ts <<'TSEOF'
+/**
+ * What is running right now.
+ *
+ * The tool behind "is anything waiting on me" and "what am I working on". It
+ * reports status as DETECTED rather than known, because herdr infers it by
+ * reading the rendered terminal — a model that states it as fact will tell
+ * someone their agent is idle while it is visibly working.
+ */
+
+import { liveAgents, resumeCommandIn } from "../lib/agents";
+import { availableLabels, missingLabels, prepareTool } from "../lib/agents/ai-context";
+import { toAiAgent } from "../lib/agents/ai-shape";
+import type { AgentStatus, Capability } from "../lib/agents/types";
+
+const LIVE_SOURCES: Capability[] = ["live.herdr", "live.claude"];
+
+type Input = {
+  /**
+   * Only agents in this state: blocked (waiting on you), working, idle, done.
+   * Omit for all of them. "blocked" is the one that answers "does anything need
+   * me right now".
+   */
+  status?: string;
+  /** Only agents whose folder path contains this. */
+  directory?: string;
+  /** Only this agent: claude, codex, opencode, gemini, cursor. */
+  agent?: string;
+};
+
+export default async function tool(input: Input) {
+  const caps = await prepareTool();
+  const snapshot = await liveAgents();
+
+  let agents = snapshot.data;
+  if (input.status) {
+    const want = input.status.trim().toLowerCase();
+    // "waiting" is what a person says; "blocked" is what herdr says.
+    const key: AgentStatus | undefined =
+      want === "waiting" || want === "blocked"
+        ? "blocked"
+        : want === "working" || want === "busy"
+          ? "working"
+          : want === "idle"
+            ? "idle"
+            : want === "done"
+              ? "done"
+              : undefined;
+    if (key) agents = agents.filter((a) => a.status === key);
+  }
+  if (input.directory) {
+    const want = input.directory.trim().toLowerCase();
+    agents = agents.filter((a) => a.cwd.toLowerCase().includes(want));
+  }
+  if (input.agent) {
+    const want = input.agent.trim().toLowerCase();
+    agents = agents.filter((a) => a.agent === want);
+  }
+
+  const counts = { blocked: 0, working: 0, idle: 0, done: 0, unknown: 0 };
+  for (const a of snapshot.data) counts[a.status]++;
+
+  const missing = missingLabels(caps, LIVE_SOURCES);
+
+  return {
+    agents: agents.map((a) => ({
+      ...toAiAgent(a),
+      resumeCommand: a.session ? (resumeCommandIn(a.session, a.cwd) ?? null) : null,
+    })),
+    totals: counts,
+    readAt: snapshot.fetchedAt.toISOString(),
+    guidance:
+      "Statuses from herdr are detected by reading the terminal screen, so they " +
+      "can lag a real change by a few seconds. Only agents with a `pane` can be " +
+      "focused; the rest can only be resumed with their resumeCommand.",
+    note:
+      missing.length > 0
+        ? `Read from: ${availableLabels(caps, LIVE_SOURCES).join(", ") || "nothing"}. ` +
+          `Not available: ${missing.join(", ")}. ` +
+          "Without herdr, only Claude Code agents are visible and none can be focused."
+        : undefined,
+  };
+}
+TSEOF
+
+cat > src/tools/focus-agent.ts <<'TSEOF'
+/**
+ * Jump to a running agent's terminal.
+ *
+ * The only tool here that changes anything, so it is confirmed — and the
+ * confirmation names the agent and its folder rather than repeating the request
+ * back. "Focus w3:p7" is something you can only trust; "Focus the agent in
+ * agent-deck, currently waiting on you" is something you can check.
+ */
+
+import { Tool, getPreferenceValues, open } from "@raycast/api";
+
+import { act, liveAgents } from "../lib/agents";
+import { prepareTool } from "../lib/agents/ai-context";
+import { findMatches, folderOf } from "../lib/agents/match";
+import { statusLabel } from "../lib/agents/labels";
+import type { LiveAgent } from "../lib/agents/types";
+
+type Input = {
+  /**
+   * Which agent: a pane id, a session id, a title, or a folder name. Prefer the
+   * `pane` value from list-agents when you have one — it is unambiguous.
+   */
+  target: string;
+};
+
+/** Shared by the confirmation and the action, so they cannot disagree. */
+async function resolve(input: Input): Promise<{ agent?: LiveAgent; matches: LiveAgent[]; total: number }> {
+  await prepareTool();
+  const agents = (await liveAgents()).data;
+  const matches = findMatches(agents, input.target ?? "");
+  return { agent: matches.length === 1 ? matches[0] : undefined, matches, total: agents.length };
+}
+
+export const confirmation: Tool.Confirmation<Input> = async (input) => {
+  const { agent, matches } = await resolve(input);
+
+  if (!agent) {
+    // Confirming an action that cannot happen wastes a turn, so let it through
+    // and fail in the tool with a message the model can act on.
+    return undefined;
+  }
+  if (!agent.paneId) return undefined;
+
+  return {
+    title: "Switch to this agent's terminal?",
+    info: [
+      { name: "Agent", value: agent.title ?? folderOf(agent) ?? agent.paneId },
+      { name: "Folder", value: agent.cwd || "unknown" },
+      { name: "Status", value: statusLabel(agent.status) },
+      { name: "Pane", value: agent.paneId },
+      ...(matches.length > 1 ? [{ name: "Note", value: `${matches.length} agents matched` }] : []),
+    ],
+  };
+};
+
+export default async function tool(input: Input) {
+  const { agent, matches, total } = await resolve(input);
+
+  if (matches.length === 0) {
+    throw new Error(
+      `Nothing matches "${input.target}". ${total} agent${total === 1 ? "" : "s"} are running; ` +
+        "call list-agents to see them and use a pane id.",
+    );
+  }
+  if (matches.length > 1) {
+    // Handed back rather than guessed at: focusing the wrong one of fifty
+    // terminals is worse than one more turn.
+    throw new Error(
+      `"${input.target}" matches ${matches.length} agents: ` +
+        matches
+          .slice(0, 5)
+          .map((a) => `${a.title ?? folderOf(a) ?? a.handle}${a.paneId ? ` (${a.paneId})` : ""}`)
+          .join(", ") +
+        ". Ask which one, or use a pane id.",
+    );
+  }
+
+  const found = agent!;
+  if (!found.paneId) {
+    throw new Error(
+      `Found ${found.title ?? folderOf(found) ?? "it"}, but it cannot be focused: it was seen through ` +
+        "Claude Code's session registry, which does not record which terminal pane a process is in. " +
+        "herdr can only focus a pane it owns. Offer the resume command instead.",
+    );
+  }
+
+  await act({ op: "focus", agent: found });
+
+  // Two steps: herdr moves focus inside its own session and cannot raise the
+  // window that session runs in. Skipping this looks like nothing happened.
+  const app = getPreferenceValues<Preferences>().terminalApp;
+  if (app?.path) await open(app.path);
+
+  return {
+    focused: {
+      agent: found.agent,
+      title: found.title ?? null,
+      directory: found.cwd,
+      pane: found.paneId,
+      status: statusLabel(found.status),
+    },
+    raisedTerminal: app?.name ?? null,
+    note: app?.path
+      ? undefined
+      : "No terminal app is set in preferences, so herdr moved its own focus but no window was raised.",
+  };
+}
+TSEOF
+npx tsc --noEmit 2>&1 | head -8; echo "=== tsc ==="
+```
+
+```text
+=== tsc ===
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:24:31Z)**_
+
+Now register them in the manifest and wire the preference mirroring into the commands.
+
+_**Agent (claude-opus-5 2026-07-27 05:24:52Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Register tools and wire preference mirroring
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PY'
+import pathlib, json
+p = pathlib.Path("package.json")
+d = json.loads(p.read_text())
+d["tools"] = [
+  {
+    "name": "search-sessions",
+    "title": "Search Agent Sessions",
+    "description": (
+      "Find a past coding-agent session by what was SAID in it, across Claude Code, Codex, "
+      "OpenCode and Gemini. Use this for 'which session was that thing about X' — it searches "
+      "the conversation text, not just titles, and returns the command to resume each one plus "
+      "whether anything is running it right now. Filter by agent, folder, or running-only."
+    ),
+  },
+  {
+    "name": "read-session",
+    "title": "Read a Session",
+    "description": (
+      "Read what was actually said in one session, by id. With `find`, returns the passages "
+      "matching those words — this is the tool for 'remind me how I fixed that'. Without it, "
+      "returns the end of the conversation, which answers 'what was I doing'. Ids come from "
+      "search-sessions; if the user names a session by its subject, search first."
+    ),
+  },
+  {
+    "name": "list-agents",
+    "title": "List Running Agents",
+    "description": (
+      "What is running right now and what state each agent is in: waiting on you, working, or "
+      "idle. Use this for 'does anything need me'. Statuses are DETECTED by reading the terminal "
+      "screen, so report them as such rather than as fact. Only agents with a `pane` can be "
+      "focused; the rest can only be resumed."
+    ),
+  },
+  {
+    "name": "focus-agent",
+    "title": "Focus an Agent",
+    "description": (
+      "Switch the terminal to a running agent, by pane id, session id, title, or folder name. "
+      "Prefer the `pane` value from list-agents — anything else can be ambiguous, and this "
+      "refuses rather than guessing when more than one agent matches. Always confirmed."
+    ),
+  },
+]
+p.write_text(json.dumps(d, indent=2) + "\n")
+print("tools registered")
+PY
+
+# Every command mirrors its preferences, because tools cannot read them.
+for f in src/sessions.tsx src/agents.tsx src/agent-menu.tsx src/focus-agent.tsx; do
+  python3 - "$f" <<'PY'
+import pathlib, sys, re
+p = pathlib.Path(sys.argv[1])
+t = p.read_text()
+if "mirrorPreferences" in t: sys.exit(0)
+
+t = t.replace('} from "./lib/agents";', '  mirrorPreferences,\n} from "./lib/agents";', 1)
+if "mirrorPreferences" not in t:
+    t = re.sub(r'(import \{[^}]*\} from "\./lib/agents";)',
+               r'\1\nimport { mirrorPreferences } from "./lib/agents/ai-preferences";', t, count=1)
+else:
+    t = t.replace('  mirrorPreferences,\n} from "./lib/agents";', '} from "./lib/agents";\nimport { mirrorPreferences } from "./lib/agents/ai-preferences";', 1)
+
+# Mirror on mount, alongside the herdr probe the commands already do.
+t = t.replace("    void probeHerdr().finally(() => setProbed(true));",
+              "    // Tools cannot read extension preferences, so the commands mirror them.\n"
+              "    void mirrorPreferences();\n"
+              "    void probeHerdr().finally(() => setProbed(true));")
+t = t.replace("  await probeHerdr();\n", "  // Tools cannot read extension preferences, so the commands mirror them.\n  void mirrorPreferences();\n  await probeHerdr();\n")
+p.write_text(t)
+print(f"  mirrored in {p.name}")
+PY
+done
+npx tsc --noEmit 2>&1 | head -8; echo "=== tsc ==="; grep -c mirrorPreferences src/*.tsx
+```
+
+```text
+tools registered
+  mirrored in sessions.tsx
+  mirrored in agents.tsx
+  mirrored in agent-menu.tsx
+  mirrored in focus-agent.tsx
+=== tsc ===
+src/agents.tsx:2
+src/focus-agent.tsx:2
+src/sessions.tsx:2
+src/agent-menu.tsx:2
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:26:03Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Build and lint with tools registered
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && npm run build 2>&1 | tail -4 && npx ray lint --fix >/dev/null 2>&1; npx ray lint 2>&1 | grep -A5 error | head -15; echo "=== lint done ==="`
+
+```text
+info  - entry points ["src/agent-menu.tsx","src/sessions.tsx","src/agents.tsx","src/focus-agent.tsx","src/tools/search-sessions.ts","src/tools/read-session.ts","src/tools/list-agents.ts","src/tools/focus-agent.ts"]
+info  - compiled entry points
+info  - generated extension's TypeScript definitions
+ready  - built extension successfully
+=== lint done ===
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+[This command modified 3 files you've previously read: ../Agent-Deck-Raycast-Extension/src/lib/agents/ai-preferences.ts, ../Agent-Deck-Raycast-Extension/src/lib/agents/ai-shape.ts, ../Agent-Deck-Raycast-Extension/src/lib/agents/index.ts. Call Read before editing.]
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:26:29Z)**_
+
+<think><details><summary>Thought Process</summary>
+All the entry points are building successfully and linting is clean. Now I'm adding dev-check assertions to validate the AI shape and preference mirroring for the pure modules, plus documenting the pitfall where tools don't receive preferences. I need to verify which files are actually pure—ai-shape.ts and labels.ts qualify, but ai-preferences.ts imports from the Raycast API so it can't be included, and I'm checking whether ai-context.ts fits the criteria.
+
+Adding ai-shape and labels to the pure modules list and running the assertions.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:26:29Z)**_
+
+All 8 entry points build. Let me add the assertions and the pitfall for the preferences trap.
+
+_**Agent (claude-opus-5 2026-07-27 05:27:03Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Add AI shape assertions
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PY'
+import pathlib
+p = pathlib.Path("src/lib/dev-check.ts")
+t = p.read_text()
+
+t = t.replace('import { findMatches, folderOf } from "./agents/match";',
+              'import { sourcesNote, toAiAgent, toAiSession } from "./agents/ai-shape";\nimport { agentLabel, agentTag, statusLabel } from "./agents/labels";\nimport { findMatches, folderOf } from "./agents/match";')
+
+t = t.replace('  "lib/specstory/wire.ts",\n];',
+              '  "lib/specstory/wire.ts",\n  "lib/agents/labels.ts",\n  "lib/agents/ai-shape.ts",\n];')
+
+anchor = '// ---------------------------------------------------------------------------\nsection("errors: absent is not broken");'
+new = '''// ---------------------------------------------------------------------------
+section("ai shape: what a model is told");
+
+{
+  const bare = sess("s1");
+  const shaped = toAiSession(bare, [], null);
+  // undefined disappears from JSON, and a field a model sees only sometimes
+  // reads as a field that does not exist. Anything load-bearing is null instead.
+  const keys = Object.keys(JSON.parse(JSON.stringify(shaped)) as object);
+  for (const k of ["sessionId", "agent", "title", "directory", "lastActivity", "resumeCommand", "runningNow"]) {
+    ok(`${k} survives serialisation even when unknown`, keys.includes(k));
+  }
+  check("an unknown date is null, not absent and not 1970", shaped.lastActivity, null);
+  check("nothing running is a zero, not a missing field", shaped.runningNow, 0);
+  ok("and `running` is omitted rather than empty", !("running" in JSON.parse(JSON.stringify(shaped))));
+
+  const withLive = toAiSession(
+    sess("s2", { updatedAt: new Date("2026-07-20T00:00:00Z") }),
+    [liveAgentFor("w3:p7"), { ...liveAgentFor("w3:p8"), paneId: undefined, source: "claude-registry", pid: 42 }],
+    "claude --resume s2",
+    ["fts", "live"],
+  );
+  check("the live count is the array length", withLive.runningNow, 2);
+  check("the date is ISO", withLive.lastActivity, "2026-07-20T00:00:00.000Z");
+  check("match reasons are passed through", withLive.matchedBy, ["fts", "live"]);
+  // A model told an agent has no pane must not offer to focus it.
+  check("a pane-less agent reports pane: null", withLive.running?.[1].pane, null);
+  ok("and says which source saw it", (withLive.running?.[1].seenBy ?? "").includes("registry"));
+  // herdr screen-scrapes; the registry reads a file. Only one is a guess.
+  check("herdr's status is flagged as detected", withLive.running?.[0].statusIsDetected, true);
+  check("the registry's is not", withLive.running?.[1].statusIsDetected, false);
+}
+
+check("an agent keeps its raw status for filtering", toAiAgent(liveAgentFor("w1:p1")).statusKey, "idle");
+ok("and a phrase for reading", toAiAgent(liveAgentFor("w1:p1")).status.length > 4);
+
+// Without this, a model reports "no sessions match" when the truth is "the
+// full-text index is not installed" — and sends the user hunting for a session
+// that is right there.
+check("no gaps means no note", sourcesNote(["a", "b"], []), undefined);
+ok("a gap is named", (sourcesNote(["a"], ["SpecStory index"]) ?? "").includes("SpecStory index"));
+ok("and the model is told to say so", (sourcesNote([], ["x"]) ?? "").includes("say so"));
+
+// One definition, so the list and the model cannot disagree about a word.
+check("statusLabel blocked", statusLabel("blocked"), "Waiting on you");
+check("statusLabel working", statusLabel("working"), "Working");
+check("agentLabel claude", agentLabel("claude"), "Claude Code");
+check("agentTag claude", agentTag("claude"), "cc");
+check("agentLabel unknown is still a word", agentLabel("unknown"), "Agent");
+
+// ---------------------------------------------------------------------------
+section("errors: absent is not broken");'''
+assert anchor in t
+t = t.replace(anchor, new)
+p.write_text(t)
+print("patched")
+PY
+just verify 2>&1 | grep -E "^(FAIL|  expected|  actual|[0-9]+/[0-9]+)" | head -10
+```
+
+```text
+patched
+FAIL and a phrase for reading
+381/382 checks passed
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:27:16Z)**_
+
+<think><details><summary>Thought Process</summary>
+I see the issue — "Idle" is exactly 4 characters, so my length check was too strict. I need to adjust the comparison to `>= 4` or better yet, verify that `status` is actually a human-readable phrase distinct from the raw `statusKey`. Let me refine the assertion to ensure they're different values, at least for the blocked case, and that status isn't empty.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:27:16Z)**_
+
+My threshold was wrong — "Idle" is exactly 4 characters. Let me assert what I actually meant.
+
+_**Agent (claude-opus-5 2026-07-27 05:27:41Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Fix the assertion and verify
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PY'
+import pathlib
+p = pathlib.Path("src/lib/dev-check.ts")
+t = p.read_text()
+t = t.replace(
+  'ok("and a phrase for reading", toAiAgent(liveAgentFor("w1:p1")).status.length > 4);',
+  '''// The point of carrying both: `statusKey` is for the model to filter on,
+// `status` is for it to say out loud. They must not be the same string, or a
+// model repeats "blocked" at a user who would understand "waiting on you".
+{
+  const blocked = toAiAgent({ ...liveAgentFor("w1:p1"), status: "blocked" });
+  check("the readable status is a phrase", blocked.status, "Waiting on you");
+  ok("distinct from the key it filters on", blocked.status !== blocked.statusKey);
+}'''
+)
+p.write_text(t)
+print("patched")
+PY
+just verify 2>&1 | grep -E "^(FAIL|  expected|  actual|[0-9]+/[0-9]+)" | head -6
+```
+
+```text
+patched
+383/383 checks passed
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:28:03Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Add the preferences pitfall and run the gate
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && cat > pitfalls/an-ai-tool-cannot-read-extension-preferences.md <<'MDEOF'
+# The AI answers from the wrong place, confidently
+
+## Symptoms (grep this section)
+
+- Ask Raycast reports "no sessions found" while the Search command lists dozens.
+- The AI only ever sees Claude Code agents, even with `liveSource` left on Auto.
+- A tool reads `~/.claude` after you pointed `claudeHome` somewhere else.
+- Nothing throws. Nothing logs. The answer is simply from the default location.
+
+## Cause
+
+**Raycast passes extension-level preferences to commands, not to tools.** Inside
+`src/tools/*.ts`, `getPreferenceValues()` returns an empty object, so every
+preference-derived value silently becomes its fallback.
+
+What makes it hard to catch is that most of it still appears to work. The binary
+probe finds herdr and sqlite3 wherever they are, and the default database paths
+are correct on a normal machine — so the tools behave perfectly right up until
+someone configures something. Then the tool answers from the default while the
+commands answer from the configured path, and only the *user* can tell they
+disagree.
+
+The sibling Pueue extension hit the same trap: its AI reported "no remote
+connections configured" while its own menu bar listed two.
+
+## Fix
+
+Mirror, and prefer the real preference.
+
+1. Every command calls `mirrorPreferences()` on mount
+   (`src/lib/agents/ai-preferences.ts`), which writes the raw values to
+   `LocalStorage` under one key.
+2. Every tool calls `prepareTool()` (`src/lib/agents/ai-context.ts`) first,
+   which reads `toolPreferences()` and hands the result to
+   `setPreferenceOverride()` before anything touches the facade.
+3. `toolPreferences()` reads the **real** preferences first and only falls back
+   to the mirror. The day Raycast starts passing them through, nothing changes.
+
+Three details that are load-bearing:
+
+- **Guard the write on having read something.** A tool's own empty read must
+  never be written back, or the first tool invocation erases the mirror the
+  commands built and the configuration is lost permanently.
+- **Invalidate the wiring cache in `setPreferenceOverride()`.** The facade
+  caches resolved paths, so without this the tool reads whatever the previous
+  caller resolved.
+- **Narrow enums on read, do not cast.** A mirror written by an older version,
+  or hand-edited, must not smuggle an unhandled value into the switch that picks
+  a live source.
+
+## Also worth knowing
+
+A `preferences` array on a `tools[]` entry is schema-valid and `ray lint`
+accepts it — but it means configuring the same value once per tool, which is
+worse than mirroring.
+MDEOF
+python3 - <<'PY'
+import pathlib
+p = pathlib.Path("pitfalls/README.md")
+t = p.read_text()
+t = t.replace(
+  "| A wait that never returns |",
+  "| The AI answers from the wrong place | [an-ai-tool-cannot-read-extension-preferences.md](an-ai-tool-cannot-read-extension-preferences.md) |\n| The match preview is slow or useless | [the-match-preview-is-not-fts5-snippet.md](the-match-preview-is-not-fts5-snippet.md) |\n| A wait that never returns |"
+)
+p.write_text(t)
+print("index updated")
+PY
+just check 2>&1 | grep -E "error|FAIL|checks passed|built extension" | tail -5
+```
+</details></tool-use>

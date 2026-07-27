@@ -9,8 +9,14 @@ dev:
 build:
     ([ -d node_modules ] || npm install) && npm run build
 
+# CI=true on purpose. `ray lint` runs a package-lock.json check ONLY when it
+# thinks it is in CI — it validates the registry hosts in the lockfile, which the
+# store rejects if they are not npmjs.org. Without this the local gate is weaker
+# than the CI gate, which is exactly backwards, and a red build is the first you
+# hear of it. Verified: dropping CI=true removes the "validate package-lock.json"
+# step from the output entirely.
 lint:
-    ([ -d node_modules ] || npm install) && npm run lint
+    ([ -d node_modules ] || npm install) && CI=true npm run lint
 
 fix:
     ([ -d node_modules ] || npm install) && npm run fix-lint

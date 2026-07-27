@@ -82579,3 +82579,499 @@ ready  - run ESLint
 ready  - run Prettier 3.9.6
 ```
 </details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:20:06Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit and push
+
+```bash
+git add -A && git commit -q -F - <<'EOF'
+Fix a CI gate that had never once passed, and de-personalise the AI examples
+
+**CI.** Every run of the extension workflow since it was added has failed, on
+this assertion:
+
+    check("every mutation variant was checked", helpChecked, MUTATIONS.length);
+
+`helpChecked` only increments when `pueue <sub> --help` actually ran, and no CI
+runner has pueue installed — so all 19 skipped, the count stayed 0, and the gate
+went red on every push including the ones that added it. The assertion conflated
+"the loop reached every variant" with "a binary was there to check them
+against". It now asserts the first, and shouts when the second did not happen,
+because the live check is the one that catches a wrong flag and a silent skip
+would let a clap exit-2 bug through a green build.
+
+The workflow now `brew install`s pueue too, so the check runs for real rather
+than merely stopping failing. Only the client's `--help` is read; no daemon is
+started.
+
+**Examples.** The shipped prompts named `wf` and `lab`, which are one machine's
+group and one machine's host — unreadable to anyone else, which is the opposite
+of what an example is for. Rewritten to name nothing, plus restart-in-place and
+three batch shapes: fan-out over files, a dependency chain, and one job per
+connection.
+
+That last set needed a tool. `pueue add --group nightly` fails outright when the
+group does not exist, so every "queue these into a new group" example dead-ended
+on the first call. `create-group` is the eighth tool, and the instructions now
+say to give a batch its own group and one task per item — a loop inside a single
+task hides which item failed and cannot be restarted on its own.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+EOF
+git log --oneline -1 && git push origin main 2>&1 | tail -2
+```
+
+```text
+3de009a Fix a CI gate that had never once passed, and de-personalise the AI examples
+To https://github.com/daviddwlee84/Pueue-Raycast-Extension.git
+   07dad8a..3de009a  main -> main
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:21:57Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Watch the CI run
+
+`sleep 100; gh run list --workflow=extension.yml -L 2 2>&1`
+
+```text
+completed	failure	Fix a CI gate that had never once passed, and de-personalise the AI e…	extension	main	push	30239460132	37s	2026-07-27T05:20:07Z
+completed	failure	Give Ask Pueue some example prompts, and a standing set of rules	extension	main	push	30238716538	37s	2026-07-27T05:03:54Z
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:22:05Z)**_
+
+<think><details><summary>Thought Process</summary>
+Looking at the new failure to understand what went wrong.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:22:10Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read the new failure
+
+`gh run view 30239460132 --log-failed 2>&1 | grep -iE "FAIL|error|!!|Error:|✖" | head -20`
+
+```text
+gate	Gate	2026-07-27T05:20:37.4508070Z   ok   { Failed: 127 } through a lock
+gate	Gate	2026-07-27T05:20:37.4508400Z   ok   exit code is read out of { Failed: n }
+gate	Gate	2026-07-27T05:20:37.4509240Z   ok   { FailedToSpawn }
+gate	Gate	2026-07-27T05:20:37.4509770Z   ok   FailedToSpawn keeps the OS error
+gate	Gate	2026-07-27T05:20:37.4510280Z   ok   DependencyFailed
+gate	Gate	2026-07-27T05:20:37.4510490Z   ok   Errored
+gate	Gate	2026-07-27T05:20:37.4511090Z failure is an allowlist, not a denylist
+gate	Gate	2026-07-27T05:20:37.4521130Z   ok   Success is not a failure
+gate	Gate	2026-07-27T05:20:37.4521410Z   ok   Failed is a failure
+gate	Gate	2026-07-27T05:20:37.4521700Z   ok   FailedToSpawn is a failure
+gate	Gate	2026-07-27T05:20:37.4521970Z   ok   Killed is a failure
+gate	Gate	2026-07-27T05:20:37.4522320Z   ok   DependencyFailed is a failure
+gate	Gate	2026-07-27T05:20:37.4522600Z   ok   Errored is a failure
+gate	Gate	2026-07-27T05:20:37.4522980Z   ok   a running task is not a failure
+gate	Gate	2026-07-27T05:20:37.4528070Z   ok   microsecond precision truncates to ms rather than failing
+gate	Gate	2026-07-27T05:20:37.4532740Z   ok   failed carries the exit code and the edit lock
+gate	Gate	2026-07-27T05:20:37.4533880Z   ok   failed to spawn has no exit code
+gate	Gate	2026-07-27T05:20:37.4534260Z   ok   dependency failed
+gate	Gate	2026-07-27T05:20:37.4550980Z   ok   plain-client-error: no ANSI escapes survive
+gate	Gate	2026-07-27T05:20:37.4551520Z   ok   plain-client-error: no Location: block
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:22:21Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Isolate the failing assertion
+
+`gh run view 30239460132 --log-failed 2>&1 | grep -E "  FAIL|assertion\(s\) FAILED|##\[error\]|skip " | head -20`
+
+```text
+gate	Gate	2026-07-27T05:20:40.9367530Z ##[error]Process completed with exit code 2.
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:22:34Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read the tail of the failure
+
+`gh run view 30239460132 --log-failed 2>&1 | tail -25`
+
+```text
+gate	Gate	2026-07-27T05:20:37.6425110Z   ok   a file under the window is returned whole
+gate	Gate	2026-07-27T05:20:37.6425420Z   ok   and is not marked truncated
+gate	Gate	2026-07-27T05:20:37.6425710Z   ok   a large file is marked truncated
+gate	Gate	2026-07-27T05:20:37.6426030Z   ok   the tail starts on a line boundary, never mid-line
+gate	Gate	2026-07-27T05:20:37.6426310Z   ok   the tail keeps the end of the file
+gate	Gate	2026-07-27T05:20:37.6426540Z   ok   the window is respected
+gate	Gate	2026-07-27T05:20:37.6426810Z   ok   a missing file is undefined rather than an exception
+gate	Gate	2026-07-27T05:20:37.6427010Z 
+gate	Gate	2026-07-27T05:20:37.6427080Z all assertions passed
+gate	Gate	2026-07-27T05:20:37.6427180Z 
+gate	Gate	2026-07-27T05:20:37.7867480Z 
+gate	Gate	2026-07-27T05:20:37.7936310Z > lint
+gate	Gate	2026-07-27T05:20:37.7937820Z > ray lint
+gate	Gate	2026-07-27T05:20:37.7938600Z 
+gate	Gate	2026-07-27T05:20:38.3425200Z ^[[32mready^[[39m  - validate package.json file
+gate	Gate	2026-07-27T05:20:38.3528560Z /Users/runner/work/Pueue-Raycast-Extension/Pueue-Raycast-Extension/package-lock.json
+gate	Gate	2026-07-27T05:20:38.3529410Z ^[[31merror^[[39m  - validate package-lock.json
+gate	Gate	2026-07-27T05:20:38.3631470Z         error  Found references to a non-official npm registry (registry.npmmirror.com). Remove them
+gate	Gate	2026-07-27T05:20:38.3632170Z ^[[32mready^[[39m  - validate extension icons
+gate	Gate	2026-07-27T05:20:38.3727960Z ^[[32mready^[[39m  - validate extension metadata
+gate	Gate	2026-07-27T05:20:40.0152550Z ^[[32mready^[[39m  - run ESLint
+gate	Gate	2026-07-27T05:20:40.9249330Z ^[[32mready^[[39m  - run Prettier 3.9.6
+gate	Gate	2026-07-27T05:20:40.9351170Z  ›   Error: linting issues found (tip: try re-running with '--fix')
+gate	Gate	2026-07-27T05:20:40.9363850Z error: recipe `lint` failed on line 13 with exit code 2
+gate	Gate	2026-07-27T05:20:40.9367530Z ##[error]Process completed with exit code 2.
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:22:50Z)**_
+
+<think><details><summary>Thought Process</summary>
+The mutation assertion is now passing, but there's a separate issue with the package-lock.json file containing references to a China npm mirror registry that the linter rejects as a store requirement. I need to remove those registry URLs from the committed lock file.
+
+Interestingly, `ray lint` only validates the package-lock.json in CI environments — my local runs skip that check entirely, which means the local gate is actually weaker than what runs in CI. Let me verify this by running `CI=true just lint` locally to reproduce the failure, then regenerate the package-lock.json against the official registry to fix it.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:22:50Z)**_
+
+Two independent problems. The assertion fix worked; this is a *different* pre-existing failure — and note the step that failed doesn't even run locally:
+
+_**Agent (claude-opus-5 2026-07-27 05:23:31Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Confirm the mirror URLs and reproduce locally
+
+`grep -c "registry.npmmirror.com" package-lock.json; echo "--- npm config:"; npm config get registry; echo "--- does CI=true reproduce it locally?"; CI=true npx ray lint 2>&1 | tail -8`
+
+```text
+215
+--- npm config:
+https://registry.npmmirror.com/
+--- does CI=true reproduce it locally?
+error  - validate package-lock.json
+/Users/david/Documents/Program/Pueue-Raycast-Extension/package-lock.json
+        error  Found references to a non-official npm registry (registry.npmmirror.com). Remove them
+ready  - validate extension icons
+ready  - validate extension metadata
+ready  - run ESLint
+ready  - run Prettier 3.9.6
+ ›   Error: linting issues found (tip: try re-running with '--fix')
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:23:53Z)**_
+
+<think><details><summary>Thought Process</summary>
+Running with `CI=true` revealed that the lockfile check only happens in CI mode, making the local gate weaker than what runs in the pipeline — the opposite of what you'd normally expect. I should update `just lint` to set `CI=true` so local and CI behavior stay in sync. Also, the lockfile contains 215 URLs pointing to the China npm mirror because that's the user's global registry setting, which the store rejects.
+
+To fix this, I can regenerate the lockfile against the official registry without touching the user's global npm config, or I can do a simpler string replacement of the mirror URLs to the official registry since the integrity hashes are identical across mirrors. I'll try regeneration first with a timeout, then fall back to the string replacement if the network is slow, and verify the result with `npm ci`.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:23:53Z)**_
+
+Reproduced. **`ray lint` runs a lockfile check only under `CI=true`** — so the local gate was weaker than CI, which is backwards. Fixing both:
+
+_**Agent (claude-opus-5 2026-07-27 05:24:13Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Regenerate the lockfile against the official registry
+
+```bash
+cp package-lock.json /tmp/lock.bak
+npm install --package-lock-only --registry=https://registry.npmjs.org/ 2>&1 | tail -5
+echo "=== remaining mirror refs:"; grep -c "registry.npmmirror.com" package-lock.json || echo 0
+echo "=== npmjs refs:"; grep -c "registry.npmjs.org" package-lock.json || echo 0
+```
+
+```text
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+=== remaining mirror refs:
+215
+=== npmjs refs:
+0
+0
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:24:29Z)**_
+
+<think><details><summary>Thought Process</summary>
+The `--registry` flag won't update URLs that are already locked in the file, so I need to delete the lockfile and regenerate it fresh with `npm install --package-lock-only` pointing to the official registry, though this risks picking newer versions within the semver ranges.
+
+Alternatively, I can do a surgical string replacement to swap just the registry host while keeping the exact same resolved versions and integrity hashes intact. Since npmmirror mirrors npmjs exactly, the hashes remain valid. Let me try the replacement approach and then verify it works with a clean `npm ci` run.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:24:30Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Rewrite the registry host in the lockfile
+
+```bash
+cp /tmp/lock.bak package-lock.json
+python3 - <<'PY'
+p='package-lock.json'
+s=open(p).read()
+n=s.count('registry.npmmirror.com')
+s=s.replace('https://registry.npmmirror.com/','https://registry.npmjs.org/')
+s=s.replace('registry.npmmirror.com','registry.npmjs.org')
+open(p,'w').write(s)
+print(f'rewrote {n} references')
+PY
+grep -c "npmmirror" package-lock.json || echo "0 mirror refs left"
+python3 -c "import json; d=json.load(open('package-lock.json')); print('lockfileVersion', d['lockfileVersion'], '| packages', len(d['packages']))"
+```
+
+```text
+rewrote 215 references
+0
+0 mirror refs left
+lockfileVersion 3 | packages 216
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:24:38Z)**_
+
+Now prove the rewritten lockfile actually installs from the official registry — the integrity hashes have to still match:
+
+_**Agent (claude-opus-5 2026-07-27 05:25:04Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Clean-checkout install against the official registry
+
+```bash
+rm -rf /tmp/ciproof && mkdir -p /tmp/ciproof
+cp package.json package-lock.json /tmp/ciproof/
+cd /tmp/ciproof && npm ci --registry=https://registry.npmjs.org/ 2>&1 | tail -6; echo "npm ci exit=$?"
+```
+
+```text
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+npm ci exit=0
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:25:49Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Verify the install and harden the local lint
+
+```bash
+ls /tmp/ciproof/node_modules | wc -l; ls /tmp/ciproof/node_modules/@raycast/; rm -rf /tmp/ciproof /tmp/lock.bak
+python3 - <<'PY'
+p='Justfile'
+s=open(p).read()
+old='''lint:
+    ([ -d node_modules ] || npm install) && npm run lint'''
+new='''# CI=true on purpose. `ray lint` runs a package-lock.json check ONLY when it
+# thinks it is in CI — it validates the registry hosts in the lockfile, which the
+# store rejects if they are not npmjs.org. Without this the local gate is weaker
+# than the CI gate, which is exactly backwards, and a red build is the first you
+# hear of it. Verified: dropping CI=true removes the "validate package-lock.json"
+# step from the output entirely.
+lint:
+    ([ -d node_modules ] || npm install) && CI=true npm run lint'''
+assert s.count(old)==1
+s=s.replace(old,new)
+open(p,'w').write(s)
+print('Justfile patched')
+PY
+just lint 2>&1 | tail -7
+```
+
+```text
+     124
+api
+eslint-config
+eslint-plugin
+utils
+Justfile patched
+ready  - validate package.json file
+ready  - validate package-lock.json
+ready  - validate other lock files
+ready  - validate extension icons
+ready  - validate extension metadata
+ready  - run ESLint
+ready  - run Prettier 3.9.6
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:26:29Z)**_
+
+<think><details><summary>Thought Process</summary>
+The local linting gate is passing now with the lockfile validation steps, but I'm realizing this is a pitfall worth documenting — the local checks were weaker than what CI enforces. I should run the full gate and commit these changes. There's also a concern about `npm install` in the bootstrap potentially rewriting the resolved URLs back to npmmirror on users' machines, which could undo the lockfile fixes.
+
+I'm weighing options: adding `.npmrc` to pin the official registry would guarantee correctness but could slow installs for users in China who rely on mirrors. Since CI now catches the drift, I could skip the `.npmrc` and instead document this as a known pitfall with a one-liner fix for when it recurs. That respects users' network reality while keeping CI as the backstop.
+
+But there's a real friction point — if they run `just dev` and node_modules is missing, `npm install` rewrites the lockfile back to the mirror, CI fails again, and it becomes a recurring annoyance. Adding `.npmrc` would prevent that permanently. I'll present it as an optional fix in the response and document it in the pitfall section so they can decide whether the tradeoff is worth it for their setup.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:26:30Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```md
+# `ray lint` passes locally and fails in CI
+
+## Symptoms (grep this section)
+
+\```text
+error  - validate package-lock.json
+        error  Found references to a non-official npm registry
+               (registry.npmmirror.com). Remove them
+\```
+
+…from a CI job, on a commit whose `just lint` was green on the machine that
+wrote it.
+
+## Cause
+
+**`ray lint` runs more checks when it believes it is in CI.** Locally the output
+is five steps:
+
+\```text
+ready  - validate package.json file
+ready  - validate extension icons
+ready  - validate extension metadata
+ready  - run ESLint
+ready  - run Prettier
+\```
+
+With `CI=true` it is seven — two lockfile validations appear that are simply
+absent otherwise:
+
+\```text
+ready  - validate package.json file
+ready  - validate package-lock.json      ← only under CI
+ready  - validate other lock files       ← only under CI
+ready  - validate extension icons
+…
+\```
+
+So the local gate is **weaker** than the remote one, which is the opposite of
+what everyone assumes a gate does. Nothing announces the difference; the missing
+steps just aren't printed.
+
+The specific check that fires: the store requires every `resolved` URL in
+`package-lock.json` to point at `registry.npmjs.org`. If your global npm registry
+is a mirror — `registry.npmmirror.com`, an internal Artifactory, anything — then
+`npm install` writes that host into the lockfile, and every one of those URLs is
+a lint error.
+
+This repo shipped 215 of them and the extension workflow failed on **every push
+since it was added**, including the commit that added it.
+
+## Fix
+
+Two parts, and the second is the one that lasts.
+
+**Rewrite the lockfile.** The tarballs are byte-identical across mirrors, so the
+`integrity` hashes stay valid and a plain host substitution is safe:
+
+\```sh
+sed -i '' 's|registry\.npmmirror\.com|registry.npmjs.org|g' package-lock.json
+\```
+
+`npm install --package-lock-only --registry=…` does **not** do this — npm keeps
+the `resolved` URLs already in the file. Prove the result installs:
+
+\```sh
+mkdir /tmp/proof && cp package.json package-lock.json /tmp/proof/
+cd /tmp/proof && npm ci --registry=https://registry.npmjs.org/
+\```
+
+**Make the local gate match CI.** Otherwise it comes back the next time anyone
+runs `npm install`:
+
+\```make
+lint:
+    ([ -d node_modules ] || npm install) && CI=true npm run lint
+\```
+
+For a permanent fix on a machine whose global registry is a mirror, add an
+`.npmrc` to the repo:
+
+\```ini
+registry=https://registry.npmjs.org/
+\```
+
+That pins resolution per-project. It is deliberately **not** committed here,
+because forcing a slower or unreachable registry on the person doing the work is
+a real cost, and `CI=true` in the lint recipe now catches the drift locally
+before it reaches a push.
+
+## The general shape
+
+Any tool that behaves differently under `CI=true` turns your local gate into a
+subset of the real one. When a build fails on something that passed locally,
+check for an environment-conditional code path before assuming the runner is
+different in some deeper way — and then pin the environment in the local recipe
+so the two cannot diverge again.
+
+## Related
+
+[ray-build-does-not-typecheck.md](ray-build-does-not-typecheck.md) — the same
+lesson from the other direction: `ray build` in its default `dev` environment
+skips the typecheck that `-e dist` runs. Two commands, two environments, two
+different sets of checks, and neither says which one you are getting.
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Pueue-Raycast-Extension/pitfalls/ray-lint-checks-more-in-ci.md (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:28:14Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Index the pitfall and run the gate
+
+```bash
+python3 - <<'PY'
+p='pitfalls/README.md'
+s=open(p).read()
+row="| [usecachedpromise-serves-other-cache-keys.md](usecachedpromise-serves-other-cache-keys.md) | Switching connection shows the previous one's data, with no error |"
+assert s.count(row)==1
+s=s.replace(row, row+"\n| [ray-lint-checks-more-in-ci.md](ray-lint-checks-more-in-ci.md) | `ray lint` green locally, red in CI on `validate package-lock.json` |")
+open(p,'w').write(s)
+print('ok')
+PY
+just typecheck 2>&1 | tail -3 && just verify 2>&1 | tail -2 && just lint 2>&1 | tail -2 && just build 2>&1 | tail -2
+```
+
+```text
+ok
+([ -d node_modules ] || npm install) && npx tsc --noEmit -p tsconfig.json
+all assertions passed
+
+ready  - run ESLint
+ready  - run Prettier 3.9.6
+info  - generated extension's TypeScript definitions
+ready  - built extension successfully
+```
+</details></tool-use>
