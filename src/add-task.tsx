@@ -27,6 +27,7 @@ import { homedir } from "node:os";
 
 import { ErrorDetail } from "./lib/error-states";
 import { connectionIcon, useConnection } from "./lib/connection-ui";
+import { lastCwdKey, lastGroupKey, rememberLastUsed } from "./lib/last-used";
 import {
   connectionByName,
   forConnection,
@@ -40,16 +41,6 @@ import {
   firstLine,
   PueueError,
 } from "./lib/pueue";
-
-/**
- * Last-used group and directory, remembered per connection.
- *
- * Both are daemon-specific — a group that exists here may not exist there, and
- * a local path is meaningless on a remote host. Sharing one key would seed the
- * form with values from whichever machine you used last.
- */
-const lastGroupKey = (connection: string) => `add.group:${connection}`;
-const lastCwdKey = (connection: string) => `add.cwd:${connection}`;
 
 /** How a task enters the queue. One control, because the CLI flags are exclusive. */
 type StartMode = "queued" | "stashed" | "immediate";
@@ -162,12 +153,10 @@ export default function Command(
         id === undefined ? `Queued${where}` : `Queued task ${id}${where}`;
       toast.message = oneline(trimmed, 60);
 
-      await LocalStorage.setItem(lastGroupKey(connectionName), group);
       const usedDirectory = remote
         ? remoteDirectory.trim()
         : workingDirectory[0];
-      if (usedDirectory)
-        await LocalStorage.setItem(lastCwdKey(connectionName), usedDirectory);
+      await rememberLastUsed(connectionName, { group, cwd: usedDirectory });
 
       // Documented use of launchCommand: force a sibling's background refresh,
       // so the menu bar catches up in seconds rather than at its next interval.

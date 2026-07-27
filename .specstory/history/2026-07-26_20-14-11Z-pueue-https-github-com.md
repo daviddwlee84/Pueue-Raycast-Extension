@@ -49969,3 +49969,528 @@ _**Agent (claude-opus-5 2026-07-27 05:31:59Z)**_
 新增兩篇 pitfall：`an-ai-tool-cannot-read-extension-preferences.md`、`the-match-preview-is-not-fts5-snippet.md`。
 
 重新 `npm run dev` 後 AI tools 才會註冊。可以試試 **Ask Raycast**：「哪個 session 在講 herdr 的 pane？」
+
+---
+
+_**User (2026-07-27 05:49:39Z)**_
+
+BTW 現在好像只有herdr下的agent會被看到？
+sesh, cmux的有支援嗎？
+（現在是不是只能依賴這些3rd party tools才能知道session狀態？ 或是像 claude 有特別做session folder的那種？）
+
+---
+
+_**Agent (claude-opus-5 2026-07-27 05:50:01Z)**_
+
+<think><details><summary>Thought Process</summary>
+The user is asking whether only herdr-managed agents are visible, or if other tools like sesh and cmux also work, and whether Claude's own session registry is included. I'm realizing there are two separate implementations here—the herdr agent list and Claude's own session registry at ~/.claude/sessions—but I'm spotting a potential wiring issue in how they connect.
+
+Looking at the merge logic, registry agents that aren't already claimed by herdr should still appear in the final list, so Claude processes outside herdr should be visible. Let me check the actual numbers: herdr reported 52 agents, the registry has 49 files, with about 46 overlapping and 3 registry-only entries. For tmux and sesh, I haven't implemented pane enumeration yet—that was planned as secondary. And cmux is something I need to investigate further.
+
+The key distinction is that Claude Code agents ARE visible without herdr because they write to ~/.claude/sessions themselves, but they can't be focused without knowing which tmux pane they're in. Other agents like Codex, OpenCode, and Gemini don't have equivalent registries, so they're not visible at all outside herdr. I should verify whether those other tools maintain their own session files and whether I can enumerate tmux panes to add focus capability for non-herdr Claude agents.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:50:01Z)**_
+
+好問題，讓我實際查一下而不是用猜的。
+
+_**Agent (claude-opus-5 2026-07-27 05:50:05Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Compare herdr vs Claude registry coverage
+
+```bash
+echo "=== herdr sees: ==="; herdr agent list 2>/dev/null | jq -r '[.result.agents[] | .agent] | group_by(.) | map({(.[0]): length}) | add'
+echo "=== claude registry sees: ==="; ls ~/.claude/sessions/*.json 2>/dev/null | wc -l
+echo "=== registry sessionIds NOT in herdr (i.e. outside herdr) ==="
+herdr agent list 2>/dev/null | jq -r '.result.agents[].agent_session.value' | sort -u > /tmp/h.txt
+jq -r .sessionId ~/.claude/sessions/*.json 2>/dev/null | sort -u > /tmp/r.txt
+comm -13 /tmp/h.txt /tmp/r.txt | wc -l
+echo "--- their cwds ---"
+for sid in $(comm -13 /tmp/h.txt /tmp/r.txt | head -5); do grep -l "$sid" ~/.claude/sessions/*.json 2>/dev/null | head -1 | xargs -I{} jq -r '"  \(.name // "?")  \(.cwd)  kind=\(.kind)"' {} ; done
+```
+
+```text
+=== herdr sees: ===
+{
+  "claude": 52
+}
+=== claude registry sees: ===
+      48
+=== registry sessionIds NOT in herdr (i.e. outside herdr) ===
+       1
+--- their cwds ---
+  agent-deck-raycast  /Users/david/Documents/Program/Pueue-Raycast-Extension  kind=interactive
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:50:07Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check other agents for registries, cmux, tmux
+
+```bash
+echo "=== do other agents write a pid/session registry? ==="
+for d in ~/.codex ~/.local/share/opencode ~/.gemini ~/.cursor; do
+  echo "--- $d"; ls "$d" 2>/dev/null | grep -iE "session|pid|run|state" | head -4
+done
+echo "=== codex sessions dir contents (is it a registry or just rollouts?) ==="; ls ~/.codex/sessions 2>/dev/null | head -3
+echo "=== what is cmux? ==="; ls /Applications/cmux.app/Contents/Resources/bin/ 2>/dev/null | head; ps -axo comm= | grep -i cmux | head -3
+echo "=== tmux / sesh present? ==="; which tmux sesh 2>/dev/null; tmux ls 2>&1 | head -3
+```
+
+```text
+=== do other agents write a pid/session registry? ===
+--- /Users/david/.codex
+sessions
+herdr-agent-state.sh
+state_5.sqlite
+--- /Users/david/.local/share/opencode
+--- /Users/david/.gemini
+state.json
+--- /Users/david/.cursor
+agent-cli-state.json
+herdr-agent-state.sh
+ide_state.json
+=== codex sessions dir contents (is it a registry or just rollouts?) ===
+2026
+=== what is cmux? ===
+claude
+cmux
+ghostty
+grok
+open
+/Applications/cmux.app/Contents/MacOS/cmux
+=== tmux / sesh present? ===
+/usr/local/bin/tmux
+/usr/local/bin/sesh
+40: 1 windows (created Mon Jul 20 18:35:28 2026)
+vibe/Avalon_Remaster: 6 windows (created Mon Jul 20 18:35:28 2026)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:50:29Z)**_
+
+<think><details><summary>Thought Process</summary>
+So the Claude registry is working independently—there's already one session registered that herdr isn't tracking, which is actually this current session running in the terminal. But the other agents don't have any pid registry entries yet, starting with the sessions directory.
+
+The key insight is that Claude Code itself writes to `~/.claude/sessions/<pid>.json`, so it's visible everywhere herdr looks (tmux, sesh, cmux, plain terminal). The real limitation is that without herdr, we can see Claude is running but not *where* it's actually running.
+
+Other agents like Codex, OpenCode, Gemini, and Cursor don't maintain a per-pid registry — herdr only knows about them because it installs hooks into each agent that report back. We could add tmux and sesh support by enumerating panes and walking the process chain to find agent processes, which would give us focus capability and discovery of non-Claude agents. That's essentially what the user's own `agent-sessions.py` script does. For cmux, I need to check if it exposes a CLI for enumeration and focusing, and I should also verify what's actually stored in cursor's and codex's state files to see if they contain actionable session data.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:50:35Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check other agents state files and cmux CLI
+
+```bash
+echo "=== are those other 'state' files live registries? ==="
+echo "--- cursor agent-cli-state.json:"; head -c 300 ~/.cursor/agent-cli-state.json 2>&1; echo
+echo "--- gemini state.json:"; head -c 200 ~/.gemini/state.json 2>&1; echo
+echo "--- codex state_5.sqlite tables:"; sqlite3 "file:$HOME/.codex/state_5.sqlite?mode=ro" ".tables" 2>&1 | head -3
+echo "=== how does herdr know about non-claude agents? ==="; herdr integration status 2>&1 | grep -v "not installed"
+echo "=== cmux CLI? ==="; /Applications/cmux.app/Contents/Resources/bin/cmux --help 2>&1 | head -12
+```
+
+```text
+=== are those other 'state' files live registries? ===
+--- cursor agent-cli-state.json:
+{
+  "version": 1,
+  "hasShownAgentCommandTip": true
+}
+--- gemini state.json:
+{
+  "tipsShown": 4
+}
+--- codex state_5.sqlite tables:
+Error: unable to open database file
+=== how does herdr know about non-claude agents? ===
+claude: current (v7) (/Users/david/.claude/hooks/herdr-agent-state.sh)
+codex: current (v6) (/Users/david/.codex/herdr-agent-state.sh)
+opencode: outdated (v8 < v9) (/Users/david/.config/opencode/plugins/herdr-agent-state.js)
+cursor: current (v1) (/Users/david/.cursor/herdr-agent-state.sh)
+=== cmux CLI? ===
+cmux - control cmux via Unix socket
+
+Usage:
+  cmux <path>                Open a directory in a new workspace (launches cmux if needed)
+  cmux [global-options] <command> [options]
+
+Handle Inputs:
+  Use UUIDs, short refs (window:1/workspace:2/pane:3/surface:4), or indexes where commands accept window, workspace, pane, or surface inputs.
+  `tab-action` also accepts `tab:<n>` in addition to `surface:<n>`.
+  Output defaults to refs; pass --id-format uuids or --id-format both to include UUIDs.
+
+Socket Auth:
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:50:37Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Test tmux-based agent discovery
+
+```bash
+echo "=== can we find agents via tmux right now? ==="
+tmux list-panes -aF '#{session_name}:#{window_index}.#{pane_index}|#{pane_pid}|#{pane_current_command}|#{pane_title}' 2>/dev/null
+echo "=== walk pane pids for agent children ==="
+for p in $(tmux list-panes -aF '#{pane_pid}' 2>/dev/null); do
+  kids=$(pgrep -P "$p" 2>/dev/null)
+  for k in $kids; do c=$(ps -o comm= -p "$k" 2>/dev/null); echo "  pane_pid=$p child=$k comm=$(basename "$c")"; done
+done 2>/dev/null | head -10
+echo "=== is THIS claude session in tmux or elsewhere? ==="
+MYPID=$(jq -r 'select(.cwd|test("Pueue-Raycast")) | .pid' ~/.claude/sessions/*.json 2>/dev/null | head -1)
+echo "claude pid=$MYPID"; cur=$MYPID; for i in 1 2 3 4 5 6; do line=$(ps -o ppid=,comm= -p "$cur" 2>/dev/null) || break; echo "  $cur <- $line"; cur=$(echo "$line"|awk '{print $1}'); [ -z "$cur" ] && break; [ "$cur" = "1" ] && break; done
+```
+
+```text
+Exit code 1
+=== can we find agents via tmux right now? ===
+40:1.1|48186|zsh|Hanrus-MacBook-Pro.local
+vibe/Avalon_Remaster:1.1|48248|zsh|:/Users/david/Documents/Program/Avalon_Remaster
+vibe/Avalon_Remaster:2.1|48303|zsh|Hanrus-MacBook-Pro.local
+vibe/Avalon_Remaster:3.1|48349|nvim|Hanrus-MacBook-Pro.local
+vibe/Avalon_Remaster:4.1|48394|zsh|✳ avalon-pwa-implementation
+vibe/Avalon_Remaster:5.1|48436|zsh|Hanrus-MacBook-Pro.local
+vibe/Avalon_Remaster:6.1|48486|zsh|Hanrus-MacBook-Pro.local
+=== walk pane pids for agent children ===
+  pane_pid=48349 child=50365 comm=nvim
+=== is THIS claude session in tmux or elsewhere? ===
+claude pid=21952
+  21952 <-  3071 claude
+  3071 <-  1576 -zsh
+  1576 <-  1575 /Users/david/.local/bin/herdr
+  1575 <-   896 herdr
+  896 <-   895 -zsh
+  895 <-   516 /usr/bin/login
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:51:09Z)**_
+
+<think><details><summary>Thought Process</summary>
+So Claude Code manages its own session registry at `~/.claude/sessions/<pid>.json` without relying on herdr, whereas other agents like Codex, OpenCode, Cursor, and Gemini don't have a live registry at all—they just store basic UI state like tips shown or command hints.
+
+The key insight is that herdr doesn't detect these agents directly; instead, it installs hooks into each agent's config directory that make the agents themselves report their state to herdr. For tmux discovery, the approach is to walk the process chain from the Claude pid to find the pane it's running in, using the pane title prefix as the signal—this works reliably when the agent is actively running. I'm also noting that cmux has its own CLI interface via Unix socket that could serve as a third LiveAgentSource, following the same pattern as herdr. The real gap is that without herdr, we can see a Claude agent is running but can't focus it anywhere — tmux support would fix that for tmux users since their dotfiles already do this. cmux is more speculative. Let me ask which approach they'd actually want implemented, since this is a real scope decision between the tmux and cmux options.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:51:26Z)**_
+
+查清楚了，答案比你想的好一些，但有一個真的缺口。
+
+## 現在的實際覆蓋
+
+**Claude Code 到處都看得到，不需要 herdr。** 因為 Claude Code **自己**會寫 `~/.claude/sessions/<pid>.json`——那不是第三方工具，是它內建的。剛剛實測：registry 有 1 個 session 是 herdr 看不到的，照樣列出來。tmux / sesh / cmux / 純終端機都一樣，因為它跟終端機無關。
+
+**其他 agent 出了 herdr 就完全看不到。** 我檢查了它們的 state 檔：
+
+```
+~/.cursor/agent-cli-state.json   {"hasShownAgentCommandTip": true}
+~/.gemini/state.json             {"tipsShown": 4}
+~/.codex/sessions/               2026/ ← 是 rollout 檔案樹，不是 live registry
+```
+
+全是 UI 提示，沒有一個是 live registry。
+
+**herdr 之所以看得到它們，是因為 herdr 往每個 agent 裡裝了 hook：**
+
+```
+codex:    ~/.codex/herdr-agent-state.sh
+opencode: ~/.config/opencode/plugins/herdr-agent-state.js
+cursor:   ~/.cursor/herdr-agent-state.sh
+```
+
+是 agent 主動回報給 herdr，不是 herdr 偵測。所以這不是我們能繞過的——除非自己做等價的偵測。
+
+## 真正的缺口
+
+不是「看不到」，是**看得到但跳不過去**。沒有 herdr 時我們知道某個 Claude agent 在跑，但不知道它在哪個 pane，所以 Focus 按鈕會隱藏。
+
+## 兩個可以補的來源
+
+**tmux（順帶就是 sesh）** — sesh 只是 tmux session 的挑選器，支援 tmux 等於支援 sesh。做法就是你 chezmoi 裡 `agent-sessions.py` 已經在做的：從 agent 的 pid 往上走 parent chain 直到撞到某個 `pane_pid`。實測可行，我剛剛就用它追出這個 session 的鏈：
+
+```
+21952 <- 3071 claude <- 1576 -zsh <- 1575 herdr ...
+```
+
+補上之後 tmux 使用者能 focus（`tmux switch-client`），而且 `pgrep` 也能撈到不在 herdr 裡的 Codex / OpenCode。
+
+**cmux** — 有 CLI，socket 控制，有 window/workspace/pane/surface 的 ref 概念，形狀跟 herdr 幾乎一樣。你機器上 cmux 正在跑。
+
+一個提醒：tmux 的 `pane_current_command` 顯示 `zsh` 不是 `claude`（agent 是子行程），`pane_title` 雖然有 `✳ ` 前綴但會殘留——我剛看到一個 pane 標題還掛著 `✳ avalon-pwa-implementation` 但底下已經沒有 agent 了。所以只能走 pid chain，不能信標題。
+
+_**Agent (claude-opus-5 2026-07-27 05:58:08Z)**_
+
+<tool-use data-tool-type="generic" data-tool-name="AskUserQuestion"><details>
+<summary>Tool use: **AskUserQuestion**</summary>
+**Which live sources should I add? (multi-select)** _(select multiple)_
+
+Options:
+- **tmux / sesh** - Walk the pid chain from each agent process to a tmux pane_pid, then focus with `tmux switch-client` + `select-pane`. Also picks up Codex/OpenCode/Gemini outside herdr via pgrep. sesh comes free — it's a tmux session picker. This is what your agent-sessions.py already does.
+- **cmux** - cmux has a socket CLI with window/workspace/pane/surface refs — nearly the same shape as herdr, so it slots into the same LiveAgentSource + AgentActuator seam. It's running on your machine now. Needs its JSON output shape captured first.
+- **Just explain the gap better** - Stop hiding Focus for agents with no pane. Instead offer "Copy resume command" and "Open the folder", and say plainly why it can't jump. Cheapest option, closes the confusion without new sources.
+
+
+**Answer:** tmux / sesh, cmux, 包含Claude Code內建 （也許我們可以明確分類 比如 manu bar 的waiting on you 明確知道是哪個source得知的 這樣即便兩邊探測到重複的session也沒關係？）". Read the answers carefully — they may request clarification, changes, or that you not proceed — and follow what they actually say.
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:58:33Z)**_
+
+<think><details><summary>Thought Process</summary>
+The user wants support for tmux/sesh and cmux in addition to the Claude Code built-in they already have. The key design shift is to explicitly label which source detected each session rather than merging duplicates—so if both herdr and registry find the same session, we show it twice but clearly mark where each came from.
+
+Actually, thinking about this more carefully: showing the same session twice would create noise. The better approach is to merge sessions by identity but preserve all the sources that detected them, then display those sources on the merged row. This way we avoid duplicate rows, make the source explicit as they requested, and can even surface when different sources disagree on a session's status.
+
+There's a complexity though—when herdr and tmux both see the same session, they might be looking at the same pane or the same process ID in different contexts, so I need to think through how to handle that deduplication logic.
+
+The cleaner model is to treat a LiveAgent as a process with a set of sources that reported it, plus a way to focus it. I'm refactoring the current `source` field into a `seenBy` array and adding a `focusVia` field to track which multiplexer can actually control it. This is a bigger change that brings in two new sources, so I should plan it out properly.
+
+My approach: first measure cmux's CLI to see if it's even feasible as a source, then work through the full design and implementation plan.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:58:33Z)**_
+
+明白了 — 那最後一點是設計上的關鍵：**source 要明確**，重複偵測到就不怕。我先把 cmux 的 CLI 摸清楚再動手。
+
+_**Agent (claude-opus-5 2026-07-27 05:58:35Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Explore cmux CLI commands
+
+```bash
+CMUX=/Applications/cmux.app/Contents/Resources/bin/cmux
+echo "=== full command list ==="; $CMUX --help 2>&1 | sed -n '/Commands:/,/^$/p' | head -40
+echo "=== try listing ==="; for c in "list" "pane list" "workspace list" "ls"; do echo "--- $c:"; timeout 5 $CMUX $c 2>&1 | head -6; done
+```
+
+```text
+=== full command list ===
+Commands:
+  welcome
+  docs [settings|shortcuts|api|browser|agents|dock]
+  settings [open [target]|path|docs|<target>]
+  config <doctor|check|validate|path|paths|docs|documentation|reload>
+  shortcuts
+  disable-browser | enable-browser | browser-status
+  restore-session
+  open <path-or-url>... [--workspace <id|ref|index>] [--surface <id|ref|index>] [--pane <id|ref|index>] [--window <id|ref|index>] [--focus <true|false>] [--no-focus]
+  feedback [--email <email> --body <text> [--image <path> ...]]
+  feed tui|clear
+  themes [list|set|clear]
+  claude-teams [claude-args...]
+  codex-teams [codex-args...]
+  omo [opencode-args...]
+  omx [omx-args...]
+  omc [omc-args...]
+  hooks setup|uninstall [--agent <name>]
+  hooks <agent> <install|uninstall|event> [options; opencode supports --project]
+  hooks feed --source <agent> [--event <event>]
+  ping
+  version
+  capabilities
+  events [--after <seq>] [--cursor-file <path>] [--name <event>] [--category <category>] [--reconnect] [--limit <n>] [--no-ack] [--no-heartbeat]
+  auth <status|login|logout>
+  login | logout                                      (aliases for auth login/logout)
+  vm <new|ls|rm|exec|shell|ssh> [args...]    (alias: cloud)
+  rpc <method> [json-params]
+  identify [--workspace <id|ref|index>] [--surface <id|ref|index>] [--window <id|ref|index>] [--no-caller]
+  list-windows
+  current-window
+  new-window
+  focus-window --window <id>
+  close-window --window <id>
+  move-workspace-to-window --workspace <id|ref> --window <id|ref>
+  reorder-workspace --workspace <id|ref|index> (--index <n> | --before <id|ref|index> | --after <id|ref|index>) [--window <id|ref|index>]
+  workspace-action --action <name> [--workspace <id|ref|index>] [--window <id|ref|index>] [--title <text>] [--color <name|#hex>] [--description <text>]
+  move-tab-to-new-workspace [--tab <id|ref|index>] [--surface <id|ref|index>] [--workspace <id|ref|index>] [--window <id|ref|index>] [--title <text>] [--focus <true|false>]
+  list-workspaces [--window <id|ref|index>]
+  new-workspace [--name <title>] [--description <text>] [--cwd <path>] [--command <text>] [--layout <json>] [--window <id|ref|index>] [--focus <true|false>]
+=== try listing ===
+--- list:
+Error: Unknown command: list
+cmux - control cmux via Unix socket
+
+Usage:
+  cmux <path>                Open a directory in a new workspace (launches cmux if needed)
+  cmux [global-options] <command> [options]
+--- pane list:
+Error: Unknown command: pane list
+cmux - control cmux via Unix socket
+
+Usage:
+  cmux <path>                Open a directory in a new workspace (launches cmux if needed)
+  cmux [global-options] <command> [options]
+--- workspace list:
+Error: Unknown command: workspace list
+cmux - control cmux via Unix socket
+
+Usage:
+  cmux <path>                Open a directory in a new workspace (launches cmux if needed)
+  cmux [global-options] <command> [options]
+--- ls:
+Error: Unknown command: ls
+cmux - control cmux via Unix socket
+
+Usage:
+  cmux <path>                Open a directory in a new workspace (launches cmux if needed)
+  cmux [global-options] <command> [options]
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:58:43Z)**_
+
+<think><details><summary>Thought Process</summary>
+I'm seeing that cmux has several listing commands like `list-workspaces`, `list-windows`, and potentially `list-panes`, plus methods for checking capabilities and making RPC calls. I should pull the full command list and test these listing commands to understand what data's available. I'm also noticing cmux has a `hooks setup` command for agents similar to herdr, which suggests it tracks agent state too.
+
+Let me start exploring the available commands.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:58:44Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Get full cmux command list and capabilities
+
+```bash
+CMUX=/Applications/cmux.app/Contents/Resources/bin/cmux
+echo "=== rest of commands ==="; $CMUX --help 2>&1 | sed -n '/list-workspaces/,/^$/p' | head -40
+echo; echo "=== ping / capabilities ==="; timeout 5 $CMUX ping 2>&1 | head -3; timeout 5 $CMUX capabilities 2>&1 | head -c 600
+```
+
+```text
+=== rest of commands ===
+  list-workspaces [--window <id|ref|index>]
+  new-workspace [--name <title>] [--description <text>] [--cwd <path>] [--command <text>] [--layout <json>] [--window <id|ref|index>] [--focus <true|false>]
+  ssh <destination> [--name <title>] [--port <n>] [--identity <path>] [--ssh-option <opt>] [--window <id|ref|index>] [--no-focus] [-- <remote-command-args>]
+  remote-daemon-status [--os <darwin|linux>] [--arch <arm64|amd64>]
+  new-split <left|right|up|down> [--workspace <id|ref|index>] [--surface <id|ref|index>] [--panel <id|ref|index>] [--window <id|ref|index>] [--focus <true|false>]
+  list-panes [--workspace <id|ref|index>] [--window <id|ref|index>]
+  list-pane-surfaces [--workspace <id|ref|index>] [--pane <id|ref|index>] [--window <id|ref|index>]
+  tree [--all] [--workspace <id|ref|index>] [--window <id|ref|index>]
+  top [--all] [--workspace <id|ref|index>] [--window <id|ref|index>] [--processes] [--sort <cpu|mem|proc>] [--flat] [--format <tree|tsv>]
+  memory [--all] [--workspace <id|ref|index>] [--groups <count>]
+  focus-pane --pane <id|ref|index> [--workspace <id|ref|index>] [--window <id|ref|index>]
+  new-pane [--type <terminal|browser>] [--direction <left|right|up|down>] [--workspace <id|ref|index>] [--window <id|ref|index>] [--url <url>] [--focus <true|false>]
+  new-surface [--type <terminal|browser>] [--pane <id|ref|index>] [--workspace <id|ref|index>] [--window <id|ref|index>] [--url <url>] [--focus <true|false>]
+  close-surface [--surface <id|ref|index>] [--workspace <id|ref|index>] [--window <id|ref|index>]
+  move-surface --surface <id|ref|index> [--pane <id|ref|index>] [--workspace <id|ref|index>] [--window <id|ref|index>] [--before <id|ref|index>] [--after <id|ref|index>] [--index <n>] [--focus <true|false>]
+  split-off --surface <id|ref|index> <left|right|up|down> [--workspace <id|ref|index>] [--window <id|ref|index>] [--focus <true|false>]
+  reorder-surface --surface <id|ref|index> (--index <n> | --before <id|ref|index> | --after <id|ref|index>) [--workspace <id|ref|index>] [--window <id|ref|index>] [--focus <true|false>]
+  tab-action --action <name> [--tab <id|ref|index>] [--surface <id|ref|index>] [--workspace <id|ref|index>] [--window <id|ref|index>] [--title <text>] [--url <url>] [--focus <true|false>]
+  surface resume <set|show|get|clear> [--workspace <id|ref|index>] [--surface <id|ref|index>] [--window <id|ref|index>]
+  rename-tab [--workspace <id|ref|index>] [--tab <id|ref|index>] [--surface <id|ref|index>] [--window <id|ref|index>] <title>
+  drag-surface-to-split --surface <id|ref|index> <left|right|up|down> [--workspace <id|ref|index>] [--window <id|ref|index>] [--focus <true|false>]
+  refresh-surfaces
+  reload-config
+  surface-health [--workspace <id|ref|index>] [--window <id|ref|index>]
+  debug-terminals
+  trigger-flash [--workspace <id|ref|index>] [--surface <id|ref|index>] [--window <id|ref|index>]
+  list-panels [--workspace <id|ref|index>] [--window <id|ref|index>]
+  focus-panel --panel <id|ref|index> [--workspace <id|ref|index>] [--window <id|ref|index>]
+  close-workspace --workspace <id|ref|index> [--window <id|ref|index>]
+  select-workspace --workspace <id|ref|index> [--window <id|ref|index>]
+  rename-workspace [--workspace <id|ref|index>] [--window <id|ref|index>] <title>
+  rename-window [--workspace <id|ref|index>] [--window <id|ref|index>] <title>
+  current-workspace [--window <id|ref|index>]
+  read-screen [--workspace <id|ref|index>] [--surface <id|ref|index>] [--window <id|ref|index>] [--scrollback] [--lines <n>]
+  send [--workspace <id|ref|index>] [--surface <id|ref|index>] [--window <id|ref|index>] <text>
+  send-key [--workspace <id|ref|index>] [--surface <id|ref|index>] [--window <id|ref|index>] <key>
+  send-panel --panel <id|ref|index> [--workspace <id|ref|index>] [--window <id|ref|index>] <text>
+  send-key-panel --panel <id|ref|index> [--workspace <id|ref|index>] [--window <id|ref|index>] <key>
+  notify --title <text> [--subtitle <text>] [--body <text>] [--workspace <id|ref|index>] [--surface <id|ref|index>] [--window <id|ref|index>]
+  list-notifications
+
+=== ping / capabilities ===
+PONG
+{
+  "access_mode" : "cmuxOnly",
+  "methods" : [
+    "app.focus_override.set",
+    "app.simulate_active",
+    "auth.begin_sign_in",
+    "auth.login",
+    "auth.sign_out",
+    "auth.status",
+    "browser.addinitscript",
+    "browser.addscript",
+    "browser.addstyle",
+    "browser.back",
+    "browser.check",
+    "browser.click",
+    "browser.console.clear",
+    "browser.console.list",
+    "browser.cookies.clear",
+    "browser.cookies.get",
+    "browser.cookies.set",
+    "browser.dblclick",
+    "browser.dialog.accept",
+    "browser.dialog.dismiss",
+    "browser.download.wait",
+    "browser.errors
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:58:55Z)**_
+
+<think><details><summary>Thought Process</summary>
+cmux has a comprehensive CLI with commands for workspace and pane management, screen reading, process monitoring, and health checks. I should test the actual listing output to see what information it provides, particularly for tracking agent processes per pane.
+
+The `top --processes` command looks especially useful since it could directly map panes to their processes, eliminating the need for pid-chain walking. I'll run `tree --all`, `list-panes`, and `top --processes --format tsv` to see what data's available, and check whether these commands support JSON output or if I need to use the RPC method instead.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:58:55Z)**_
+
+cmux has a full socket CLI — `list-panes`, `focus-pane`, `read-screen`, and `top --processes`. Let me see the actual output shapes.
+
+_**Agent (claude-opus-5 2026-07-27 05:58:57Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Test cmux listing output shapes
+
+```bash
+CMUX=/Applications/cmux.app/Contents/Resources/bin/cmux
+echo "=== list-workspaces ==="; timeout 8 $CMUX list-workspaces 2>&1 | head -12
+echo; echo "=== list-panes ==="; timeout 8 $CMUX list-panes 2>&1 | head -12
+echo; echo "=== top --processes --format tsv (pane -> process) ==="; timeout 10 $CMUX top --all --processes --format tsv 2>&1 | head -20
+```
+
+```text
+=== list-workspaces ===
+* workspace:1  tarlin  [selected]
+  workspace:2  /Users
+
+=== list-panes ===
+* pane:1  [11 surfaces]  [focused]
+
+=== top --processes --format tsv (pane -> process) ===
+201.0	4537425920	47	total	total		
+201.0	4537425920	47	window	window:1	total	
+53.3	749948928	1	process	521	window:1	cmux
+147.7	3781898240	45	workspace	workspace:1	window:1	tarlin
+147.7	3781898240	45	pane	pane:1	workspace:1	
+94.2	1593847808	17	surface	surface:7	pane:1	⠐ fix-usecachedpromise-bug
+20.4	503640064	1	process	95663	surface:7	2.1.220
+0.0	1032192	1	process	72183	95663	caffeinate
+0.0	1912832	1	process	76490	95663	zsh
+0.0	1236992	1	process	77391	76490	just
+0.0	786432	1	process	77410	77391	bash
+0.0	44503040	1	process	77412	77410	node
+54.9	161480704	1	process	77453	77412	node
+0.1	33058816	1	process	77511	77453	esbuild
+0.0	425984	1	process	77392	76490	tail
+0.1	46583808	1	process	5017	surface:7	esbuild
+0.0	21889024	1	process	4968	surface:7	node
+0.0	601489408	1	process	5007	4968	node
+0.0	1794048	1	process	5016	5007	log
+0.0	385024	1	process	77708	surface:7	sleep
+```
+</details></tool-use>

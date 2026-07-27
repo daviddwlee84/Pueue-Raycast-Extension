@@ -59,11 +59,18 @@ Mention the extension in Raycast AI with `@pueue`, or run **Ask Pueue** from roo
        failed. Don't restart or change anything.
 @pueue Which group has the most failures, and do they share a cause?
 @pueue Restart every failed task in place, overwriting their old logs
-@pueue Queue 'python process.py <file>' once per file for a.csv, b.csv and c.csv
+@pueue In ~/data, queue 'python process.py <file>' once per file for
+       a.csv, b.csv and c.csv
 @pueue Make a group called nightly that runs 2 at a time, then queue
-       'make clean', 'make build' and 'make test' into it
-@pueue Queue 'npm test' on every connection, one task each
+       'make clean', 'make build' and 'make test' into it, all in
+       ~/projects/app, each waiting for the one before
 ```
+
+Every batch example names its directory on purpose. `pueue add` inherits the
+**client's** working directory when none is given, and the client here is a
+subprocess of Raycast — measured to be `/`. A task queued without one would run
+`make` at the filesystem root. The tool never leaves it to pueue: it resolves a
+directory, shows it in the confirmation, and reports it back.
 
 Eleven ship as example prompts, so they appear in the **Ask Pueue** list rather
 than having to be remembered. `ai.instructions` carries the rules that shouldn't

@@ -67,6 +67,15 @@ Every mutating tool here uses it. None of them is silent.
 - **Results are capped and say so.** 100 tasks maximum, newest first, with
   `matched` / `returned` / `truncated` alongside — a silently short list is
   indistinguishable from a short queue.
+- **A working directory is always resolved, never left to pueue.** `pueue add`
+  with no `--working-directory` inherits the *client's* cwd, and the client is a
+  subprocess of Raycast: measured, a task queued that way gets `path: "/"`. So
+  `make build` would run at the filesystem root and fail in a way that looks like
+  a broken build. `add-task` resolves the last-used directory (falling back to
+  `$HOME`), puts it in the confirmation whether or not the model chose it, and
+  returns it. The one exception is an ssh connection, where the client runs on
+  the far side and pueue's own default is the remote `$HOME` — which is both
+  correct and not something we could compute from here.
 - **`reset` is not exposed.** It kills and deletes everything in a group,
   running tasks included. No sentence is ambiguous enough to be worth that; it
   stays a deliberate action in the Groups view.

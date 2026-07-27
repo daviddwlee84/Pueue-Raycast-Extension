@@ -83161,3 +83161,1054 @@ gate	Gate	2026-07-27T05:29:12.6100980Z   ok   group-add: --parallel
 gate	Gate	2026-07-27T05:29:12.6102540Z   ok   every mutation variant was reached
 ```
 </details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:32:16Z)**_
+
+<think><details><summary>Thought Process</summary>
+The live `--help` check is now running properly in CI against a real Homebrew installation, confirming all 19 variants work correctly. I need to update my memory about the CI lint difference, add a reusable fact about the CI=true finding, and then write up a summary. I should also update the raycast-extension-dev skill with this CI discovery since that's exactly what it's designed for.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:32:34Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Record the CI finding in the skill
+
+```bash
+python3 - <<'PY'
+import os
+S=os.path.expanduser('~/Documents/Program/agent-skills/skills/local/raycast-extension-dev')
+p=S+'/SKILL.md'
+s=open(p).read()
+
+old = '''| `ray lint` | manifest schema, icons, ESLint, Prettier, **reserved-shortcut collisions** | types |'''
+new = '''| `ray lint` | manifest schema, icons, ESLint, Prettier, **reserved-shortcut collisions**, and — **only under `CI=true`** — `package-lock.json` registry hosts | types |'''
+assert s.count(old)==1
+s=s.replace(old,new)
+
+old2 = '''- **`@types/node` must match Raycast's runtime (Node 22), not your shell's node.**'''
+new2 = '''- **`ray lint` runs MORE checks when it thinks it is in CI.** Locally it prints
+  five steps; with `CI=true` it prints seven — `validate package-lock.json` and
+  `validate other lock files` appear only there, and nothing announces the
+  difference. Your local gate is a *subset* of the remote one, which is backwards.
+  Put `CI=true` in the lint recipe so they cannot diverge. The check that bites:
+  every `resolved` URL in the lockfile must be `registry.npmjs.org`, so a global
+  npm registry pointing at a mirror (`registry.npmmirror.com`, an internal
+  Artifactory) writes a lockfile the store rejects. Fix by host substitution —
+  the tarballs are identical, so `integrity` stays valid, and
+  `npm install --package-lock-only --registry=…` will *not* rewrite URLs already
+  in the file.
+- **`@types/node` must match Raycast's runtime (Node 22), not your shell's node.**'''
+assert s.count(old2)==1
+s=s.replace(old2,new2)
+open(p,'w').write(s)
+print('SKILL.md updated')
+PY
+cp ~/Documents/Program/agent-skills/skills/local/raycast-extension-dev/SKILL.md .agents/skills/raycast-extension-dev/SKILL.md
+git add -A && git commit -q -m "$(cat <<'EOF'
+Record that ray lint checks more under CI=true
+
+The lockfile registry check exists only when ray lint believes it is in CI, so
+an extension can be green locally and red on every push with nothing explaining
+why. Syncs the vendored copy.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+EOF
+)" && git push origin main 2>&1 | tail -2
+```
+
+```text
+SKILL.md updated
+To https://github.com/daviddwlee84/Pueue-Raycast-Extension.git
+   3819bf7..db1eaa1  main -> main
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:32:50Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```md
+---
+name: npm-registry-is-a-mirror
+description: This machine's global npm registry is registry.npmmirror.com, which breaks Raycast store lockfile checks
+metadata:
+  type: project
+---
+
+David's global npm registry is `registry.npmmirror.com` (China mirror). Any
+`npm install` writes that host into every `resolved` URL in `package-lock.json`.
+
+**Why it matters:** the Raycast store requires `registry.npmjs.org`, and
+`ray lint` enforces it — but **only when `CI=true`**, so it passes locally and
+fails on every push. Pueue-Raycast-Extension's workflow failed on every run from
+the day it was added until 2026-07-27 for this reason.
+
+**How to apply:** after any dependency change in a Raycast extension, check
+`grep -c npmmirror package-lock.json`. Fix by host substitution (`sed
+'s|registry\.npmmirror\.com|registry.npmjs.org|g'`) — the tarballs are identical
+across mirrors so `integrity` stays valid, and
+`npm install --package-lock-only --registry=…` does *not* rewrite URLs already in
+the file. Do not add a repo `.npmrc` pinning npmjs.org without asking: the mirror
+is presumably there because the official registry is slow or unreachable from
+his network. See [[interactive-pass-is-the-gap]].
+
+```
+
+```text
+File created successfully at: /Users/david/.claude/projects/-Users-david-Documents-Program-Pueue-Raycast-Extension/memory/npm-registry-is-a-mirror.md
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:33:01Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Index the memory and confirm CI
+
+```bash
+M=/Users/david/.claude/projects/-Users-david-Documents-Program-Pueue-Raycast-Extension/memory/MEMORY.md
+grep -q "npm-registry-is-a-mirror" "$M" || printf -- '- [npm registry is a mirror](npm-registry-is-a-mirror.md) — global npm points at npmmirror; Raycast store lockfile checks reject it\n' >> "$M"
+cat "$M"; echo "=== final CI"; gh run list --workflow=extension.yml -L 1
+```
+
+```text
+- [Tag only when verified](tag-only-when-verified.md) — a version tag is a claim the version was used, not that it compiles
+- [The interactive pass is the gap](interactive-pass-is-the-gap.md) — every reported bug so far was invisible to `just check`
+- [External tools are always optional](external-tools-are-always-optional.md) — missing dependency means degrade with a hint, never require
+- [AI tools get no preferences](raycast-tools-get-no-preferences.md) — Raycast passes extension preferences to commands, not tools
+- [npm registry is a mirror](npm-registry-is-a-mirror.md) — global npm points at npmmirror; Raycast store lockfile checks reject it
+=== final CI
+completed	success	Point the lockfile at npmjs.org, and stop the local gate being weaker…	extension	main	push	30239859765	44s	2026-07-27T05:28:51Z
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:33:24Z)**_
+
+CI is green, and the prompts are de-personalised. Pushed as `3de009a`, `3819bf7`, `db1eaa1`.
+
+## The prompts
+
+You were right that `wf` and `lab` are unreadable to anyone but you — that's the opposite of what an example is for. Rewritten to name nothing, plus the restart-in-place one you asked for and three batch shapes:
+
+```text
+@pueue Which group has the most failures, and do they share a cause?
+@pueue Restart every failed task in place, overwriting their old logs
+@pueue Queue 'python process.py <file>' once per file for a.csv, b.csv and c.csv
+@pueue Make a group called nightly that runs 2 at a time, then queue
+       'make clean', 'make build' and 'make test' into it
+@pueue Queue 'npm test' on every connection, one task each
+```
+
+Fan-out, a dependency chain, and one job per machine — three things pueue is actually for.
+
+Writing the batch ones exposed a gap. `pueue add --group nightly` **fails outright** when the group doesn't exist (`Group nightly doesn't exists. Use one of these: [...]`), so every "queue these into a new group" example would have dead-ended on the first call. So there's now an eighth tool, `create-group`, and the instructions say to give a batch its own group with **one task per item** — a loop inside a single task hides which item failed and can't be restarted alone.
+
+## CI — two separate bugs, neither of them new
+
+Worth saying plainly: **the workflow had never passed.** Every run since it was added went red, including the commit that added it.
+
+**First:** `check("every mutation variant was checked", helpChecked, MUTATIONS.length)` only counted variants where `pueue <sub> --help` actually ran. No CI runner has pueue, so all 19 skipped and the count stayed 0. The assertion conflated *"the loop reached every variant"* with *"a binary was there to check them against"*. It now asserts the first and shouts when the second didn't happen — and CI `brew install`s pueue, so the check runs for real rather than merely stopping failing:
+
+```
+ok   restart: --in-place --failed-in-group
+ok   group-add: --parallel
+ok   every mutation variant was reached
+```
+
+**Second, and more interesting:** `ray lint` was green locally and red in CI *on the same commit*. It runs **more checks when it thinks it's in CI** — locally five steps, under `CI=true` seven, with two lockfile validations appearing only there and nothing announcing the difference. Your local gate was a *subset* of the remote one.
+
+What it caught: your global npm registry is `registry.npmmirror.com`, so all 215 `resolved` URLs pointed there, and the store requires `registry.npmjs.org`. Fixed by host substitution rather than regeneration — the tarballs are byte-identical across mirrors so `integrity` stays valid and versions don't move. Proved with `npm ci --registry=https://registry.npmjs.org/` into a clean directory: exit 0, 124 packages. (`npm install --package-lock-only --registry=…` does *not* rewrite URLs already in the file — I tried that first and it changed nothing.)
+
+`just lint` now sets `CI=true` so the two gates can't diverge again. Written up in `pitfalls/ray-lint-checks-more-in-ci.md` and added to the `raycast-extension-dev` skill.
+
+**One thing I left for you:** this comes back the moment anyone runs `npm install`, because npm rewrites the URLs from your global config. The permanent fix is a repo `.npmrc` with `registry=https://registry.npmjs.org/` — I deliberately didn't commit it, since your mirror is presumably there because npmjs.org is slow or unreachable from your network, and that's your call not mine. The local gate now catches the drift before a push either way.
+
+---
+
+_**User (2026-07-27 05:51:17Z)**_
+
+像 @pueue Make a group called nightly that runs 2 at a time, then queue 'make clean', 'make build' and 'make test' into it 這種需求的話 到底是會在那個directory運行呢？（還是預設在home跑？ 如果這種非常依賴運行路徑的可能不能做example？）
+
+---
+
+_**Agent (claude-opus-5 2026-07-27 05:51:55Z)**_
+
+<think><details><summary>Thought Process</summary>
+I see the issue now — when `pueue add` runs without `--working-directory`, it uses the client's current working directory, which in this case is the Raycast extension process's cwd, not the user's shell cwd. Since `cli-transport.ts` spawns the subprocess without specifying a `cwd` option, it inherits whatever `process.cwd()` the Raycast extension has, which is likely not where the user expects it to be.
+
+The Add Task form and quick-add both explicitly pass a `workingDirectory` (defaulting to home), so they're fine. But the AI tool's `add-task` has `workingDirectory` as optional — if the model omits it, pueue falls back to the extension's process cwd, which is a real bug. I can verify this empirically by running `pueue add` from a specific directory and checking what path the task records, which I've already seen happen with the demo tasks showing paths from wherever I ran the command.
+
+The fix is to make the `add-task` tool always pass an explicit working directory, defaulting to the last-used directory from LocalStorage (per connection) or home, just like the UI does. The tool should also report back which directory it used so the model can tell the user. For remote connections though, `homedir()` is the local home, which is wrong — the command runs on the remote, so the path must exist there. The Add Task form handles this by having the user type a remote path, but for the tool, if no directory is given and it's a remote connection, I probably shouldn't pass one and let the remote default apply. The shell will expand `$HOME` before pueue sees it when passed through ssh, so using `~` would be the right approach for remote connections. My strategy is to use the provided directory if given, omit it for remote-ssh (letting it default to the remote home), otherwise fall back to the last-used directory from storage or the local home. I should always report the resolved working directory in the result, even when it wasn't explicitly provided. Let me check what working directory a pueue add command actually gets when none is specified.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:51:55Z)**_
+
+Good question, and the answer is bad. `pueue add` without `--working-directory` uses the **client's** cwd — and for a tool that's whatever cwd the Raycast process happens to have. Let me measure it:
+
+_**Agent (claude-opus-5 2026-07-27 05:51:57Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Confirm pueue inherits the client cwd
+
+```bash
+node -e "
+const {execFileSync} = require('node:child_process');
+// Mimic the transport: execFile with no cwd option, from a process whose cwd is /
+process.chdir('/');
+const out = execFileSync('/usr/local/bin/pueue', ['--color','never','add','--print-task-id','--','echo cwd-probe'], {encoding:'utf8'});
+console.log('task id', out.trim());
+"
+sleep 1
+/usr/local/bin/pueue status --json | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+for k,t in sorted(d['tasks'].items(), key=lambda x:int(x[0]), reverse=True)[:1]:
+    print('id',k,'command',t['command'],'-> path:', t['path'])
+"
+```
+
+```text
+task id 11
+id 11 command echo cwd-probe -> path: /
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:52:09Z)**_
+
+<think><details><summary>Thought Process</summary>
+I found the bug — the `add-task` tool isn't setting the correct working directory, so tasks run in Raycast's process directory instead of the user's project. I need to fix that. I should also check what working directory the remote pueue client uses when running over SSH, since `ssh host 'pueue add ...'` executes in the remote home directory. Let me test both scenarios to verify the behavior.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:52:09Z)**_
+
+`/`. Confirmed — an AI-queued `make clean` would have run at the filesystem root. Checking the remote case too:
+
+_**Agent (claude-opus-5 2026-07-27 05:52:10Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check the remote client cwd
+
+```bash
+/usr/local/bin/pueue --color never remove 11 >/dev/null 2>&1
+echo "=== what cwd does a remote pueue client get?"
+timeout 20 ssh -o BatchMode=yes -o ConnectTimeout=5 david_ubuntu 'pwd; ~/.cargo/bin/pueue --version' 2>&1 | head -3
+```
+
+```text
+=== what cwd does a remote pueue client get?
+/home/daviddwlee84
+pueue 4.0.2
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:52:33Z)**_
+
+<think><details><summary>Thought Process</summary>
+I've identified the core issue: when using a local socket connection, the pueue client inherits the Raycast extension's working directory (which defaults to `/`), but for SSH connections the client runs remotely with the proper home directory context. For the `add-task` command, I need to prioritize the model-supplied working directory if available, otherwise fall back to the last-used directory for local connections.
+
+Now I'm figuring out where to store the LocalStorage keys that track the working directory and group per connection — they're currently private to the add-task view, but I need to share them with the tool. I'm considering moving them to a shared module like `src/lib/ai-connection.ts` since they're connection-scoped, though I need to be careful not to create circular dependencies with React imports.
+
+I think the cleanest approach is creating a small `src/lib/last-used.ts` module that exports key builders and readers, then updating both the UI components and the tool to use it consistently. I should also check if quick-add.tsx is duplicating these keys already.
+
+For the instructions, I need to make sure the model knows to ask for or state the directory when running path-dependent commands, since even with the default fixed to use the last-used directory or home, that still might not be the user's actual project location.
+
+The example prompts should demonstrate this pattern directly — something like queuing make commands into a group while specifying the project directory, and doing the same for the file-processing example. That teaches the right habit while answering the user's original question about how to specify where commands run.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:52:33Z)**_
+
+Confirmed split: **ssh** gets the remote `$HOME` (sensible); **local** gets the Raycast process's cwd (`/` — meaningless). Fixing the tool:
+
+_**Agent (claude-opus-5 2026-07-27 05:52:34Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Find the last-used key helpers
+
+`grep -n "lastGroupKey\|lastCwdKey\|LocalStorage" src/quick-add.tsx src/add-task.tsx | head -20`
+
+```text
+src/add-task.tsx:17:  LocalStorage,
+src/add-task.tsx:51:const lastGroupKey = (connection: string) => `add.group:${connection}`;
+src/add-task.tsx:52:const lastCwdKey = (connection: string) => `add.cwd:${connection}`;
+src/add-task.tsx:95:    LocalStorage.getItem<string>(lastGroupKey(connectionName)).then((g) => {
+src/add-task.tsx:98:    LocalStorage.getItem<string>(lastCwdKey(connectionName)).then((d) => {
+src/add-task.tsx:165:      await LocalStorage.setItem(lastGroupKey(connectionName), group);
+src/add-task.tsx:170:        await LocalStorage.setItem(lastCwdKey(connectionName), usedDirectory);
+src/quick-add.tsx:15:  LocalStorage,
+src/quick-add.tsx:47:    (await LocalStorage.getItem<string>(`add.group:${connection.name}`)) ??
+src/quick-add.tsx:50:    (await LocalStorage.getItem<string>(`add.cwd:${connection.name}`)) ??
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:52:41Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read quick-add's defaulting
+
+`sed -n 40,70p src/quick-add.tsx`
+
+```text
+  }
+
+  // Quick Add always targets the default connection: it has no UI to pick
+  // one, and silently queueing onto whichever daemon a *different* command
+  // happened to select would be worse than being predictable.
+  const connection = defaultConnection();
+  const group =
+    (await LocalStorage.getItem<string>(`add.group:${connection.name}`)) ??
+    "default";
+  const cwd =
+    (await LocalStorage.getItem<string>(`add.cwd:${connection.name}`)) ??
+    homedir();
+
+  try {
+    const id = await mutate(
+      {
+        op: "add",
+        command,
+        group: group === "default" ? undefined : group,
+        label: label || undefined,
+        workingDirectory: cwd,
+      },
+      { connection },
+    );
+
+    await showHUD(
+      id === undefined
+        ? `Queued ${oneline(command, 40)}`
+        : `Queued task ${id} · ${oneline(command, 40)}`,
+    );
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:52:59Z)**_
+
+<think><details><summary>Thought Process</summary>
+Quick Add already has the pattern with `homedir()`, so I just need to extract that logic into a shared module and apply it consistently across all three places.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:52:59Z)**_
+
+The pattern already exists in Quick Add — the tool just skipped it. Extracting it so there's one answer:
+
+_**Agent (claude-opus-5 2026-07-27 05:53:00Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * What the last submission used, remembered per connection.
+ *
+ * Both values are daemon-specific: a group that exists here may not exist there,
+ * and a local path is meaningless on a remote host. Sharing one key would seed a
+ * form with values from whichever machine you happened to use last.
+ *
+ * This module exists because the working directory has a sharp edge. `pueue add`
+ * without `--working-directory` uses **the client's current directory**, and the
+ * client here is a subprocess of Raycast — whose cwd is not your shell's, not
+ * your project's, and measured to be `/`. A task queued that way runs `make` at
+ * the filesystem root. Every submission path therefore passes a directory
+ * explicitly rather than letting pueue fall back.
+ *
+ * The one exception is a connection that runs over ssh: there the pueue client
+ * runs on the far side, in the login shell's directory, which is the remote
+ * `$HOME` — a sensible default we could not compute locally anyway. See
+ * `defaultWorkingDirectory`.
+ */
+
+import { LocalStorage } from "@raycast/api";
+import { homedir } from "node:os";
+
+import { runsOverSsh, type Connection } from "./pueue";
+
+export const lastGroupKey = (connection: string) => `add.group:${connection}`;
+export const lastCwdKey = (connection: string) => `add.cwd:${connection}`;
+
+export async function readLastGroup(connection: string): Promise<string> {
+  return (await LocalStorage.getItem<string>(lastGroupKey(connection))) ?? "default";
+}
+
+export async function readLastCwd(
+  connection: string,
+): Promise<string | undefined> {
+  const stored = await LocalStorage.getItem<string>(lastCwdKey(connection));
+  return stored && stored.length > 0 ? stored : undefined;
+}
+
+export async function rememberLastUsed(
+  connection: string,
+  o: { group?: string; cwd?: string },
+): Promise<void> {
+  if (o.group) await LocalStorage.setItem(lastGroupKey(connection), o.group);
+  if (o.cwd) await LocalStorage.setItem(lastCwdKey(connection), o.cwd);
+}
+
+/**
+ * Where a task should run when the caller did not say.
+ *
+ * `undefined` means "let pueue decide", and is only ever returned for an ssh
+ * connection, where pueue's own decision is the remote home directory. For
+ * anything the local client submits, a concrete path is always returned —
+ * leaving it to pueue there means the Raycast process's cwd.
+ */
+export async function defaultWorkingDirectory(
+  connection: Connection,
+): Promise<string | undefined> {
+  if (runsOverSsh(connection)) return undefined;
+  return (await readLastCwd(connection.name)) ?? homedir();
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Pueue-Raycast-Extension/src/lib/last-used.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:53:26Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Queue a command.
+ *
+ * The only tool that creates work rather than reporting it, and the one worth
+ * having: "queue a release build in the nightly group" is a sentence, and
+ * everything it needs — the command, the group, the daemon — is in it.
+ *
+ * The confirmation is not optional. A shell command assembled from a sentence is
+ * exactly the thing a person should read before it runs, and the confirmation
+ * shows it verbatim alongside the machine and the directory it will run in.
+ *
+ * That directory is the sharp edge here. `pueue add` with no
+ * `--working-directory` inherits the *client's* current directory, and the
+ * client is a subprocess of Raycast — measured to be `/`. A model that queues
+ * `make build` without a directory would otherwise be queueing it at the
+ * filesystem root, which fails in a way that looks like the build is broken.
+ * So a directory is always resolved and always shown. See
+ * `lib/last-used.ts`.
+ */
+
+import { Action, Tool } from "@raycast/api";
+
+import { mutate, oneline } from "../lib/pueue";
+import { defaultWorkingDirectory, rememberLastUsed } from "../lib/last-used";
+import { resolveConnectionStrict } from "../lib/ai-connection";
+
+type Input = {
+  /**
+   * The shell command line, exactly as it would be typed. pueue hands it to
+   * `sh -c` itself, so pipes, redirections, `&&` and quoting all work — do not
+   * escape or wrap it.
+   */
+  command: string;
+  /** Which daemon to queue it on. Omit for this machine's own. */
+  connection?: string;
+  /** The group to queue into. Omit for `default`. The group must already exist. */
+  group?: string;
+  /** A short label, shown beside the task in the queue. */
+  label?: string;
+  /**
+   * Where to run it. **Always set this for a command that depends on where it
+   * runs** — `make`, `npm`, `cargo`, `git`, anything using a relative path. If
+   * the user has not said where, ask rather than guessing; the fallback is the
+   * last directory they queued into, which may be a different project. The path
+   * must exist on the machine that will run the task, which for a remote
+   * connection is the remote filesystem, not this one.
+   */
+  workingDirectory?: string;
+  /** Task ids this one waits for. A failed dependency yields DependencyFailed. */
+  after?: number[];
+  /** Queue it without running: it sits in the stash until enqueued by hand. */
+  stashed?: boolean;
+  /** Start immediately, ignoring the group's parallelism limit. */
+  immediate?: boolean;
+};
+
+export const confirmation: Tool.Confirmation<Input> = async (input) => {
+  const connection = await resolveConnectionStrict(input.connection);
+  const directory =
+    input.workingDirectory ?? (await defaultWorkingDirectory(connection));
+  return {
+    // Not Destructive: this adds work rather than destroying any. It still
+    // confirms, because the command was assembled from prose.
+    style: Action.Style.Regular,
+    message: `Queue this command on ${connection.name}?`,
+    info: [
+      { name: "Command", value: input.command },
+      { name: "Daemon", value: connection.name },
+      { name: "Group", value: input.group ?? "default" },
+      {
+        // Always shown, and says whose default it is when nobody chose. A
+        // command that runs in the wrong directory is the failure this tool is
+        // most likely to cause.
+        name: "Directory",
+        value:
+          input.workingDirectory ??
+          (directory
+            ? `${directory} (last used)`
+            : `${connection.name}'s home directory`),
+      },
+      { name: "Label", value: input.label },
+      {
+        name: "Waits for",
+        value: input.after?.map((id) => `#${id}`).join(", "),
+      },
+      {
+        name: "Start",
+        value: input.stashed
+          ? "stashed — will not run until enqueued"
+          : input.immediate
+            ? "immediately, ignoring the parallelism limit"
+            : undefined,
+      },
+    ],
+  };
+};
+
+export default async function tool(input: Input) {
+  const connection = await resolveConnectionStrict(input.connection);
+  const directory =
+    input.workingDirectory ?? (await defaultWorkingDirectory(connection));
+
+  const id = await mutate(
+    {
+      op: "add",
+      command: input.command,
+      group: input.group,
+      label: input.label,
+      workingDirectory: directory,
+      after: input.after,
+      stashed: input.stashed,
+      immediate: input.immediate,
+    },
+    { connection },
+  );
+
+  // Only remember a directory the caller actually chose. Writing back the
+  // fallback would turn one unspecified submission into the default for every
+  // later one.
+  if (input.workingDirectory) {
+    await rememberLastUsed(connection.name, { cwd: input.workingDirectory });
+  }
+
+  return {
+    queued: true,
+    taskId: id ?? null,
+    connection: connection.name,
+    group: input.group ?? "default",
+    command: oneline(input.command, 200),
+    // Reported so the model can tell the user where it went. If this is not the
+    // directory they meant, the task will fail for a reason that has nothing to
+    // do with the command.
+    workingDirectory: directory ?? `${connection.name}'s home directory`,
+    workingDirectoryWasChosen: input.workingDirectory !== undefined,
+  };
+}
+
+```
+
+```text
+<tool_use_error>File has been modified since read, either by the user or by a linter. Read it again before attempting to write it.</tool_use_error>
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:53:36Z)**_
+
+<tool-use data-tool-type="read" data-tool-name="Read"><details>
+<summary>Tool use: **Read**</summary>
+ `./src/tools/add-task.ts`
+
+```text
+1	/**
+2	 * Queue a command.
+3	 *
+4	 * The only tool that creates work rather than reporting it, and the one worth
+5	 * having: "queue a release build in the wf group on lab" is a sentence, and
+6	 * everything it needs — the command, the group, the daemon — is in it.
+7	 *
+8	 * The confirmation is not optional. A shell command assembled from a sentence is
+9	 * exactly the thing a person should read before it runs, and the confirmation
+10	 * shows it verbatim alongside the machine it will run on.
+11	 */
+12	
+13	import { Action, Tool } from "@raycast/api";
+14	
+15	import { mutate, oneline } from "../lib/pueue";
+16	import { resolveConnectionStrict } from "../lib/ai-connection";
+17	
+18	type Input = {
+19	  /**
+20	   * The shell command line, exactly as it would be typed. pueue hands it to
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:54:02Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Queue a command.
+ *
+ * The only tool that creates work rather than reporting it, and the one worth
+ * having: "queue a release build in the nightly group" is a sentence, and
+ * everything it needs — the command, the group, the daemon — is in it.
+ *
+ * The confirmation is not optional. A shell command assembled from a sentence is
+ * exactly the thing a person should read before it runs, and the confirmation
+ * shows it verbatim alongside the machine and the directory it will run in.
+ *
+ * That directory is the sharp edge here. `pueue add` with no
+ * `--working-directory` inherits the *client's* current directory, and the
+ * client is a subprocess of Raycast — measured to be `/`. A model that queued
+ * `make build` without one would be queueing it at the filesystem root, which
+ * then fails in a way that looks like the build is broken. So a directory is
+ * always resolved and always shown. See `lib/last-used.ts`.
+ */
+
+import { Action, Tool } from "@raycast/api";
+
+import { mutate, oneline } from "../lib/pueue";
+import { defaultWorkingDirectory, rememberLastUsed } from "../lib/last-used";
+import { resolveConnectionStrict } from "../lib/ai-connection";
+
+type Input = {
+  /**
+   * The shell command line, exactly as it would be typed. pueue hands it to
+   * `sh -c` itself, so pipes, redirections, `&&` and quoting all work — do not
+   * escape or wrap it.
+   */
+  command: string;
+  /** Which daemon to queue it on. Omit for this machine's own. */
+  connection?: string;
+  /** The group to queue into. Omit for `default`. The group must already exist. */
+  group?: string;
+  /** A short label, shown beside the task in the queue. */
+  label?: string;
+  /**
+   * Where to run it. **Always set this for a command that depends on where it
+   * runs** — `make`, `npm`, `cargo`, `git`, anything using a relative path. If
+   * the user has not said where, ask rather than guessing: the fallback is the
+   * last directory they queued into, which may belong to a different project.
+   * The path must exist on the machine that will run the task, which for a
+   * remote connection is the remote filesystem, not this one.
+   */
+  workingDirectory?: string;
+  /** Task ids this one waits for. A failed dependency yields DependencyFailed. */
+  after?: number[];
+  /** Queue it without running: it sits in the stash until enqueued by hand. */
+  stashed?: boolean;
+  /** Start immediately, ignoring the group's parallelism limit. */
+  immediate?: boolean;
+};
+
+/** How the directory reads in a confirmation, including whose choice it was. */
+function directoryLabel(
+  chosen: string | undefined,
+  resolved: string | undefined,
+  connectionName: string,
+): string {
+  if (chosen) return chosen;
+  if (resolved) return `${resolved} (last used — nobody chose)`;
+  return `${connectionName}'s home directory`;
+}
+
+export const confirmation: Tool.Confirmation<Input> = async (input) => {
+  const connection = await resolveConnectionStrict(input.connection);
+  const resolved =
+    input.workingDirectory ?? (await defaultWorkingDirectory(connection));
+  return {
+    // Not Destructive: this adds work rather than destroying any. It still
+    // confirms, because the command was assembled from prose.
+    style: Action.Style.Regular,
+    message: `Queue this command on ${connection.name}?`,
+    info: [
+      { name: "Command", value: input.command },
+      { name: "Daemon", value: connection.name },
+      { name: "Group", value: input.group ?? "default" },
+      {
+        // Always shown, never omitted. Running in the wrong directory is the
+        // failure this tool is most likely to cause, and the only place it can
+        // be caught is here.
+        name: "Directory",
+        value: directoryLabel(
+          input.workingDirectory,
+          resolved,
+          connection.name,
+        ),
+      },
+      { name: "Label", value: input.label },
+      {
+        name: "Waits for",
+        value: input.after?.map((id) => `#${id}`).join(", "),
+      },
+      {
+        name: "Start",
+        value: input.stashed
+          ? "stashed — will not run until enqueued"
+          : input.immediate
+            ? "immediately, ignoring the parallelism limit"
+            : undefined,
+      },
+    ],
+  };
+};
+
+export default async function tool(input: Input) {
+  const connection = await resolveConnectionStrict(input.connection);
+  const resolved =
+    input.workingDirectory ?? (await defaultWorkingDirectory(connection));
+
+  const id = await mutate(
+    {
+      op: "add",
+      command: input.command,
+      group: input.group,
+      label: input.label,
+      workingDirectory: resolved,
+      after: input.after,
+      stashed: input.stashed,
+      immediate: input.immediate,
+    },
+    { connection },
+  );
+
+  // Only remember a directory the caller actually chose. Writing the fallback
+  // back would turn one unspecified submission into the default for every later
+  // one, which is how a wrong guess becomes permanent.
+  if (input.workingDirectory) {
+    await rememberLastUsed(connection.name, { cwd: input.workingDirectory });
+  }
+
+  return {
+    queued: true,
+    taskId: id ?? null,
+    connection: connection.name,
+    group: input.group ?? "default",
+    command: oneline(input.command, 200),
+    // Reported so the model can tell the user where it went. If this is not the
+    // directory they meant, the task fails for a reason that has nothing to do
+    // with the command.
+    workingDirectory: resolved ?? `${connection.name}'s home directory`,
+    workingDirectoryWasChosen: input.workingDirectory !== undefined,
+  };
+}
+
+```
+
+```text
+The file /Users/david/Documents/Program/Pueue-Raycast-Extension/src/tools/add-task.ts has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:54:14Z)**_
+
+Now point the two view commands at the same helper, so there's one answer to "where does it run":
+
+_**Agent (claude-opus-5 2026-07-27 05:54:14Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Point quick-add at the shared helper
+
+```bash
+python3 - <<'PY'
+p='src/quick-add.tsx'
+s=open(p).read()
+old = '''  const group =
+    (await LocalStorage.getItem<string>(`add.group:${connection.name}`)) ??
+    "default";
+  const cwd =
+    (await LocalStorage.getItem<string>(`add.cwd:${connection.name}`)) ??
+    homedir();'''
+new = '''  const group = await readLastGroup(connection.name);
+  // Never left to pueue: without an explicit directory it uses the *client's*
+  // cwd, and the client is a subprocess of Raycast. See lib/last-used.ts.
+  const cwd = (await defaultWorkingDirectory(connection)) ?? homedir();'''
+assert s.count(old)==1
+s=s.replace(old,new)
+open(p,'w').write(s)
+print('quick-add ok')
+PY
+grep -n "^import\|LocalStorage\|homedir" src/quick-add.tsx | head
+```
+
+```text
+quick-add ok
+13:import {
+15:  LocalStorage,
+20:import { homedir } from "node:os";
+22:import { describeError } from "./lib/error-states";
+23:import {
+49:  const cwd = (await defaultWorkingDirectory(connection)) ?? homedir();
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:54:51Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Point add-task.tsx at the shared helper
+
+```bash
+python3 - <<'PY'
+p='src/quick-add.tsx'
+s=open(p).read()
+s=s.replace('import { describeError } from "./lib/error-states";',
+            'import { describeError } from "./lib/error-states";\nimport {\n  defaultWorkingDirectory,\n  readLastGroup,\n} from "./lib/last-used";')
+open(p,'w').write(s)
+PY
+python3 - <<'PY'
+p='src/add-task.tsx'
+s=open(p).read()
+old = '''/**
+ * Last-used group and directory, remembered per connection.
+ *
+ * Both are daemon-specific — a group that exists here may not exist there, and
+ * a local path is meaningless on a remote host. Sharing one key would seed the
+ * form with values from whichever machine you used last.
+ */
+const lastGroupKey = (connection: string) => `add.group:${connection}`;
+const lastCwdKey = (connection: string) => `add.cwd:${connection}`;
+
+'''
+assert s.count(old)==1
+s=s.replace(old,'')
+s=s.replace('import { connectionIcon, useConnection } from "./lib/connection-ui";',
+            'import { connectionIcon, useConnection } from "./lib/connection-ui";\nimport {\n  lastCwdKey,\n  lastGroupKey,\n  rememberLastUsed,\n} from "./lib/last-used";')
+old2 = '''      await LocalStorage.setItem(lastGroupKey(connectionName), group);
+      const usedDirectory = remote
+        ? remoteDirectory.trim()
+        : workingDirectory[0];
+      if (usedDirectory)
+        await LocalStorage.setItem(lastCwdKey(connectionName), usedDirectory);'''
+new2 = '''      const usedDirectory = remote
+        ? remoteDirectory.trim()
+        : workingDirectory[0];
+      await rememberLastUsed(connectionName, { group, cwd: usedDirectory });'''
+assert s.count(old2)==1
+s=s.replace(old2,new2)
+open(p,'w').write(s)
+print('add-task.tsx ok')
+PY
+just typecheck 2>&1 | tail -8
+```
+
+```text
+add-task.tsx ok
+([ -d node_modules ] || npm install) && npx tsc --noEmit -p tsconfig.json
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:55:22Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Lint after the refactor
+
+`just lint 2>&1 | grep -E "error|warning|ready  - run" | tail -6`
+
+```text
+✖ 1 problem (1 error, 0 warnings)
+error  - run Prettier 3.9.6
+  error  Code style issues found. Please run Prettier 3.9.6 (ray lint --fix).
+  error  Code style issues found. Please run Prettier 3.9.6 (ray lint --fix).
+  error  Code style issues found. Please run Prettier 3.9.6 (ray lint --fix).
+error: Recipe `lint` failed on line 19 with exit code 2
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:56:08Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Format and re-lint
+
+`just fix 2>&1 | tail -3; just lint 2>&1 | grep -E "error|✖|ready  - run Prettier" | tail -4`
+
+```text
+ready  - run Prettier 3.9.6
+ ›   Error: linting issues found (tip: try re-running with '--fix')
+error: Recipe `fix` failed on line 22 with exit code 2
+  15:3  error  'LocalStorage' is defined but never used  @typescript-eslint/no-unused-vars
+✖ 1 problem (1 error, 0 warnings)
+ready  - run Prettier 3.9.6
+error: Recipe `lint` failed on line 19 with exit code 2
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:56:50Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Drop the now-unused import
+
+```bash
+python3 - <<'PY'
+p='src/quick-add.tsx'
+s=open(p).read()
+s=s.replace('  LocalStorage,\n','',1)
+open(p,'w').write(s)
+PY
+grep -n "LocalStorage" src/quick-add.tsx src/add-task.tsx; echo "(none expected)"; just fix 2>&1 | tail -2; just lint 2>&1 | tail -3
+```
+
+```text
+src/add-task.tsx:17:  LocalStorage,
+src/add-task.tsx:86:    LocalStorage.getItem<string>(lastGroupKey(connectionName)).then((g) => {
+src/add-task.tsx:89:    LocalStorage.getItem<string>(lastCwdKey(connectionName)).then((d) => {
+(none expected)
+ready  - run ESLint
+ready  - run Prettier 3.9.6
+ready  - validate extension metadata
+ready  - run ESLint
+ready  - run Prettier 3.9.6
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:57:07Z)**_
+
+Green. Now the prompts — the fix has to teach the habit, not just avoid the crash:
+
+_**Agent (claude-opus-5 2026-07-27 05:57:31Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Name the directory in every batch example
+
+```bash
+python3 - <<'PY'
+import json
+p='package.json'
+d=json.load(open(p))
+
+d['ai']['evals'] = [
+  {"input": "@pueue Give me an overview of every connection, then explain why anything failed. Don't restart or change anything."},
+  {"input": "@pueue What's running right now, and how long has each one been going?"},
+  {"input": "@pueue Why did my failed tasks fail? Read the logs — don't fix anything yet."},
+  {"input": "@pueue Which group has the most failures, and do they share a cause?"},
+  {"input": "@pueue How far through is each group, and roughly when will the queue be empty?"},
+  {"input": "@pueue Restart every failed task in place, overwriting their old logs"},
+  {"input": "@pueue Restart the failures as new tasks so the original logs are kept"},
+  # Every batch example names its directory. `pueue add` inherits the client's
+  # cwd, and the client is a subprocess of Raycast — an example that omitted the
+  # directory would be teaching people to queue `make` at the filesystem root.
+  {"input": "@pueue In ~/data, queue 'python process.py <file>' once per file for a.csv, b.csv and c.csv"},
+  {"input": "@pueue Make a group called nightly that runs 2 at a time, then queue 'make clean', 'make build' and 'make test' into it, all in ~/projects/app, each waiting for the one before"},
+  {"input": "@pueue Queue 'npm test' in ~/projects/app on every connection, one task each"},
+  {"input": "@pueue Clean up the successful tasks but keep the failures so I can still read them"},
+]
+
+d['ai']['instructions'] = d['ai']['instructions'].replace(
+  "Use `after` when the steps must run in order; without it a group with parallelism above 1 will run them at the same time.",
+  "Use `after` when the steps must run in order; without it a group with parallelism above 1 will run them at the same time."
+  " ALWAYS set `workingDirectory` for a command that depends on where it runs — make, npm, cargo, git, or anything with a relative path."
+  " pueue inherits the client's directory when none is given, and this client is a subprocess of Raycast, so the task would run somewhere arbitrary."
+  " If the user has not said where, ask; do not fall back to a previous project's directory and hope."
+)
+json.dump(d,open(p,'w'),indent=2,ensure_ascii=False)
+open(p,'a').write('\n')
+print('ok')
+PY
+just lint 2>&1 | tail -2 && just verify 2>&1 | tail -2
+```
+
+```text
+ok
+ready  - run ESLint
+ready  - run Prettier 3.9.6
+all assertions passed
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:57:59Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Document the directory rule
+
+```bash
+python3 - <<'PY'
+p='README.md'
+s=open(p).read()
+old = '''@pueue Queue 'python process.py <file>' once per file for a.csv, b.csv and c.csv
+@pueue Make a group called nightly that runs 2 at a time, then queue
+       'make clean', 'make build' and 'make test' into it
+@pueue Queue 'npm test' on every connection, one task each
+\```'''
+new = '''@pueue In ~/data, queue 'python process.py <file>' once per file for
+       a.csv, b.csv and c.csv
+@pueue Make a group called nightly that runs 2 at a time, then queue
+       'make clean', 'make build' and 'make test' into it, all in
+       ~/projects/app, each waiting for the one before
+\```
+
+Every batch example names its directory on purpose. `pueue add` inherits the
+**client's** working directory when none is given, and the client here is a
+subprocess of Raycast — measured to be `/`. A task queued without one would run
+`make` at the filesystem root. The tool never leaves it to pueue: it resolves a
+directory, shows it in the confirmation, and reports it back.'''
+assert s.count(old)==1
+s=s.replace(old,new)
+open(p,'w').write(s)
+print('ok')
+PY
+python3 - <<'PY'
+p='backlog/ai-tools.md'
+s=open(p).read()
+old='''- **`reset` is not exposed.**'''
+new='''- **A working directory is always resolved, never left to pueue.** `pueue add`
+  with no `--working-directory` inherits the *client's* cwd, and the client is a
+  subprocess of Raycast: measured, a task queued that way gets `path: "/"`. So
+  `make build` would run at the filesystem root and fail in a way that looks like
+  a broken build. `add-task` resolves the last-used directory (falling back to
+  `$HOME`), puts it in the confirmation whether or not the model chose it, and
+  returns it. The one exception is an ssh connection, where the client runs on
+  the far side and pueue's own default is the remote `$HOME` — which is both
+  correct and not something we could compute from here.
+- **`reset` is not exposed.**'''
+assert s.count(old)==1
+s=s.replace(old,new)
+open(p,'w').write(s)
+print('ok')
+PY
+just lint 2>&1 | tail -2
+```
+
+```text
+ok
+ok
+ready  - run ESLint
+ready  - run Prettier 3.9.6
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:59:04Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Full gate plus dist
+
+`just typecheck 2>&1 | tail -2 && just verify 2>&1 | tail -2 && just build 2>&1 | tail -2 && just dist 2>&1 | tail -2`
+
+```text
+([ -d node_modules ] || npm install) && npx tsc --noEmit -p tsconfig.json
+all assertions passed
+
+info  - generated extension's TypeScript definitions
+ready  - built extension successfully
+info  - checked TypeScript
+ready  - built extension successfully
+```
+</details></tool-use>

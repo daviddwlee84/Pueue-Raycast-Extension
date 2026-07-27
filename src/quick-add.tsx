@@ -12,7 +12,6 @@
 
 import {
   LaunchType,
-  LocalStorage,
   launchCommand,
   showHUD,
   type LaunchProps,
@@ -20,6 +19,7 @@ import {
 import { homedir } from "node:os";
 
 import { describeError } from "./lib/error-states";
+import { defaultWorkingDirectory, readLastGroup } from "./lib/last-used";
 import {
   defaultConnection,
   firstLine,
@@ -43,12 +43,10 @@ export default async function Command(
   // one, and silently queueing onto whichever daemon a *different* command
   // happened to select would be worse than being predictable.
   const connection = defaultConnection();
-  const group =
-    (await LocalStorage.getItem<string>(`add.group:${connection.name}`)) ??
-    "default";
-  const cwd =
-    (await LocalStorage.getItem<string>(`add.cwd:${connection.name}`)) ??
-    homedir();
+  const group = await readLastGroup(connection.name);
+  // Never left to pueue: without an explicit directory it uses the *client's*
+  // cwd, and the client is a subprocess of Raycast. See lib/last-used.ts.
+  const cwd = (await defaultWorkingDirectory(connection)) ?? homedir();
 
   try {
     const id = await mutate(
