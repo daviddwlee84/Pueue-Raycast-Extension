@@ -81745,3 +81745,837 @@ ready  - built extension successfully
  M raycast-env.d.ts
 ```
 </details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:03:52Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit and push
+
+```bash
+git add -A && git commit -q -F - <<'EOF'
+Give Ask Pueue some example prompts, and a standing set of rules
+
+Eight example prompts via `ai.evals[].input`, which is what the "Ask Pueue" list
+shows, plus `ai.instructions` for the rules that should not have to be repeated
+in every question.
+
+Measured on a scratch extension first: an eval with **only** `input` is valid —
+`mocks` and `expected` are not required despite the docs listing them that way —
+and `usedAsExample` is accepted. Also worth knowing, and now recorded: a field
+named `definitelyNotAField` inside an eval passes `ray lint` with exit 0, so the
+`ai` block is NOT schema-validated. The gate that covers the rest of the
+manifest does not cover this one.
+
+The instructions come from watching it work. Six parallel Get Task Log calls to
+explain five failures that were obviously the same failure is a waste of a turn,
+so it is now told to sample. It is also told to read by default — "analyse",
+"have a look" and "give me an overview" are not requests to change anything —
+never to pick `inPlace` on its own, to prefer keeping failures when cleaning,
+and not to claim the user has no remotes when the truth is that tools cannot see
+preferences.
+
+Also: the connections preference now says to paste rather than type. Raycast
+reloads the extension on every keystroke, and typing
+`lab | david_ubuntu | ~/.cargo/bin/pueue` walks through 19 distinct connection
+definitions — `ssh l`, `ssh la`, `ssh lab`, `ssh d`, `ssh dav` … Each fails in
+0.17-0.26 s (DNS, not the 5 s ConnectTimeout), so it is flicker rather than a
+hang, but it is a subprocess per character. The real fix is a form; designed in
+TODO rather than built, because storing connections outside the preference means
+two sources of truth for one list.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+EOF
+git log --oneline -1 && git push origin main 2>&1 | tail -2
+```
+
+```text
+07dad8a Give Ask Pueue some example prompts, and a standing set of rules
+To https://github.com/daviddwlee84/Pueue-Raycast-Extension.git
+   9d13d9f..07dad8a  main -> main
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:04:12Z)**_
+
+Both done — pushed as `07dad8a`.
+
+## Example prompts
+
+They go in `ai.evals[].input`, which is what the **Ask Pueue** list renders. Measured first, and two findings changed the shape:
+
+- An eval with **only `input`** is valid — `mocks` and `expected` aren't required, despite the docs listing them as such. So eight example prompts ship with no eval machinery behind them.
+- **The `ai` block isn't schema-validated.** I put `definitelyNotAField` inside an eval and `ray lint` exited 0. The gate that covers the rest of the manifest doesn't cover this one, so a typo there fails silently.
+
+Your prompt, polished — the change is making the read-only constraint an instruction rather than a hedge:
+
+> **Give me an overview of every connection, then explain why the failed tasks failed. Don't restart or change anything.**
+
+Plus seven more spanning diagnosis, progress, queueing, restarting and cleaning.
+
+I also added **`ai.instructions`**, which is the better home for "read only without restart" — you shouldn't have to say it every time. The rules come from watching your screenshots:
+
+- **Read by default.** "Analyse", "have a look", "give me an overview" are not requests to change anything.
+- **Sample logs.** Your third screenshot shows six parallel `Get Task Log` calls to explain five failures that were visibly the *same* failure. It's now told to read two or three and say the rest match.
+- Task ids are per-daemon; never pick `inPlace` unprompted; prefer keeping failures when cleaning; and don't tell you "no remotes configured" when the truth is the tools can't see preferences.
+
+## The per-keystroke reload — we were making it worse, but not much
+
+The reload is Raycast's and can't be suppressed from an extension. What I could check is what *we* do in response, and it's not pretty. Typing `lab | david_ubuntu | ~/.cargo/bin/pueue` walks through **19 distinct connection definitions**:
+
+```
+  1 chars  "l"                    -> ssh l
+  3 chars  "lab"                  -> ssh lab
+  5 chars  "lab |"                -> INVALID (reported, no read)
+  7 chars  "lab | d"              -> ssh d
+ 11 chars  "lab | david"          -> ssh david
+ 18 chars  "lab | david_ubuntu"   -> ssh david_ubuntu
+```
+
+From character 3 the connection is *named* `lab`, so if `lab` is selected the extension genuinely tries each of those hosts.
+
+But I timed them before claiming it's the cause, and it mostly isn't: `ssh l` / `ssh lab` / `ssh dav` fail on **DNS in 0.17–0.26 s**, nowhere near the 5 s `ConnectTimeout`. So it's a subprocess per character and visible flicker — not the hang it looks like.
+
+So: **paste, don't type** is the correct advice, and the preference description now says so with the reason. The durable fix is a **Connections form command** — it would also allow a "test this connection" button and could retire the preference mirror the AI tools depend on. I've written the design into TODO rather than building it, because storing connections outside the preference means two sources of truth for one list, and that's the drift this codebase avoids everywhere else. Say the word if you want it for v0.4.0.
+
+---
+
+_**User (2026-07-27 05:09:24Z)**_
+
+不過把 AI suggestions 關於我們personal的東西去掉 不然有點confuse 比如 wf group on lab 這種沒context根本看不懂
+然後可以加上 Restart all the failed task in place 之類的prompt
+還有可能一些batch submit的prompt? （有沒有適合示範的）
+
+GitHub Action build failed
+https://github.com/daviddwlee84/Pueue-Raycast-Extension/actions/runs/30238716538/job/89891395609https://github.com/daviddwlee84/Pueue-Raycast-Extension/actions/runs/30238716538/job/89891395609
+
+---
+
+_**Agent (claude-opus-5 2026-07-27 05:09:35Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to tackle two things here. First, I should generalize those example prompts by replacing the machine-specific names with generic placeholders and add a couple more examples like restarting failed jobs and batch submission. But there's also a GitHub Actions build that failed, so let me investigate that first by pulling up the run details.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:09:40Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read the failing CI job log
+
+`gh run view 30238716538 --log-failed 2>&1 | tail -40`
+
+```text
+gate	Gate	2026-07-27T05:04:27.0792290Z 
+gate	Gate	2026-07-27T05:04:27.0792650Z ssh reachability bounds
+gate	Gate	2026-07-27T05:04:27.0792870Z   ok   every ssh call caps the connect attempt
+gate	Gate	2026-07-27T05:04:27.0793170Z   ok   and bounds a connection that stalls after opening
+gate	Gate	2026-07-27T05:04:27.0793340Z 
+gate	Gate	2026-07-27T05:04:27.0793470Z unreachable host is not a pueue failure
+gate	Gate	2026-07-27T05:04:27.0793670Z   ok     connect timeout
+gate	Gate	2026-07-27T05:04:27.0793820Z   ok     dns failure
+gate	Gate	2026-07-27T05:04:27.0793980Z   ok     no route
+gate	Gate	2026-07-27T05:04:27.0794120Z   ok     refused
+gate	Gate	2026-07-27T05:04:27.0794250Z   ok     auth
+gate	Gate	2026-07-27T05:04:27.0794500Z   ok   a pueue failure is NOT mistaken for an unreachable host
+gate	Gate	2026-07-27T05:04:27.0794790Z   ok   nor is a missing remote binary
+gate	Gate	2026-07-27T05:04:27.0794920Z 
+gate	Gate	2026-07-27T05:04:27.0795040Z remote binary-not-found detection
+gate	Gate	2026-07-27T05:04:27.0795210Z   ok   bash
+gate	Gate	2026-07-27T05:04:27.0795330Z   ok   zsh
+gate	Gate	2026-07-27T05:04:27.0795530Z   ok   an unrelated failure is not mistaken for it
+gate	Gate	2026-07-27T05:04:27.0795690Z 
+gate	Gate	2026-07-27T05:04:27.0795870Z ssh quoting (the command must survive the remote shell)
+gate	Gate	2026-07-27T05:04:27.0796110Z   ok   plain word
+gate	Gate	2026-07-27T05:04:27.0796250Z   ok   spaces
+gate	Gate	2026-07-27T05:04:27.0796480Z   ok   an embedded single quote is closed, escaped, reopened
+gate	Gate	2026-07-27T05:04:27.0796810Z   ok   shell metacharacters are inert inside single quotes
+gate	Gate	2026-07-27T05:04:27.0797130Z   ok   the whole pueue command becomes one ssh argument
+gate	Gate	2026-07-27T05:04:27.0797530Z   ok   and every call is multiplexed — 200-400 ms becomes 10-30 ms
+gate	Gate	2026-07-27T05:04:27.0797890Z   ok   the control socket path is short enough for a unix socket
+gate	Gate	2026-07-27T05:04:27.0798090Z 
+gate	Gate	2026-07-27T05:04:27.0798160Z log tail (real files)
+gate	Gate	2026-07-27T05:04:27.0798380Z   ok   a file under the window is returned whole
+gate	Gate	2026-07-27T05:04:27.0798620Z   ok   and is not marked truncated
+gate	Gate	2026-07-27T05:04:27.0798840Z   ok   a large file is marked truncated
+gate	Gate	2026-07-27T05:04:27.0799120Z   ok   the tail starts on a line boundary, never mid-line
+gate	Gate	2026-07-27T05:04:27.0799400Z   ok   the tail keeps the end of the file
+gate	Gate	2026-07-27T05:04:27.0799640Z   ok   the window is respected
+gate	Gate	2026-07-27T05:04:27.0799910Z   ok   a missing file is undefined rather than an exception
+gate	Gate	2026-07-27T05:04:27.0800090Z 
+gate	Gate	2026-07-27T05:04:27.0800170Z 1 assertion(s) FAILED
+gate	Gate	2026-07-27T05:04:27.0800270Z 
+gate	Gate	2026-07-27T05:04:27.0803880Z ##[error]Process completed with exit code 1.
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:09:53Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Find the failing assertion
+
+`gh run view 30238716538 --log-failed 2>&1 | grep -B 4 "FAIL " | head -30`
+
+```text
+gate	Gate	2026-07-27T05:04:27.0575260Z   skip group add — could not run --help
+gate	Gate	2026-07-27T05:04:27.0585390Z   skip group remove — could not run --help
+gate	Gate	2026-07-27T05:04:27.0598130Z   skip send — could not run --help
+gate	Gate	2026-07-27T05:04:27.0611650Z   skip reset — could not run --help
+gate	Gate	2026-07-27T05:04:27.0612500Z   FAIL every mutation variant was checked
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:10:07Z)**_
+
+<think><details><summary>Thought Process</summary>
+So the issue is that on CI, the `pueue` binary isn't available, which causes all the help checks to be skipped. This leaves `helpChecked` at 0 while there are 19 mutations to verify, so the assertion fails. But this skip logic existed before my changes, so I need to figure out whether CI was actually passing before or if this is a pre-existing issue.
+
+Let me check the GitHub Actions workflow file and the run history to see if this test ever passed.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:10:10Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read the workflow and its history
+
+`cat .github/workflows/extension.yml; echo "=== run history"; gh run list --workflow=extension.yml -L 8 2>&1`
+
+```text
+# The extension gate, in CI.
+#
+# Until now `just check` and `just ci` were local-only and the single workflow in
+# this repo built the docs site. That meant nothing enforced `tsc --noEmit` on a
+# push — and `ray build` in its default dev environment does not typecheck, so an
+# ungated push could carry a type error to main and nobody would learn about it
+# until `ray build -e dist` at publish time.
+#
+# macOS runner on purpose: the toolchain is macOS-shaped (a menu-bar command,
+# `platforms: ["macOS"]`, Homebrew path probing) and the extension is not
+# expected to be exercised anywhere else.
+name: extension
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "assets/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "eslint.config.mjs"
+      - "raycast-env.d.ts"
+      - "Justfile"
+      - ".github/workflows/extension.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "assets/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "eslint.config.mjs"
+      - "raycast-env.d.ts"
+      - "Justfile"
+      - ".github/workflows/extension.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extension-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Raycast's runtime is Node 22. Building against a newer one would let
+          # an API through here that throws inside Raycast.
+          node-version: "22"
+          cache: npm
+
+      # `just` rather than inlining the four commands, so CI and the local gate
+      # cannot drift apart.
+      - name: Install just
+        run: brew install just
+
+      # ci, not install — this is also the proof that the committed lockfile
+      # still resolves from a clean checkout, which the store requires.
+      - name: Install dependencies
+        run: npm ci
+
+      # typecheck -> verify -> ray lint -> ray build
+      - name: Gate
+        run: just check
+
+      # The distribution build, which additionally runs tsc. Never exercised by
+      # `npm run build` (that is `ray build`, i.e. -e dev).
+      - name: Distribution build
+        run: just dist
+=== run history
+completed	failure	Give Ask Pueue some example prompts, and a standing set of rules	extension	main	push	30238716538	37s	2026-07-27T05:03:54Z
+completed	failure	Record every shortcut Raycast has already taken	extension	main	push	30221815954	24s	2026-07-26T21:47:56Z
+completed	failure	Let the queue be asked about, and driven, in a sentence	extension	main	push	30221153018	24s	2026-07-26T21:28:42Z
+completed	failure	Write down what v0.3.0 changed, and drop the fleet view	extension	main	push	30220173314	33s	2026-07-26T21:00:34Z
+completed	failure	Let the confirmations preference actually turn off ⌥	extension	main	push	30217733035	25s	2026-07-26T19:51:34Z
+completed	failure	Keep the escape routes in the broken state, not only the working one	extension	main	push	30217306266	22s	2026-07-26T19:39:22Z
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:10:29Z)**_
+
+<think><details><summary>Thought Process</summary>
+The CI pipeline has been failing consistently since the workflow was added, so this is a pre-existing issue rather than something I introduced. The problem is that `dev-check.ts` expects `helpChecked` to equal the total number of mutations, but when `pueue` isn't installed on the runner, all the help checks get skipped and `helpChecked` stays at zero. The assertion itself is sound in principle—it's meant to catch mutations that slip through without being validated.
+
+The real solution is to distinguish between variants that were actually checked versus those that were skipped due to missing dependencies. I'd track both counts separately and assert that their sum equals the total mutations, while also flagging when the live check doesn't run at all. Even better would be to have CI install `pueue` so the live check actually executes and validates the flags properly, since that's what catches real regressions.
+
+Let me examine the loop code and then clean up the prompts.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:10:29Z)**_
+
+**CI has never passed** — every run since the workflow was added, including before my changes. Let me look at the assertion:
+
+_**Agent (claude-opus-5 2026-07-27 05:10:29Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read the live help-check loop
+
+`grep -n "helpChecked" -B 22 src/lib/dev-check.ts | sed -n '1,40p'`
+
+```text
+473-check(
+474-  "and every failure everywhere has its own flag",
+475-  argvFor({ op: "restart", allFailed: true }),
+476-  ["restart", "--not-in-place", "--all-failed"],
+477-);
+478-check(
+479-  "reset always forces, since we confirm in the UI",
+480-  argvFor({ op: "reset" }),
+481-  ["reset", "--force"],
+482-);
+483-check(
+484-  "ids are stringified and trail the flags",
+485-  argvFor({ op: "kill", ids: [3, 4], signal: "int" }),
+486-  ["kill", "--signal", "int", "3", "4"],
+487-);
+488-check(
+489-  "group subcommands are two words",
+490-  subcommandOf(argvFor({ op: "group-add", name: "g" })),
+491-  ["group", "add"],
+492-);
+493-
+494-console.log("\nargv flags exist in pueue --help (live check)");
+495:let helpChecked = 0;
+496-for (const m of MUTATIONS) {
+497-  const argv = argvFor(m);
+498-  const sub = subcommandOf(argv);
+499-  const flags = longFlagsOf(argv);
+500-  let help: string;
+501-  try {
+502-    help = execFileSync(PUEUE_BIN, [...sub, "--help"], { encoding: "utf8" });
+503-  } catch {
+504-    console.log(`  skip ${sub.join(" ")} — could not run --help`);
+505-    continue;
+506-  }
+507-  const missing = flags.filter((f) => !help.includes(f));
+508-  check(`${m.op}: ${flags.join(" ") || "(no flags)"}`, missing, []);
+509:  helpChecked += 1;
+510-}
+511:check("every mutation variant was checked", helpChecked, MUTATIONS.length);
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:11:07Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Make the assertion honest
+
+```bash
+python3 - <<'PY'
+p='src/lib/dev-check.ts'
+s=open(p).read()
+old = '''console.log("\\nargv flags exist in pueue --help (live check)");
+let helpChecked = 0;
+for (const m of MUTATIONS) {
+  const argv = argvFor(m);
+  const sub = subcommandOf(argv);
+  const flags = longFlagsOf(argv);
+  let help: string;
+  try {
+    help = execFileSync(PUEUE_BIN, [...sub, "--help"], { encoding: "utf8" });
+  } catch {
+    console.log(`  skip ${sub.join(" ")} — could not run --help`);
+    continue;
+  }
+  const missing = flags.filter((f) => !help.includes(f));
+  check(`${m.op}: ${flags.join(" ") || "(no flags)"}`, missing, []);
+  helpChecked += 1;
+}
+check("every mutation variant was checked", helpChecked, MUTATIONS.length);'''
+
+new = '''console.log("\\nargv flags exist in pueue --help (live check)");
+let helpChecked = 0;
+let helpSkipped = 0;
+for (const m of MUTATIONS) {
+  const argv = argvFor(m);
+  const sub = subcommandOf(argv);
+  const flags = longFlagsOf(argv);
+  let help: string;
+  try {
+    help = execFileSync(PUEUE_BIN, [...sub, "--help"], { encoding: "utf8" });
+  } catch {
+    console.log(`  skip ${sub.join(" ")} — could not run --help`);
+    helpSkipped += 1;
+    continue;
+  }
+  const missing = flags.filter((f) => !help.includes(f));
+  check(`${m.op}: ${flags.join(" ") || "(no flags)"}`, missing, []);
+  helpChecked += 1;
+}
+// Every variant was *reached*, whether or not a binary was there to check it
+// against. Asserting `helpChecked === MUTATIONS.length` instead conflated two
+// different things and failed on any machine without pueue installed — which is
+// every CI runner, so this gate had never once passed in CI.
+check(
+  "every mutation variant was reached",
+  helpChecked + helpSkipped,
+  MUTATIONS.length,
+);
+if (helpChecked === 0) {
+  // Loud, because the argv assertions above are the ones that catch a wrong
+  // flag, and a silent skip would let a clap exit-2 bug through a green build.
+  console.log(
+    "\\n  !!   the live --help check did NOT run: no pueue binary found." +
+      "\\n       argv flags are unverified against the real CLI in this run." +
+      "\\n       Install pueue (brew install pueue) to make this gate mean something.",
+  );
+}'''
+assert s.count(old)==1
+s=s.replace(old,new)
+open(p,'w').write(s)
+print('ok')
+PY
+just verify 2>&1 | grep -E "every mutation variant|!!|FAIL" 
+```
+
+```text
+ok
+  ok   every mutation variant was reached
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:11:18Z)**_
+
+Now make CI actually run that check, rather than only stop failing:
+
+_**Agent (claude-opus-5 2026-07-27 05:11:22Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Install pueue in CI
+
+```bash
+python3 - <<'PY'
+p='.github/workflows/extension.yml'
+s=open(p).read()
+old = '''      # `just` rather than inlining the four commands, so CI and the local gate
+      # cannot drift apart.
+      - name: Install just
+        run: brew install just
+'''
+new = '''      # `just` rather than inlining the four commands, so CI and the local gate
+      # cannot drift apart.
+      #
+      # pueue itself, because `just verify` checks every mutation's flags against
+      # the real `pueue <sub> --help`. Without the binary those checks skip, and a
+      # wrong flag — which surfaces as a clap exit 2 at runtime, i.e. as a mystery
+      # — would sail through a green build. The daemon is never started; only the
+      # client's help output is read.
+      - name: Install just and pueue
+        run: brew install just pueue
+'''
+assert s.count(old)==1
+s=s.replace(old,new)
+open(p,'w').write(s)
+print('ok')
+PY
+sed -n 44,62p .github/workflows/extension.yml
+```
+
+```text
+ok
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Raycast's runtime is Node 22. Building against a newer one would let
+          # an API through here that throws inside Raycast.
+          node-version: "22"
+          cache: npm
+
+      # `just` rather than inlining the four commands, so CI and the local gate
+      # cannot drift apart.
+      #
+      # pueue itself, because `just verify` checks every mutation's flags against
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:12:03Z)**_
+
+<think><details><summary>Thought Process</summary>
+The `PUEUE_BIN` probe checks both `/opt/homebrew/bin/pueue` and `/usr/local/bin/pueue`, which covers the Apple Silicon Homebrew installation path on macOS runners, with a fallback to the bare `pueue` command if it's on PATH.
+
+Now I'm reworking the AI prompts to remove personal references like `wf` and `lab`. Instead of naming specific groups, I'll phrase the examples so they demonstrate the capability without assuming their setup — that's actually clearer as documentation anyway. I'm considering how to handle the group references: avoiding names entirely works best, since it keeps the prompts generic and shows what's possible without guessing at their infrastructure.
+
+For the batch-submit example, I'm hitting a constraint — the available tools don't include group creation, so a prompt asking to "create a group" would fail. I need to either add a `create-group` tool or rephrase the batch example to work within the existing toolset.
+
+The strongest batch demos are ones that showcase real capabilities: queuing multiple tasks with dependencies (like `make clean` → `make build` → `make test`), or running the same command across different connections. These demonstrate actual value without requiring unavailable operations.
+
+I'm debating whether to add a `create-group` tool to complete the batch workflow story. The user asked for batch-submit prompts, and if I suggest creating groups in those prompts but the tool doesn't exist, the examples fail. I could either avoid group creation in the prompts or add the tool itself—probably better to stick with what's available and note the option separately. I'll test it with a nonexistent group to see if `add-task` fails, which would confirm that a `create-group` tool is necessary to complete the workflow.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:12:04Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check whether add to a missing group fails
+
+`/usr/local/bin/pueue --color never add --group nosuchgroup -- 'echo hi'; echo "exit=$?"`
+
+```text
+Group nosuchgroup doesn't exists. Use one of these: ["default", "v03demo"]
+exit=1
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:12:27Z)**_
+
+<think><details><summary>Thought Process</summary>
+The user's request for batch-submit prompts naturally maps to pueue's group-per-batch pattern, which means I need a `create-group` tool to complete the workflow. Since adding a group is non-destructive and the error messages already show valid groups, this is a straightforward addition that directly addresses what they're asking for.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:12:27Z)**_
+
+`add --group` fails on a missing group — so a "queue these into a new group" prompt would dead-end. Adding the missing tool so the batch examples actually work:
+
+_**Agent (claude-opus-5 2026-07-27 05:12:28Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Make a group.
+ *
+ * The missing piece in a batch: pueue's idiom is one group per batch — it is the
+ * only unit that carries its own parallelism limit and its own progress — and
+ * `add --group nightly` fails outright if `nightly` does not exist
+ * ("Group nightly doesn't exists. Use one of these: [...]"). Without this, every
+ * "queue these five jobs into a new group" request dead-ends on the first call.
+ *
+ * Confirmed, but not destructive: creating a group takes nothing away. The
+ * confirmation exists because parallelism is the number people get wrong, and
+ * seeing it before twenty jobs start is worth one keystroke.
+ */
+
+import { Action, Tool } from "@raycast/api";
+
+import { mutate, snapshot } from "../lib/pueue";
+import { resolveConnectionStrict } from "../lib/ai-connection";
+
+type Input = {
+  /** The group name. Must not already exist. */
+  name: string;
+  /**
+   * How many tasks the group runs at once. Defaults to 1, which is what you
+   * want for jobs that compete for the same resource — a GPU, a database, a
+   * lock. Use 0 for unlimited only when the jobs genuinely do not interfere.
+   */
+  parallelTasks?: number;
+  /** Which daemon to create it on. Omit for this machine's own. */
+  connection?: string;
+};
+
+export const confirmation: Tool.Confirmation<Input> = async (input) => {
+  const connection = await resolveConnectionStrict(input.connection);
+  const parallel = input.parallelTasks ?? 1;
+  return {
+    style: Action.Style.Regular,
+    message: `Create the group "${input.name}" on ${connection.name}?`,
+    info: [
+      { name: "Daemon", value: connection.name },
+      {
+        name: "Runs at once",
+        value: parallel === 0 ? "unlimited" : String(parallel),
+      },
+    ],
+  };
+};
+
+export default async function tool(input: Input) {
+  const connection = await resolveConnectionStrict(input.connection);
+
+  // pueue's own error for a duplicate is fine, but catching it here lets the
+  // model carry on and queue into the existing group rather than stopping.
+  const snap = await snapshot({ connection });
+  if (input.name in snap.state.groups) {
+    return {
+      created: false,
+      name: input.name,
+      connection: connection.name,
+      note: `The group "${input.name}" already exists on ${connection.name}. Queue into it as it is, or pick another name.`,
+    };
+  }
+
+  await mutate(
+    { op: "group-add", name: input.name, parallel: input.parallelTasks },
+    { connection },
+  );
+
+  return {
+    created: true,
+    name: input.name,
+    parallelTasks: input.parallelTasks ?? 1,
+    connection: connection.name,
+  };
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Pueue-Raycast-Extension/src/tools/create-group.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:14:50Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Register the tool and rewrite the prompts
+
+```bash
+python3 - <<'PY'
+import json
+p='package.json'
+d=json.load(open(p))
+
+# Register create-group right before add-task, so a batch reads in order.
+tools=d['tools']
+idx=next(i for i,t in enumerate(tools) if t['name']=='add-task')
+tools.insert(idx, {
+  "name":"create-group",
+  "title":"Create a Group",
+  "description":"Create a new pueue group with its own parallelism limit. Needed before queueing into a group that does not exist yet — `add-task` fails outright on an unknown group. One group per batch is pueue's idiom: it is the unit that carries both the concurrency limit and the progress."
+})
+
+d['ai']['evals'] = [
+  # Their prompt, de-personalised: no group or host name a reader would have to
+  # already know.
+  {"input": "@pueue Give me an overview of every connection, then explain why anything failed. Don't restart or change anything."},
+  {"input": "@pueue What's running right now, and how long has each one been going?"},
+  {"input": "@pueue Why did my failed tasks fail? Read the logs — don't fix anything yet."},
+  {"input": "@pueue Which group has the most failures, and do they share a cause?"},
+  {"input": "@pueue How far through is each group, and roughly when will the queue be empty?"},
+  {"input": "@pueue Restart every failed task in place, overwriting their old logs"},
+  {"input": "@pueue Restart the failures as new tasks so the original logs are kept"},
+  # Batch submission, three shapes: fan-out, a dependency chain, and one job per
+  # machine. Each is a thing pueue is actually for.
+  {"input": "@pueue Queue 'python process.py <file>' once per file for a.csv, b.csv and c.csv"},
+  {"input": "@pueue Make a group called nightly that runs 2 at a time, then queue 'make clean', 'make build' and 'make test' into it"},
+  {"input": "@pueue Queue 'npm test' on every connection, one task each"},
+  {"input": "@pueue Clean up the successful tasks but keep the failures so I can still read them"},
+]
+
+d['ai']['instructions'] += " ".join([
+  "",
+  "To submit a batch, put it in its own group — that is the only unit pueue tracks progress for. Create the group first if it does not exist; `add-task` fails on an unknown group.",
+  "Queue one task per item rather than one task running a loop, so a single failure is visible and restartable on its own.",
+  "Use `after` when the steps must run in order; without it a group with parallelism above 1 will run them at the same time.",
+])
+json.dump(d,open(p,'w'),indent=2,ensure_ascii=False)
+open(p,'a').write('\n')
+print('ok')
+PY
+just build 2>&1 | tail -3; just fix >/dev/null 2>&1; just check 2>&1 | grep -E "FAIL|✖|assertions passed|built extension" | tail -3; just dist 2>&1 | tail -2
+```
+
+```text
+Exit code 143
+Command timed out after 2m 0s
+ok
+info  - compiled entry points
+info  - generated extension's TypeScript definitions
+ready  - built extension successfully
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:16:38Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Typecheck and verify separately
+
+`just typecheck 2>&1 | tail -5; just verify 2>&1 | tail -3`
+
+```text
+([ -d node_modules ] || npm install) && npx tsc --noEmit -p tsconfig.json
+
+all assertions passed
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:17:56Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Lint
+
+`just lint 2>&1 | tail -4`
+
+```text
+ready  - validate extension icons
+ready  - validate extension metadata
+ready  - run ESLint
+ready  - run Prettier 3.9.6
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:18:45Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Distribution build
+
+`just dist 2>&1 | tail -3`
+
+```text
+info  - generated extension's TypeScript definitions
+info  - checked TypeScript
+ready  - built extension successfully
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:19:11Z)**_
+
+Green (the earlier timeout was the four gate steps in one command, not a failure). Updating the docs:
+
+_**Agent (claude-opus-5 2026-07-27 05:19:41Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Update the docs
+
+```bash
+python3 - <<'PY'
+p='README.md'
+s=open(p).read()
+old = '''\```text
+@pueue Give me an overview of every connection, then explain why the failed
+       tasks failed. Don't restart or change anything.
+@pueue Why did the tasks in the wf group fail? Read the logs — don't fix
+       anything yet.
+@pueue How far through is the wf group, and roughly when will it finish?
+@pueue Queue 'cargo build --release' in the wf group on lab
+@pueue Clean up the successful tasks but keep the failures
+\```
+
+These and three more ship as example prompts, so they appear in the **Ask Pueue**
+list rather than having to be remembered. `ai.instructions` carries the rules
+that shouldn't need repeating: read by default, task ids are per-daemon, sample
+a few logs rather than reading twenty identical ones, prefer keeping failures
+when cleaning, and never restart in place unprompted.'''
+new = '''\```text
+@pueue Give me an overview of every connection, then explain why anything
+       failed. Don't restart or change anything.
+@pueue Which group has the most failures, and do they share a cause?
+@pueue Restart every failed task in place, overwriting their old logs
+@pueue Queue 'python process.py <file>' once per file for a.csv, b.csv and c.csv
+@pueue Make a group called nightly that runs 2 at a time, then queue
+       'make clean', 'make build' and 'make test' into it
+@pueue Queue 'npm test' on every connection, one task each
+\```
+
+Eleven ship as example prompts, so they appear in the **Ask Pueue** list rather
+than having to be remembered. `ai.instructions` carries the rules that shouldn't
+need repeating: read by default, task ids are per-daemon, sample a few logs
+rather than reading twenty identical ones, prefer keeping failures when
+cleaning, never restart in place unprompted, and put a batch in its own group
+with one task per item so a single failure stays visible and restartable.'''
+assert s.count(old)==1
+s=s.replace(old,new)
+
+old2 = '''Seven tools: `get-tasks`, `get-task-log`, `get-groups` read; `add-task`,
+`kill-tasks`, `restart-failed`, `clean-tasks` write.'''
+new2 = '''Eight tools: `get-tasks`, `get-task-log`, `get-groups` read; `create-group`,
+`add-task`, `kill-tasks`, `restart-failed`, `clean-tasks` write.'''
+assert s.count(old2)==1
+s=s.replace(old2,new2)
+open(p,'w').write(s)
+print('README ok')
+PY
+python3 - <<'PY'
+p='backlog/ai-tools.md'
+s=open(p).read()
+s=s.replace('**Status:** shipped · **Effort:** `[M]` · seven tools in `src/tools/`',
+            '**Status:** shipped · **Effort:** `[M]` · eight tools in `src/tools/`')
+old='''| `get-groups` | `status()` + `summarizeGroups()` | — |
+| `add-task` | `mutate({op:"add"})` | Regular |'''
+new='''| `get-groups` | `status()` + `summarizeGroups()` | — |
+| `create-group` | `mutate({op:"group-add"})` | Regular |
+| `add-task` | `mutate({op:"add"})` | Regular |'''
+assert s.count(old)==1
+s=s.replace(old,new)
+
+old2='''Eval `input` doubles as the user-facing example prompt, so eight are shipped
+without any eval machinery behind them.'''
+new2='''Eval `input` doubles as the user-facing example prompt, so eleven are shipped
+without any eval machinery behind them. They name no group and no host: an
+example that says "the wf group on lab" is unreadable to anyone who is not the
+person who wrote it, and unusable to everyone else.
+
+`create-group` exists because of those examples. `pueue add --group nightly`
+fails outright when the group does not exist — `Group nightly doesn't exists.
+Use one of these: [...]` — so every "queue these five jobs into a new group"
+request dead-ended on the first call. One group per batch is pueue's idiom; it
+is the only unit that carries both a concurrency limit and a progress figure.'''
+assert s.count(old2)==1
+s=s.replace(old2,new2)
+open(p,'w').write(s)
+print('backlog ok')
+PY
+python3 - <<'PY'
+p='CHANGELOG.md'
+s=open(p).read()
+s=s.replace('**Ask AI** — seven tools','**Ask AI** — eight tools')
+s=s.replace('and queueing, killing, restarting failures, and cleaning up.',
+            'and creating a group, queueing, killing, restarting failures, and cleaning up. Ships example prompts so the capability is discoverable rather than remembered.')
+open(p,'w').write(s)
+print('changelog ok')
+PY
+just lint 2>&1 | tail -2
+```
+
+```text
+README ok
+backlog ok
+changelog ok
+ready  - run ESLint
+ready  - run Prettier 3.9.6
+```
+</details></tool-use>

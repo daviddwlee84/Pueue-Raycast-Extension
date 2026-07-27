@@ -55,23 +55,25 @@ This is the single most likely "it's broken" report, and it isn't a bug in the e
 Mention the extension in Raycast AI with `@pueue`, or run **Ask Pueue** from root search:
 
 ```text
-@pueue Give me an overview of every connection, then explain why the failed
-       tasks failed. Don't restart or change anything.
-@pueue Why did the tasks in the wf group fail? Read the logs — don't fix
-       anything yet.
-@pueue How far through is the wf group, and roughly when will it finish?
-@pueue Queue 'cargo build --release' in the wf group on lab
-@pueue Clean up the successful tasks but keep the failures
+@pueue Give me an overview of every connection, then explain why anything
+       failed. Don't restart or change anything.
+@pueue Which group has the most failures, and do they share a cause?
+@pueue Restart every failed task in place, overwriting their old logs
+@pueue Queue 'python process.py <file>' once per file for a.csv, b.csv and c.csv
+@pueue Make a group called nightly that runs 2 at a time, then queue
+       'make clean', 'make build' and 'make test' into it
+@pueue Queue 'npm test' on every connection, one task each
 ```
 
-These and three more ship as example prompts, so they appear in the **Ask Pueue**
-list rather than having to be remembered. `ai.instructions` carries the rules
-that shouldn't need repeating: read by default, task ids are per-daemon, sample
-a few logs rather than reading twenty identical ones, prefer keeping failures
-when cleaning, and never restart in place unprompted.
+Eleven ship as example prompts, so they appear in the **Ask Pueue** list rather
+than having to be remembered. `ai.instructions` carries the rules that shouldn't
+need repeating: read by default, task ids are per-daemon, sample a few logs
+rather than reading twenty identical ones, prefer keeping failures when
+cleaning, never restart in place unprompted, and put a batch in its own group
+with one task per item so a single failure stays visible and restartable.
 
-Seven tools: `get-tasks`, `get-task-log`, `get-groups` read; `add-task`,
-`kill-tasks`, `restart-failed`, `clean-tasks` write. **Every writing tool
+Eight tools: `get-tasks`, `get-task-log`, `get-groups` read; `create-group`,
+`add-task`, `kill-tasks`, `restart-failed`, `clean-tasks` write. **Every writing tool
 confirms before it runs**, and the confirmation names the tasks and the daemon —
 `Kill 3 running tasks in "wf" on lab` beside `#7 #8 #9`, not just the sentence
 you typed back at you. `reset` is deliberately not exposed: it deletes every

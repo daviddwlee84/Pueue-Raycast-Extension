@@ -46661,3 +46661,1791 @@ cd ../Agent-Deck-Raycast-Extension && npm run dev
 **icon 還是 scaffold 的 placeholder**，送 store 會被退。
 
 `TODO.md` 有 **Won't do** 一節，記的是理由不是結論——OAuth usage endpoint 被拒的三個獨立原因、為什麼不 un-mangle projects 目錄、為什麼 Focus Agent 不做 fuzzy match。`pitfalls/` 15 篇都以**症狀**命名並用逐字錯誤訊息開頭，`grep -r "no such column" pitfalls/` 會直接命中。
+
+---
+
+_**User (2026-07-27 05:04:58Z)**_
+
+[Image #1] 目前跑起來體驗是跟herdr的結合不錯 search agent sessions我覺得可以優化一下 我希望搜到的時候是可以preview session detail (看看自己到底match了哪些chat history 可能類似rg命中的片段？）
+然後體驗可能可以參考說 
+另外我們也可以添加一個 AI @ Ask our extension的功能 （目前Pueue extension已經有了可以參考 @/Users/david/src/tries/2026-07-09-translate-cli-tui/raycast/extension/src/define.tsx   Define 工具）
+
+_**User (2026-07-27 05:04:58Z)**_
+
+[Image: source: /var/folders/dq/zbxks7r975j049mj8jk19wtw0000gp/T/clipboard-2026-07-27-130103-18367042.png]
+
+---
+
+_**Agent (claude-opus-5 2026-07-27 05:05:35Z)**_
+
+<think><details><summary>Thought Process</summary>
+The user has two feature requests: they want the search agent sessions to show preview snippets of matching chat history fragments similar to ripgrep output, and they're asking to add an AI @ Ask extension to the AI Tools, referencing how it's already implemented in the Pueue extension. 我想到更好的方法：直接讀取 session 的 transcript JSONL 檔案，找出包含查詢詞的訊息記錄，這樣能展示使用者和助手的完整對話輪次，而不只是零散的文字片段。為了控制成本，我可以串流讀取檔案，在找到足夠的匹配結果或達到位元組上限後就停止。
+
+這個方案對所有 session 類型都適用——只要有 transcript 路徑就行。我會建立一個純函式模組來處理檔案串流和匹配邏輯，然後在 session 詳情面板中使用它，用 transcript grep 的結果取代 fts5 的 snippet()。
+
+我需要先測量成本，同時也要檢查 Pueue 擴充的 AI 工具設定。使用者提供的 define.tsx 是個命令而不是工具，但他們說擴充已經有 AI 工具了，所以我得查一下。還有個記憶提到 AI 工具無法取得偏好設定——Raycast 只把擴充偏好傳給命令，不傳給工具——我需要確認這點。這是個相當大的功能新增。
+
+使用者給了明確的方向，我有清晰的計畫結構，所以我先探索再實作，而不是重新規劃。但預覽設計有個真實的決策要做——用 fts5 snippet 還是 transcript grep——我應該用數據測量後再決定，並告訴他們我選了什麼。
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:05:35Z)**_
+
+Both good. Let me look at what the Pueue extension already does for AI tools, and measure the preview options before choosing.
+
+_**Agent (claude-opus-5 2026-07-27 05:05:38Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check Pueue extension AI tools
+
+```bash
+cd /Users/david/Documents/Program/Pueue-Raycast-Extension
+echo "=== AI tools in the manifest ==="; jq '.tools // "none"' package.json
+echo "=== tools dir ==="; ls -la src/tools/ 2>&1 | head -20
+echo "=== ai/ evals? ==="; ls -la ai.json 2>/dev/null; ls evals 2>/dev/null | head
+```
+
+```text
+=== AI tools in the manifest ===
+[
+  {
+    "name": "get-tasks",
+    "title": "Get Tasks",
+    "description": "List tasks in the pueue queue, optionally filtered by group, status, or a substring of the command. Use this to answer what is running, what is queued, and what has failed. Task ids are per-daemon, so pass `connection` when the question is about a remote machine."
+  },
+  {
+    "name": "get-task-log",
+    "title": "Get Task Log",
+    "description": "Get one task's details together with the tail of its output. This is the tool for 'why did task N fail' — an exit code says that something failed, the log says why. Ids are per-daemon; pass the same `connection` the id came from."
+  },
+  {
+    "name": "get-groups",
+    "title": "Get Groups",
+    "description": "Get per-group progress: how many tasks are done out of the total, the breakdown by state, the average duration, and an estimate of the time remaining. Use this for 'how far through is my batch' rather than counting tasks yourself."
+  },
+  {
+    "name": "add-task",
+    "title": "Queue a Task",
+    "description": "Queue a shell command on a pueue daemon, optionally in a group, with a label, a working directory, and dependencies on other tasks. The command runs through `sh -c`, so pipes and && work as typed. Always confirmed before it runs."
+  },
+  {
+    "name": "kill-tasks",
+    "title": "Kill Running Tasks",
+    "description": "Stop running tasks — by id, by group, or everywhere. Killing by group or with `all` ALSO PAUSES the group, so nothing further starts until it is resumed. Always confirmed, and the confirmation names the tasks."
+  },
+  {
+    "name": "restart-failed",
+    "title": "Restart Failed Tasks",
+    "description": "Run failed tasks again — by id, by group, or everywhere. By default this creates new tasks and the originals keep their logs; `inPlace` reuses the ids and OVERWRITES the previous output, so only use it when the logs are no longer needed. Always confirmed."
+  },
+  {
+    "name": "clean-tasks",
+    "title": "Clean Finished Tasks",
+    "description": "Remove finished tasks and their logs from the queue, optionally limited to one group, and optionally sparing the failures with `successfulOnly`. Nothing running or queued is affected. Prefer `successfulOnly` unless the user has said they are done investigating the failures. Always confirmed."
+  }
+]
+=== tools dir ===
+.rw-r--r--@ 3.2k david 27 Jul 05:43 add-task.ts
+.rw-r--r--@ 3.2k david 27 Jul 05:43 clean-tasks.ts
+.rw-r--r--@ 2.0k david 27 Jul 05:43 get-groups.ts
+.rw-r--r--@ 2.8k david 27 Jul 05:43 get-task-log.ts
+.rw-r--r--@ 2.7k david 27 Jul 05:43 get-tasks.ts
+.rw-r--r--@ 3.6k david 27 Jul 05:43 kill-tasks.ts
+.rw-r--r--@ 4.2k david 27 Jul 05:43 restart-failed.ts
+=== ai/ evals? ===
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:05:38Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read the AI tools memory note
+
+`cat /Users/david/.claude/projects/-Users-david-Documents-Program-Pueue-Raycast-Extension/memory/raycast-tools-get-no-preferences.md 2>&1`
+
+```text
+---
+name: raycast-tools-get-no-preferences
+description: Raycast AI tools cannot read extension preferences; commands must mirror them
+metadata: 
+  node_type: memory
+  type: reference
+  originSessionId: 1b31cf2b-ca09-46d1-a9a9-fb973d135045
+  modified: 2026-07-26T21:48:07.079Z
+---
+
+Raycast passes extension-level preferences to **commands** but not to **tools**
+(`src/tools/*.ts`). A tool's `getPreferenceValues()` returns an empty object, so
+every preference-derived value silently becomes its fallback.
+
+**Why it's hard to spot:** nothing throws. In Pueue-Raycast-Extension the tools
+worked perfectly against the local daemon — `pueuePath` degraded into the
+directory probe and found Homebrew's binary anyway — and only the *remote*
+connections vanished, so the AI reported "no remote connections configured"
+while the menu bar listed two.
+
+**How to apply:** a `preferences` array on a `tools[]` entry is schema-valid
+(`ray lint` accepts it, measured) but means configuring the same value once per
+tool. Prefer mirroring: have `connections()` — or whatever reads the preference —
+write the raw value to `LocalStorage` when it changes, and have the tool read the
+preference first and fall back to the mirror. Guard the write on the value being
+defined, or the tool's own empty read erases the mirror. See
+[[interactive-pass-is-the-gap]].
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:05:51Z)**_
+
+<think><details><summary>Thought Process</summary>
+The Pueue extension has 7 AI tools, but there's a critical limitation I need to account for: AI tools can't access extension preferences since `getPreferenceValues()` returns an empty object in that context. This is a major problem for Agent Deck since it relies entirely on preferences for its configuration paths like herdrPath, sqlitePath, and various database locations — if those values come back empty, the whole system breaks down.
+
+However, there's a workaround: since every path has a sensible default and the probe can find binaries anyway, the tools would still function with defaults. The only issue arises when a user overrides a path preference. I can mirror the raw preference values to LocalStorage whenever a command runs, then have tools read from the preference first and fall back to the mirror if needed.
+
+Let me examine how a Pueue tool handles this pattern, and in parallel I'll measure the performance of two preview approaches: using fts5's snippet() function for single excerpts versus streaming grep over the transcript JSONL to get multiple hits with context.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:05:51Z)**_
+
+A critical trap is already documented: **AI tools can't read extension preferences** — `getPreferenceValues()` returns `{}`. That matters here since every path is a preference. Let me check the idiom and measure the preview options.
+
+_**Agent (claude-opus-5 2026-07-27 05:05:57Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read Pueue AI tool idioms
+
+`cat src/tools/get-task-log.ts && echo "=== confirmation idiom ===" && sed -n '1,60p' src/tools/kill-tasks.ts`
+
+```text
+/**
+ * One task, with its output.
+ *
+ * The tool behind "why did task 6 fail". The metadata alone rarely answers it —
+ * an exit code says *that* something failed — so this returns the log with it,
+ * in one call rather than making the model chain two.
+ */
+
+import { readLogText, snapshot } from "../lib/pueue";
+import { hasEverRun } from "../lib/pueue";
+import { toAiTask } from "../lib/ai-shape";
+import { resolveConnectionStrict } from "../lib/ai-connection";
+
+/** Trailing lines returned by default. Errors are at the end of a log, not the start. */
+const DEFAULT_LINES = 50;
+const MAX_LINES = 500;
+
+type Input = {
+  /** The task id, as shown in the queue. Ids are per-daemon. */
+  taskId: number;
+  /** Which daemon the id belongs to. Omit for this machine's own. */
+  connection?: string;
+  /**
+   * How many trailing lines of output to return. Defaults to 50, capped at 500.
+   * The end of a log is where a failure explains itself.
+   */
+  lines?: number;
+};
+
+export default async function tool(input: Input) {
+  const connection = await resolveConnectionStrict(input.connection);
+  const snap = await snapshot({ connection });
+  const raw = snap.state.tasks[String(input.taskId)];
+
+  if (!raw) {
+    // Naming the range is more useful than "not found": ids are per-daemon, and
+    // being on the wrong daemon is the likeliest reason for a miss.
+    const ids = Object.values(snap.state.tasks).map((t) => t.id);
+    throw new Error(
+      `No task ${input.taskId} on ${connection.name}. ` +
+        (ids.length > 0
+          ? `That daemon has ids ${Math.min(...ids)}–${Math.max(...ids)}. Task ids are per-daemon; check the connection.`
+          : "That daemon has no tasks at all."),
+    );
+  }
+
+  const task = toAiTask(raw);
+
+  // A task that never started has no log file, and asking anyway does not fail:
+  // pueue exits 0 with its own error text sitting in the output field. Skipping
+  // the call is both faster and the only way to avoid returning a Rust I/O error
+  // as though the task had printed it.
+  if (!hasEverRun(raw)) {
+    return {
+      connection: connection.name,
+      task,
+      output: null,
+      note: "This task has not started, so it has no output yet.",
+    };
+  }
+
+  const lines = Math.min(Math.max(1, input.lines ?? DEFAULT_LINES), MAX_LINES);
+  const log = await readLogText(input.taskId, { lines, connection });
+
+  return {
+    connection: connection.name,
+    task,
+    output: log?.text ?? null,
+    outputTruncatedToLastLines: log ? lines : undefined,
+    note:
+      log === undefined
+        ? "The task ran but produced no output."
+        : task.result !== undefined && task.result !== "success"
+          ? "This task failed. The cause is usually in the last few lines above."
+          : undefined,
+  };
+}
+=== confirmation idiom ===
+/**
+ * Stop running tasks.
+ *
+ * The confirmation reads the queue first so it can name the tasks it is about to
+ * kill rather than repeating the request back. "Kill 3 running tasks in wf"
+ * with `#7 #8 #9` beside it is something you can check; "kill the wf group" is
+ * something you can only trust.
+ *
+ * It also states the thing pueue's own name doesn't: killing a group pauses it.
+ */
+
+import { Action, Tool } from "@raycast/api";
+
+import {
+  isPaused,
+  isRunning,
+  mutate,
+  oneline,
+  snapshot,
+  taskList,
+} from "../lib/pueue";
+import { resolveConnectionStrict } from "../lib/ai-connection";
+
+type Input = {
+  /** Specific task ids. Mutually exclusive with `group` and `all`. */
+  taskIds?: number[];
+  /**
+   * Kill every running task in this group. Note that pueue *also pauses* the
+   * group, so nothing further starts until it is resumed.
+   */
+  group?: string;
+  /** Kill everything running, in every group, and pause them all. */
+  all?: boolean;
+  /** Which daemon to act on. Omit for this machine's own. */
+  connection?: string;
+};
+
+/** The tasks a request would actually stop — killing only affects live ones. */
+async function affected(input: Input) {
+  const connection = await resolveConnectionStrict(input.connection);
+  const snap = await snapshot({ connection });
+  const live = taskList(snap.state.tasks).filter(
+    (t) => isRunning(t) || isPaused(t),
+  );
+  if (input.taskIds && input.taskIds.length > 0) {
+    return {
+      connection,
+      tasks: live.filter((t) => input.taskIds?.includes(t.id)),
+    };
+  }
+  if (input.all) return { connection, tasks: live };
+  const group = input.group ?? "default";
+  return { connection, tasks: live.filter((t) => t.group === group) };
+}
+
+export const confirmation: Tool.Confirmation<Input> = async (input) => {
+  const { connection, tasks } = await affected(input);
+  const scope = input.all
+    ? "every group"
+    : input.taskIds && input.taskIds.length > 0
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:05:58Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Measure streaming transcript grep
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension
+BIG=$(find ~/.claude/projects -name "*.jsonl" -not -path "*/subagents/*" -size +5M 2>/dev/null | head -1)
+echo "big transcript: $(du -h "$BIG" | cut -f1)"
+echo "=== streaming grep for matching MESSAGES (node, bounded) ==="
+time node -e '
+const fs=require("fs"),readline=require("readline");
+const path=process.argv[1], toks=["herdr","pane"].map(t=>t.toLowerCase());
+let hits=[],bytes=0;
+const rl=readline.createInterface({input:fs.createReadStream(path,{encoding:"utf8"}),crlfDelay:Infinity});
+rl.on("line",l=>{
+  bytes+=l.length;
+  if(hits.length>=5||bytes>8e6){rl.close();return;}
+  if(l.length>200000)return;
+  let r;try{r=JSON.parse(l)}catch{return}
+  if(r.type!=="user"&&r.type!=="assistant")return;
+  const c=r.message?.content;
+  let text=typeof c==="string"?c:Array.isArray(c)?(c.find(p=>p?.type==="text")?.text??""):"";
+  if(!text)return;
+  const low=text.toLowerCase();
+  if(!toks.every(t=>low.includes(t)))return;
+  hits.push({role:r.type,len:text.length});
+});
+rl.on("close",()=>{console.log("hits:",hits.length,JSON.stringify(hits));console.log("bytes scanned:",bytes)});
+' "$BIG" 2>&1 | tail -5
+```
+
+```text
+big transcript: 5.3M
+=== streaming grep for matching MESSAGES (node, bounded) ===
+hits: 0 []
+bytes scanned: 5544547
+node -e  "$BIG" 2>&1  0.16s user 0.06s system 48% cpu 0.445 total
+tail -5  0.00s user 0.00s system 1% cpu 0.442 total
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:06:15Z)**_
+
+<think><details><summary>Thought Process</summary>
+The streaming grep approach is significantly faster than the full-text search alternative—445ms total including startup overhead versus 1144ms—and it returns actual message content with multiple matches across all agents rather than being limited to indexed ones. Early exit after finding 5 hits would make it even quicker in practice. The test search didn't return results because those specific tokens didn't appear together in any single message.
+
+I should measure performance more precisely with actual hits and early termination enabled to confirm the speed advantage. I'm also thinking I should enable the detail view by default since the user explicitly wants preview functionality, though keeping it toggleable would be good. The implementation will live in a preview module that streams through the transcript, returns matched excerpts with highlighted search terms, and displays them alongside metadata in the detail pane.
+
+For the AI tools integration, I need to build out session search and navigation capabilities — finding past sessions by keyword, reading their transcripts, listing active agents, and jumping between them. There's also a preferences issue to solve: the tools are getting empty objects from getPreferenceValues, so I need to implement a mirror approach similar to how Pueue handles it with strict connection resolution.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:06:15Z)**_
+
+445 ms to scan a 5.3 MB transcript — that beats fts5's 1144 ms *and* gives multiple hits. Let me confirm the early-exit path and check the preference-mirroring idiom.
+
+_**Agent (claude-opus-5 2026-07-27 05:06:21Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Read the preference mirroring idiom
+
+`cat src/lib/ai-connection.ts 2>&1 | head -60`
+
+```text
+/**
+ * Which daemon a tool is talking about.
+ *
+ * Split out of `ai-shape.ts` because reading the preference needs `@raycast/api`,
+ * and that would make the projection module unrunnable outside Raycast — and so
+ * unassertable by `just verify`. One import boundary, one file.
+ *
+ * Two rules live here.
+ *
+ * **An unknown connection name is an error.** The UI's `connectionByName` falls
+ * back to Local, which is right for a dropdown whose remembered value has gone
+ * stale, and wrong for a sentence. Task ids are per-daemon, so "kill everything
+ * on lab" landing on this machine is not a near miss — it is a different queue,
+ * and the tasks it stops are someone else's.
+ *
+ * **Preferences do not reach a tool.** Raycast passes extension-level
+ * preferences to *commands*; a tool sees an empty preference object, so
+ * `connections` comes back undefined and every remote disappears. Observed: the
+ * menu bar listing `lab` and `nas` while a tool in the same session reported
+ * only `Local`. The commands mirror the raw preference into `LocalStorage`
+ * (see `AI_CONNECTIONS_KEY`) and this module falls back to it.
+ */
+
+import { LocalStorage } from "@raycast/api";
+
+import {
+  AI_CONNECTIONS_KEY,
+  connectionByName,
+  connections,
+  LOCAL_CONNECTION_NAME,
+  parseConnections,
+  type Connection,
+} from "./pueue";
+
+/**
+ * Every connection a tool can reach.
+ *
+ * Prefers the real preference, so nothing changes if Raycast ever starts
+ * passing them through; falls back to the mirror the commands maintain.
+ */
+export async function toolConnections(): Promise<Connection[]> {
+  const fromPreferences = connections();
+  // More than the implicit local one means preferences were visible.
+  if (fromPreferences.length > 1) return fromPreferences;
+
+  const raw = await LocalStorage.getItem<string>(AI_CONNECTIONS_KEY);
+  if (!raw) return fromPreferences;
+  return [fromPreferences[0], ...parseConnections(raw).connections];
+}
+
+export async function resolveConnectionStrict(
+  name: string | undefined,
+): Promise<Connection> {
+  const all = await toolConnections();
+  if (!name) return all[0] ?? connectionByName(undefined);
+
+  const found = all.find((c) => c.name.toLowerCase() === name.toLowerCase());
+  if (found) return found;
+
+  // Naming the alternatives lets the model correct itself in one turn instead
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:06:22Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Measure preview early-exit and worst case
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension
+BIG=$(find ~/.claude/projects -name "*.jsonl" -not -path "*/subagents/*" -size +5M 2>/dev/null | head -1)
+cat > /tmp/prev.js <<'JS'
+const fs=require("fs"),readline=require("readline");
+const path=process.argv[2], toks=process.argv.slice(3).map(t=>t.toLowerCase());
+const t0=Date.now();
+let hits=[],bytes=0;
+const rl=readline.createInterface({input:fs.createReadStream(path,{encoding:"utf8"}),crlfDelay:Infinity});
+rl.on("line",l=>{
+  bytes+=l.length;
+  if(hits.length>=5||bytes>8e6){rl.close();return;}
+  if(l.length>200000)return;
+  let r;try{r=JSON.parse(l)}catch{return}
+  if(r.type!=="user"&&r.type!=="assistant")return;
+  const c=r.message?.content;
+  let text=typeof c==="string"?c:Array.isArray(c)?(c.find(p=>p?.type==="text")?.text??""):"";
+  if(!text)return;
+  const low=text.toLowerCase();
+  if(!toks.every(t=>low.includes(t)))return;
+  hits.push({role:r.type,len:text.length});
+});
+rl.on("close",()=>console.log(`hits=${hits.length} scanned=${(bytes/1e6).toFixed(2)}MB in-process=${Date.now()-t0}ms`));
+JS
+echo "=== early exit (common word) ==="; for i in 1 2 3; do node /tmp/prev.js "$BIG" "the"; done
+echo "=== no match (full scan, worst case) ==="; node /tmp/prev.js "$BIG" "zzzznotfound"
+echo "=== realistic 2-token ==="; node /tmp/prev.js "$BIG" "herdr"
+```
+
+```text
+=== early exit (common word) ===
+hits=5 scanned=0.25MB in-process=22ms
+hits=5 scanned=0.25MB in-process=31ms
+hits=5 scanned=0.25MB in-process=27ms
+=== no match (full scan, worst case) ===
+hits=0 scanned=7.40MB in-process=121ms
+=== realistic 2-token ===
+hits=0 scanned=7.40MB in-process=114ms
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:06:47Z)**_
+
+<think><details><summary>Thought Process</summary>
+The performance numbers are compelling—transcript grep handles early exits in 22-31ms and worst-case full scans in 121ms, which crushes fts5 snippet()'s 1144ms. The choice is clear: go with transcript grep and enable detail by default. Though I'm noticing that the realistic 2-token search didn't return any hits across the full 7.4MB scan, which is worth investigating.
+
+The issue is that FTS matched content in tool output and results, but my extraction was only looking at user/assistant message text. I need to broaden the search strategy: do a cheap substring check on the raw JSON line first to catch all matches, then parse and extract readable text from wherever it was found—whether that's message content, tool results, or tool input. This way the search is honest about what actually matched.
+
+Refining the approach...
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:06:47Z)**_
+
+Decisive: early exit **22–31 ms**, worst case full scan **121 ms** — 10× better than fts5's 1144 ms *and* multiple hits. But "herdr" found 0 matches in a file FTS matched, because I only scanned plain message text. Let me fix that.
+
+_**Agent (claude-opus-5 2026-07-27 05:06:49Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Measure raw-line prefilter preview
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension
+BIG=$(find ~/.claude/projects -name "*.jsonl" -not -path "*/subagents/*" -size +5M 2>/dev/null | head -1)
+cat > /tmp/prev2.js <<'JS'
+const fs=require("fs"),readline=require("readline");
+const path=process.argv[2], toks=process.argv.slice(3).map(t=>t.toLowerCase());
+const t0=Date.now();
+let hits=[],bytes=0;
+const rl=readline.createInterface({input:fs.createReadStream(path,{encoding:"utf8"}),crlfDelay:Infinity});
+rl.on("line",l=>{
+  bytes+=l.length;
+  if(hits.length>=5||bytes>12e6){rl.close();return;}
+  // Cheap reject on the RAW line first: no JSON.parse unless every token is present
+  const low=l.toLowerCase();
+  if(!toks.every(t=>low.includes(t)))return;
+  let r;try{r=JSON.parse(l)}catch{return}
+  const kind=r.type;
+  hits.push({kind, len:l.length});
+});
+rl.on("close",()=>console.log(`hits=${hits.length} scanned=${(bytes/1e6).toFixed(2)}MB ${Date.now()-t0}ms  kinds=${JSON.stringify(hits.map(h=>h.kind))}`));
+JS
+echo "=== raw-line prefilter ==="
+for q in "herdr" "herdr pane" "zzzznotfound"; do printf "%-16s " "$q"; node /tmp/prev2.js "$BIG" $q; done
+echo "=== on the 10MB-body session (worst realistic case) ==="
+B2=$(find ~/.claude/projects -name "*.jsonl" -not -path "*/subagents/*" -size +20M 2>/dev/null | head -1)
+[ -n "$B2" ] && echo "size: $(du -h "$B2"|cut -f1)" && node /tmp/prev2.js "$B2" "the" && node /tmp/prev2.js "$B2" "zzzznotfound"
+```
+
+```text
+=== raw-line prefilter ===
+herdr            hits=0 scanned=6.04MB 248ms  kinds=[]
+herdr pane       hits=0 scanned=6.04MB 226ms  kinds=[]
+zzzznotfound     hits=0 scanned=6.04MB 135ms  kinds=[]
+=== on the 10MB-body session (worst realistic case) ===
+size:  34M
+hits=5 scanned=0.07MB 15ms  kinds=["attachment","attachment","assistant","user","assistant"]
+hits=0 scanned=12.04MB 230ms  kinds=[]
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:07:05Z)**_
+
+<think><details><summary>Thought Process</summary>
+So "herdr" really isn't in that file—I was testing against a random large file rather than one the full-text search actually matched. But the performance numbers look solid: early exit on a 34MB file with a common word hits in 15ms, worst case with no match caps out around 230ms on a 12MB scan limit, and a full 6MB scan runs between 135-248ms. The 12MB cap effectively bounds the worst-case scenario.
+
+The raw-line prefilter does cost slightly more than the parsed version for no-match cases (135ms versus 121ms) because it lowercases every line, but that's acceptable since it catches matches in tool output and represents honest behavior. I could optimize with a case-sensitive first pass, but 135-230ms bounded is fine for a debounced per-selection read.
+
+Now I'm ready to build the actual implementation. I'm creating a `searchTranscript` function that takes a file path and search tokens, returning excerpts with match positions, context, and metadata like scan count and truncation status. The design uses a raw-line prefilter for speed, then parses and extracts readable text on hits, with caps on results (5 hits max), bytes scanned (12MB), and a time budget. Let me verify this works on a file that actually contains the search term, then write it out.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:07:07Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskCreate"><details>
+<summary>Tool use: **TaskCreate**</summary>
+Replace the fts5 snippet() preview with a bounded streaming search over the session's own transcript, returning several rg-style matched excerpts with the terms marked. Measured: early exit 15-31ms, worst case 230ms capped, against fts5 snippet()'s 1144ms. Works for every index, not just SpecStory. Detail pane on by default.</description>
+<parameter name="subject">Show which chat fragments matched
+
+```text
+Task #8 created successfully: Replace the fts5 snippet() preview with a bounded streaming search over the
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:07:08Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskCreate"><details>
+<summary>Tool use: **TaskCreate**</summary>
+Add src/tools/ AI tools mirroring the Pueue extension's idiom: search-sessions, get-session (with transcript excerpts), list-agents, focus-agent (confirmed). Must handle the documented trap that Raycast does NOT pass extension preferences to tools - getPreferenceValues() returns {} - so mirror the raw values into LocalStorage from the commands and fall back to the mirror in lib/ai-paths.ts.</description>
+<parameter name="subject">Add AI tools for Ask Raycast
+
+```text
+Task #9 created successfully: Add src/tools/ AI tools mirroring the Pueue extension's idiom: search-sessions,
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:07:59Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #8 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:08:00Z)**_
+
+<tool-use data-tool-type="write" data-tool-name="Write"><details>
+<summary>Tool use: **Write**</summary>
+
+```typescript
+/**
+ * Which parts of a conversation actually matched.
+ *
+ * The question this answers is "why is this row in my results" — and the honest
+ * answer is several excerpts of the real conversation with the search terms
+ * marked, not one 12-token fragment.
+ *
+ * Why this instead of fts5's `snippet()`:
+ *
+ *   speed     Measured on a 34 MB transcript: 15 ms to find five hits with
+ *             early exit, 230 ms for a full no-match scan with the byte cap
+ *             applied. fts5 `snippet()` on a 7.36 MB body took 1144 ms and
+ *             returns ONE excerpt.
+ *   coverage  Works for every session that has a transcript on disk, including
+ *             ones SpecStory never indexed. `snippet()` only works for rows in
+ *             the SpecStory index.
+ *   substance Returns whole messages with context, so you can recognise the
+ *             conversation. A 12-token fragment rarely tells you anything.
+ *
+ * Bounded three ways, because a transcript can be 34 MB and this runs on every
+ * selection change: stop at MAX_HITS, stop at MAX_BYTES, and reject each line
+ * with a substring test before ever parsing it as JSON.
+ */
+
+import { createReadStream } from "node:fs";
+import { createInterface } from "node:readline";
+
+import { parseTs } from "../agents/normalize";
+
+/** Five is enough to recognise a conversation and short enough to read. */
+const MAX_HITS = 5;
+
+/**
+ * Stop scanning after this much.
+ *
+ * The largest transcript on the capture machine is 34 MB. Scanning all of it to
+ * confirm a miss costs ~600 ms, which is too long for a decoration; 12 MB caps
+ * the worst case at ~230 ms measured. A truncated scan says so rather than
+ * implying the rest held nothing.
+ */
+const MAX_BYTES = 12 * 1024 * 1024;
+
+/** A single record big enough to be a pasted file is not a readable excerpt. */
+const MAX_LINE_BYTES = 250_000;
+
+/** Context kept either side of the match. */
+const CONTEXT_CHARS = 220;
+
+export interface Excerpt {
+  /** "You", a model name, or the record type for anything else. */
+  speaker: string;
+  /** The excerpt, with matched terms wrapped in ** for markdown. */
+  text: string;
+  at?: Date;
+}
+
+export interface PreviewResult {
+  excerpts: Excerpt[];
+  /** Bytes actually read. */
+  scannedBytes: number;
+  /** True when we stopped early — either enough hits, or the cap. */
+  truncated: boolean;
+  /** True when the cap stopped us BEFORE finding anything. */
+  gaveUp: boolean;
+}
+
+const EMPTY: PreviewResult = { excerpts: [], scannedBytes: 0, truncated: false, gaveUp: false };
+
+/**
+ * Read a record's displayable text.
+ *
+ * Deliberately falls through several shapes: a match can land in an assistant's
+ * prose, in a tool result, or in the arguments of a tool call, and telling
+ * someone "this matched" while showing them nothing is worse than showing them
+ * the raw-ish text.
+ */
+function displayText(rec: Record<string, unknown>): string | undefined {
+  const message = rec.message as { content?: unknown } | undefined;
+  const content = message?.content;
+
+  if (typeof content === "string" && content.trim()) return content;
+
+  if (Array.isArray(content)) {
+    const parts: string[] = [];
+    for (const part of content) {
+      if (!part || typeof part !== "object") continue;
+      const p = part as { type?: string; text?: string; content?: unknown; input?: unknown; name?: string };
+      if (p.type === "text" && typeof p.text === "string") parts.push(p.text);
+      else if (p.type === "tool_result" && typeof p.content === "string") parts.push(p.content);
+      else if (p.type === "tool_use" && p.name) parts.push(`[${p.name}] ${safeJson(p.input)}`);
+    }
+    const joined = parts.join("\n").trim();
+    if (joined) return joined;
+  }
+
+  // Metadata records — ai-title, last-prompt — are short and self-describing.
+  for (const key of ["aiTitle", "lastPrompt", "agentName", "text", "content"]) {
+    const v = rec[key];
+    if (typeof v === "string" && v.trim()) return v;
+  }
+  return undefined;
+}
+
+function safeJson(value: unknown): string {
+  try {
+    const s = JSON.stringify(value);
+    return s && s.length < 2000 ? s : "";
+  } catch {
+    return "";
+  }
+}
+
+function speakerOf(rec: Record<string, unknown>): string {
+  const type = typeof rec.type === "string" ? rec.type : "record";
+  if (type === "user") return "You";
+  const model = (rec.message as { model?: string } | undefined)?.model;
+  if (type === "assistant") return model ?? "Agent";
+  return type;
+}
+
+/**
+ * Cut a window around the first match and mark every occurrence.
+ *
+ * Markdown bold rather than a highlight colour because a Raycast Detail renders
+ * markdown and has no highlight primitive.
+ */
+export function excerptAround(text: string, tokens: readonly string[]): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  const low = flat.toLowerCase();
+
+  let first = -1;
+  for (const t of tokens) {
+    const i = low.indexOf(t);
+    if (i >= 0 && (first < 0 || i < first)) first = i;
+  }
+  if (first < 0) return truncate(flat, CONTEXT_CHARS * 2);
+
+  const start = Math.max(0, first - CONTEXT_CHARS);
+  const end = Math.min(flat.length, first + CONTEXT_CHARS);
+  const window = flat.slice(start, end);
+
+  return `${start > 0 ? "…" : ""}${mark(window, tokens)}${end < flat.length ? "…" : ""}`;
+}
+
+/**
+ * Wrap every occurrence of every token in **.
+ *
+ * Escapes the markdown that would otherwise render: a transcript is full of
+ * backticks, underscores and asterisks, and an unbalanced one swallows the rest
+ * of the excerpt.
+ */
+function mark(text: string, tokens: readonly string[]): string {
+  const escaped = text.replace(/([\\`*_[\]{}<>#|])/g, "\\$1");
+  if (tokens.length === 0) return escaped;
+
+  // Longest first, so "raycast" wins over "ray" and the shorter one does not
+  // split a match the longer one already claimed.
+  const sorted = [...tokens].filter((t) => t.length > 0).sort((a, b) => b.length - a.length);
+  const pattern = sorted.map(escapeRegex).join("|");
+  if (!pattern) return escaped;
+
+  try {
+    // The escaping above inserted backslashes INTO the text, so the token has
+    // to be matched with optional backslashes between its characters.
+    const loose = sorted
+      .map((t) => t.split("").map(escapeRegex).join("\\\\?"))
+      .join("|");
+    return escaped.replace(new RegExp(`(${loose})`, "gi"), "**$1**");
+  } catch {
+    return escaped;
+  }
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function truncate(s: string, max: number): string {
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+/**
+ * Find where the query matched inside one transcript.
+ *
+ * Tokens are ANDed per LINE, not per file: a session that mentions "raycast"
+ * in one message and "extension" in another matched the index legitimately, but
+ * showing two unrelated excerpts as "the match" is misleading. Requiring both
+ * on one line means an excerpt always contains the whole query.
+ *
+ * If that finds nothing, `looseFallback` re-runs requiring only the FIRST token,
+ * so a genuine index hit never renders as "no preview".
+ */
+export function searchTranscript(
+  path: string,
+  tokens: readonly string[],
+  opts: { signal?: AbortSignal; maxHits?: number } = {},
+): Promise<PreviewResult> {
+  const needles = tokens.map((t) => t.trim().toLowerCase()).filter((t) => t.length > 0);
+  if (needles.length === 0) return Promise.resolve(EMPTY);
+
+  return scan(path, needles, opts).then((strict) => {
+    if (strict.excerpts.length > 0 || needles.length === 1) return strict;
+    // Fall back to the first token alone. The row IS a match — some index said
+    // so — and "no preview" would read as a bug rather than as "the words are
+    // in different messages".
+    return scan(path, needles.slice(0, 1), opts).then((loose) =>
+      loose.excerpts.length > 0 ? loose : strict,
+    );
+  });
+}
+
+function scan(
+  path: string,
+  needles: readonly string[],
+  opts: { signal?: AbortSignal; maxHits?: number },
+): Promise<PreviewResult> {
+  const maxHits = opts.maxHits ?? MAX_HITS;
+
+  return new Promise<PreviewResult>((resolve) => {
+    const excerpts: Excerpt[] = [];
+    let scannedBytes = 0;
+    let truncated = false;
+    let settled = false;
+
+    const stream = createReadStream(path, { encoding: "utf8" });
+    const rl = createInterface({ input: stream, crlfDelay: Infinity });
+
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      rl.close();
+      stream.destroy();
+      resolve({
+        excerpts,
+        scannedBytes,
+        truncated,
+        gaveUp: truncated && excerpts.length === 0,
+      });
+    };
+
+    // A superseded selection must stop the read, not race it.
+    opts.signal?.addEventListener("abort", finish, { once: true });
+
+    rl.on("line", (line) => {
+      if (settled) return;
+      scannedBytes += line.length + 1;
+
+      if (excerpts.length >= maxHits || scannedBytes > MAX_BYTES) {
+        truncated = true;
+        finish();
+        return;
+      }
+      if (line.length > MAX_LINE_BYTES) return;
+
+      // The cheap reject, and the reason this is fast: a substring test on the
+      // raw line, before any JSON parsing. Most lines fail here.
+      const low = line.toLowerCase();
+      for (const n of needles) {
+        if (!low.includes(n)) return;
+      }
+
+      let rec: Record<string, unknown>;
+      try {
+        rec = JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        return;
+      }
+
+      const text = displayText(rec);
+      if (!text) return;
+      // The tokens may have matched a field we do not display (a uuid, a path).
+      // Only claim a match we can actually show.
+      const lowText = text.toLowerCase();
+      if (!needles.every((n) => lowText.includes(n))) return;
+
+      excerpts.push({
+        speaker: speakerOf(rec),
+        text: excerptAround(text, needles),
+        at: parseTs(typeof rec.timestamp === "string" ? rec.timestamp : undefined),
+      });
+    });
+
+    rl.on("close", finish);
+    rl.on("error", finish);
+    stream.on("error", finish);
+  });
+}
+
+/** Render excerpts as the markdown a Detail pane shows. */
+export function renderExcerpts(result: PreviewResult, query: string): string {
+  if (result.excerpts.length === 0) {
+    return result.gaveUp
+      ? `_Searched the first ${Math.round(result.scannedBytes / 1e6)} MB of this session without finding “${query}”. It is a long one._`
+      : "_The match is not in the conversation text — it may be in a file path or a tool result._";
+  }
+
+  const body = result.excerpts
+    .map((e) => `**${e.speaker}**\n\n${e.text}`)
+    .join("\n\n---\n\n");
+
+  return result.truncated && result.excerpts.length >= MAX_HITS
+    ? `${body}\n\n---\n\n_First ${result.excerpts.length} matches._`
+    : body;
+}
+
+```
+
+```text
+File created successfully at: /Users/david/Documents/Program/Agent-Deck-Raycast-Extension/src/lib/claude/preview.ts (file state is current in your context — no need to Read it back)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:08:22Z)**_
+
+<think><details><summary>Thought Process</summary>
+Now I need to wire this into the facade and update the sessions view. The `resolveSnippet` method should become `sessionPreview`, which will resolve the transcript path from the session (checking transcriptPath, falling back to findTranscript for claude or the codex rollout), then run searchTranscript on it. I also need to ensure sessions have a transcriptPath property—SpecStory rows have `native_path` which is often empty, so I'll need to resolve that. Let me update the agents index file to handle this.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:08:22Z)**_
+
+Now wire it into the facade, resolving the transcript path when the index didn't supply one.
+
+_**Agent (claude-opus-5 2026-07-27 05:08:23Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Wire the preview into the facade
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PY'
+import pathlib
+p = pathlib.Path("src/lib/agents/index.ts")
+t = p.read_text()
+
+t = t.replace(
+  'import { readPromptHistory, searchPrompts } from "../claude/history";\nimport { historyPath } from "../claude/paths";',
+  'import { readPromptHistory, searchPrompts } from "../claude/history";\n'
+  'import { renderExcerpts, searchTranscript, type PreviewResult } from "../claude/preview";\n'
+  'import { codexHistoryPath, codexSessionsDir, findTranscript, historyPath, listCodexRollouts, projectsDir } from "../claude/paths";'
+)
+
+old = t[t.index("/**\n * A highlighted excerpt, or undefined."):t.index("export async function act(")]
+new = '''/**
+ * Where a session's transcript lives on disk.
+ *
+ * The index that produced the row often does not know. SpecStory's `native_path`
+ * is empty on essentially every row measured, so the path has to be found by
+ * session id — which is safe because they are UUIDs, and which is the only
+ * correct way given the projects/ directory name cannot be turned back into a
+ * path.
+ */
+export function transcriptPathFor(session: AgentSession): string | undefined {
+  if (session.transcriptPath) return session.transcriptPath;
+
+  const p = prefs();
+  if (session.key.agent === "claude") {
+    return findTranscript(projectsDir(claudeHome(p.claudeHome)), session.key.sessionId);
+  }
+  if (session.key.agent === "codex") {
+    const dir = codexSessionsDir(expandTilde(p.codexHome?.trim() || join(homedir(), ".codex")));
+    // Rollout filenames carry the uuid, so this is a lookup rather than a scan
+    // of the file contents.
+    return listCodexRollouts(dir, 2000).find((r) => r.sessionId === session.key.sessionId)?.path;
+  }
+  // OpenCode keeps messages in SQLite rather than on disk, so there is nothing
+  // to grep. The UI says so instead of showing an empty preview.
+  return undefined;
+}
+
+/**
+ * The parts of a conversation that matched the query.
+ *
+ * Reads the session's own transcript rather than asking the index for a
+ * snippet. Measured, on a 34 MB transcript: 15 ms to find five matches with
+ * early exit, 230 ms for a full no-match scan under the byte cap. fts5's
+ * `snippet()` took 1144 ms on a 7.36 MB body and returns exactly one fragment.
+ *
+ * It also works for sessions no index full-text-searched — the filesystem
+ * readers find sessions by prompt and title, and this shows why they matched.
+ */
+export async function sessionPreview(
+  session: AgentSession,
+  query: string,
+  opts?: ReadOptions,
+): Promise<{ markdown: string; found: boolean } | undefined> {
+  const tokens = query.trim().split(/\\s+/).filter(Boolean);
+  if (tokens.length === 0) return undefined;
+
+  const path = transcriptPathFor(session);
+  if (!path) return undefined;
+
+  let result: PreviewResult;
+  try {
+    result = await searchTranscript(path, tokens, { signal: opts?.signal });
+  } catch {
+    // A preview is a decoration. A transcript deleted between the search and
+    // the selection must not take the row down with it.
+    return undefined;
+  }
+  return { markdown: renderExcerpts(result, query), found: result.excerpts.length > 0 };
+}
+
+'''
+t = t.replace(old, new)
+
+t = t.replace(
+  'import { existsSync } from "node:fs";',
+  'import { existsSync } from "node:fs";\nimport { homedir } from "node:os";\nimport { join } from "node:path";'
+)
+t = t.replace(
+  'import { resolveCapabilities } from "./capabilities";',
+  'import { resolveCapabilities } from "./capabilities";\nimport { expandTilde } from "./probe";'
+)
+p.write_text(t)
+print("patched")
+PY
+grep -n "resolveSnippet\|sessionPreview\|transcriptPathFor" src/lib/agents/index.ts | head
+```
+
+```text
+patched
+352:export function transcriptPathFor(session: AgentSession): string | undefined {
+381:export async function sessionPreview(
+389:  const path = transcriptPathFor(session);
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:08:43Z)**_
+
+Now update the search view to use it, with the detail pane on by default.
+
+_**Agent (claude-opus-5 2026-07-27 05:08:46Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Rewire the view to the transcript preview
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PY'
+import pathlib, re
+p = pathlib.Path("src/sessions.tsx")
+t = p.read_text()
+
+t = t.replace("  resolveSnippet,\n", "  sessionPreview,\n")
+
+# The preview is now cheap enough to be the default. Measured 15-31ms with early
+# exit against fts5 snippet()'s 1144ms, so the reason it was off no longer holds.
+t = t.replace(
+  "  const wantsDetail = prefs.showSnippets === true;",
+  "  // On by default now. The reason it was off was fts5 `snippet()` costing\n"
+  "  // 1144 ms on a large body; reading the transcript directly measures 15-31 ms\n"
+  "  // with early exit and 230 ms for a capped no-match scan, and it returns\n"
+  "  // several real excerpts instead of one fragment.\n"
+  "  const wantsDetail = prefs.showSnippets !== false;",
+)
+
+old_snip = t[t.index("  const snippet = useCachedPromise("):t.index("  const failure = results.error")]
+new_snip = '''  // Per-selection and debounced by useCachedPromise's dependency change, never
+  // on the typeahead path. `execute` is what keeps it off the list render.
+  const preview = useCachedPromise(
+    async (enabled: boolean, query: string, session: AgentSession | undefined) => {
+      if (!enabled || !session || !query.trim()) return undefined;
+      return sessionPreview(session, query, { signal: previewAbort.current?.signal });
+    },
+    [wantsDetail, text, selectedHit?.session],
+    {
+      keepPreviousData: false,
+      abortable: previewAbort,
+      execute: wantsDetail && selectedHit !== undefined && text.trim().length > 0,
+    },
+  );
+
+'''
+t = t.replace(old_snip, new_snip)
+
+t = t.replace(
+  "  const liveAbort = useRef<AbortController>(new AbortController());",
+  "  const liveAbort = useRef<AbortController>(new AbortController());\n  const previewAbort = useRef<AbortController>(new AbortController());",
+)
+
+t = t.replace("snippet={\n                  selected === keyString(hit.session.key)\n                    ? snippet.data\n                    : undefined\n                }",
+              "preview={\n                  selected === keyString(hit.session.key)\n                    ? preview.data\n                    : undefined\n                }")
+t = t.replace("snippetLoading={\n                  selected === keyString(hit.session.key) && snippet.isLoading\n                }",
+              "previewLoading={\n                  selected === keyString(hit.session.key) && preview.isLoading\n                }")
+t = t.replace("  snippet,\n  snippetLoading,\n  onRevalidate,\n}: {\n  hit: SessionHit;\n  showDetail: boolean;\n  snippet?: string;\n  snippetLoading: boolean;",
+              "  preview,\n  previewLoading,\n  onRevalidate,\n}: {\n  hit: SessionHit;\n  showDetail: boolean;\n  preview?: { markdown: string; found: boolean };\n  previewLoading: boolean;")
+t = t.replace("<SessionDetail hit={hit} snippet={snippet} loading={snippetLoading} />",
+              "<SessionDetail hit={hit} preview={preview} loading={previewLoading} />")
+p.write_text(t)
+print("patched sessions.tsx")
+PY
+grep -n "snippet" src/sessions.tsx | head
+```
+
+```text
+patched sessions.tsx
+13: *   selection -> preview   0.2-1.1 s snippet(), which is why it is off by default
+74:  // On by default now. The reason it was off was fts5 `snippet()` costing
+130:  // snippet() took 1144 ms on a 7.36 MB body against 20 ms for the same query
+384:  snippet,
+388:  snippet?: string;
+395:    : snippet
+396:      ? snippet
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:08:56Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Inspect the remaining detail component
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && sed -n '375,435p' src/sessions.tsx`
+
+```text
+          </ActionPanel.Section>
+        </ActionPanel>
+      }
+    />
+  );
+}
+
+function SessionDetail({
+  hit,
+  snippet,
+  loading,
+}: {
+  hit: SessionHit;
+  snippet?: string;
+  loading: boolean;
+}) {
+  const { session, live } = hit;
+
+  const body = loading
+    ? "_Finding the match…_"
+    : snippet
+      ? snippet
+      : // Not an apology. Only SpecStory can highlight a match, and only for a
+        // session it indexed; saying so beats a spinner that never resolves.
+        "_No preview for this session._";
+
+  return (
+    <List.Item.Detail
+      markdown={`# ${session.title}\n\n${body}`}
+      metadata={
+        <List.Item.Detail.Metadata>
+          <List.Item.Detail.Metadata.Label
+            title="Agent"
+            text={agentLabel(session.key.agent)}
+          />
+          <List.Item.Detail.Metadata.Label
+            title="Folder"
+            text={session.cwd ?? "unknown"}
+          />
+          <List.Item.Detail.Metadata.Label
+            title="Last Activity"
+            text={relativeTime(session.updatedAt)}
+          />
+          {session.userTurns !== undefined ? (
+            <List.Item.Detail.Metadata.Label
+              title="Your Turns"
+              text={String(session.userTurns)}
+            />
+          ) : null}
+          {live.length > 0 ? (
+            <List.Item.Detail.Metadata.TagList title="Running">
+              {live.map((a) => (
+                <List.Item.Detail.Metadata.TagList.Item
+                  key={a.handle}
+                  text={`${statusLabel(a.status)}${a.paneId ? ` · ${a.paneId}` : ""}`}
+                  color={a.status === "blocked" ? Color.Red : Color.Green}
+                />
+              ))}
+            </List.Item.Detail.Metadata.TagList>
+          ) : null}
+          <List.Item.Detail.Metadata.Separator />
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:09:22Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Finish rewiring the detail pane
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PY'
+import pathlib
+p = pathlib.Path("src/sessions.tsx")
+t = p.read_text()
+
+old = '''function SessionDetail({
+  hit,
+  snippet,
+  loading,
+}: {
+  hit: SessionHit;
+  snippet?: string;
+  loading: boolean;
+}) {
+  const { session, live } = hit;
+
+  const body = loading
+    ? "_Finding the match…_"
+    : snippet
+      ? snippet
+      : // Not an apology. Only SpecStory can highlight a match, and only for a
+        // session it indexed; saying so beats a spinner that never resolves.
+        "_No preview for this session._";
+
+  return (
+    <List.Item.Detail
+      markdown={`# ${session.title}\\n\\n${body}`}'''
+
+new = '''function SessionDetail({
+  hit,
+  preview,
+  loading,
+  query,
+}: {
+  hit: SessionHit;
+  preview?: { markdown: string; found: boolean };
+  loading: boolean;
+  query: string;
+}) {
+  const { session, live } = hit;
+
+  const body = !query.trim()
+    ? "_Type to search, and the matching parts of the conversation appear here._"
+    : loading
+      ? "_Looking through this session…_"
+      : preview
+        ? preview.markdown
+        : // OpenCode keeps its messages in SQLite rather than on disk, and a
+          // transcript can be deleted after the index recorded it. Naming the
+          // reason beats a spinner that never resolves.
+          "_No transcript on disk for this session, so there is nothing to quote._";
+
+  return (
+    <List.Item.Detail
+      markdown={`${body}`}'''
+
+assert old in t
+t = t.replace(old, new)
+t = t.replace(
+  "<SessionDetail hit={hit} preview={preview} loading={previewLoading} />",
+  "<SessionDetail\n          hit={hit}\n          preview={preview}\n          loading={previewLoading}\n          query={query}\n        />",
+)
+t = t.replace(
+  "  preview,\n  previewLoading,\n  onRevalidate,\n}: {\n  hit: SessionHit;\n  showDetail: boolean;\n  preview?: { markdown: string; found: boolean };\n  previewLoading: boolean;\n  onRevalidate: () => void;\n}) {",
+  "  preview,\n  previewLoading,\n  query,\n  onRevalidate,\n}: {\n  hit: SessionHit;\n  showDetail: boolean;\n  preview?: { markdown: string; found: boolean };\n  previewLoading: boolean;\n  query: string;\n  onRevalidate: () => void;\n}) {",
+)
+t = t.replace(
+  "                previewLoading={\n                  selected === keyString(hit.session.key) && preview.isLoading\n                }",
+  "                previewLoading={\n                  selected === keyString(hit.session.key) && preview.isLoading\n                }\n                query={text}",
+)
+p.write_text(t)
+print("patched")
+PY
+npx tsc --noEmit 2>&1 | head -10; echo "=== tsc ==="
+```
+
+```text
+patched
+=== tsc ===
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:09:43Z)**_
+
+<think><details><summary>Thought Process</summary>
+Typecheck is passing, so now I need to update the preference description since it still references the old measurement system, and fix the file header comment to match. I should also add dev-check assertions to verify that the preview module functions like excerptAround and mark are pure, then run an end-to-end test with an actual search to make sure everything works together.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:10:12Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Update preference and header measurements
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PY'
+import pathlib, json
+p = pathlib.Path("package.json")
+d = json.loads(p.read_text())
+for c in d["commands"]:
+    if c["name"] == "sessions":
+        for pref in c["preferences"]:
+            if pref["name"] == "showSnippets":
+                pref["title"] = "Match Preview"
+                pref["label"] = "Show the matching parts of the conversation"
+                pref["description"] = (
+                    "Reads the session's own transcript to quote the messages that matched. "
+                    "On by default: measured at 15-31 ms to find the first few matches, and "
+                    "230 ms at worst on a 34 MB session. Turn it off for a plain list."
+                )
+                pref["default"] = True
+p.write_text(json.dumps(d, indent=2) + "\n")
+
+s = pathlib.Path("src/sessions.tsx")
+t = s.read_text()
+t = t.replace(
+  " *   selection -> preview   0.2-1.1 s snippet(), which is why it is off by default\n"
+  " *   first query, cold        3.5 s   faulting in a 290 MB b-tree, warmed at mount",
+  " *   selection -> preview   15-31 ms  first matches in a transcript, early exit\n"
+  " *                            230 ms  worst case, a 34 MB session with no match\n"
+  " *   first query, cold        3.5 s   faulting in a 290 MB b-tree, warmed at mount",
+)
+t = t.replace(
+  "  // Snippets are per-selection and never on the typeahead path. Measured:\n"
+  "  // snippet() took 1144 ms on a 7.36 MB body against 20 ms for the same query\n"
+  "  // without it, and the largest body in the index is 10.5 MB.\n", "")
+s.write_text(t)
+print("patched")
+PY
+npm run build >/dev/null 2>&1 && npx tsc --noEmit 2>&1 | head -5; echo "=== build+tsc ok ==="; grep -n "selection -> preview" -A2 src/sessions.tsx | head -4
+```
+
+```text
+patched
+=== build+tsc ok ===
+13: *   selection -> preview   15-31 ms  first matches in a transcript, early exit
+14- *                            230 ms  worst case, a 34 MB session with no match
+15- *   first query, cold        3.5 s   faulting in a 290 MB b-tree, warmed at mount
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:10:38Z)**_
+
+Now the assertions for the preview, then I'll verify it end-to-end against a real session.
+
+_**Agent (claude-opus-5 2026-07-27 05:11:03Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Add preview assertions
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PY'
+import pathlib
+p = pathlib.Path("src/lib/dev-check.ts")
+t = p.read_text()
+t = t.replace('import { readRegistry } from "./claude/registry";',
+              'import { readRegistry } from "./claude/registry";\nimport { excerptAround, searchTranscript } from "./claude/preview";')
+
+anchor = '// ---------------------------------------------------------------------------\nsection("focus: which of fifty terminals you land in");'
+new = '''// ---------------------------------------------------------------------------
+section("preview: which fragments matched");
+
+// Markdown, so every character the renderer treats as syntax has to survive as
+// text. A transcript is full of backticks, underscores and asterisks, and one
+// unbalanced marker swallows the rest of the excerpt.
+ok("the matched term is marked", excerptAround("we fixed the herdr pane", ["herdr"]).includes("**herdr**"));
+ok("matching is case-insensitive", excerptAround("HERDR panes", ["herdr"]).includes("**HERDR**"));
+ok("every occurrence is marked", (excerptAround("herdr and herdr", ["herdr"]).match(/\\*\\*herdr\\*\\*/g) ?? []).length === 2);
+ok("backticks are escaped", excerptAround("run `herdr list`", ["herdr"]).includes("\\\\`"));
+ok("underscores are escaped", excerptAround("my_var herdr", ["herdr"]).includes("\\\\_"));
+ok("asterisks are escaped", excerptAround("a * b herdr", ["herdr"]).includes("\\\\*"));
+// Longest-first, so a short token cannot split a match a longer one claimed.
+ok("the longer token wins", excerptAround("raycast", ["ray", "raycast"]).includes("**raycast**"));
+check("whitespace is collapsed", excerptAround("a\\n\\n  b", []), "a b");
+ok("no match still returns the text", excerptAround("nothing here", ["zzz"]).length > 0);
+ok("an empty token list does not throw", excerptAround("hello", []).length > 0);
+
+// The window: a match deep in a long message must not return the whole message.
+const LONG = `${"x".repeat(5000)} herdr ${"y".repeat(5000)}`;
+const windowed = excerptAround(LONG, ["herdr"]);
+ok("a long message is windowed", windowed.length < 700, `${windowed.length} chars`);
+ok("and elided on both sides", windowed.startsWith("…") && windowed.endsWith("…"));
+ok("the match survives the window", windowed.includes("**herdr**"));
+
+// A file that does not exist must resolve, not reject: a transcript can be
+// deleted between the search that found it and the selection that previews it.
+{
+  const missing = await searchTranscript(join(tmpdir(), "agent-deck-nope.jsonl"), ["x"]);
+  check("a missing transcript yields no excerpts", missing.excerpts, []);
+  check("and does not claim it gave up", missing.gaveUp, false);
+}
+
+// Against a real transcript, when one exists.
+{
+  const home = homedir();
+  const projects = join(home, ".claude", "projects");
+  if (existsSync(projects)) {
+    const buckets = readdirSync(projects);
+    let sample: string | undefined;
+    for (const b of buckets) {
+      const dir = join(projects, b);
+      try {
+        const f = readdirSync(dir).find((n) => n.endsWith(".jsonl"));
+        if (f) {
+          sample = join(dir, f);
+          break;
+        }
+      } catch {
+        continue;
+      }
+    }
+    if (sample) {
+      const t0 = Date.now();
+      const hit = await searchTranscript(sample, ["the"], { maxHits: 5 });
+      const ms = Date.now() - t0;
+      ok("a common word finds excerpts in a real transcript", hit.excerpts.length > 0, `${hit.excerpts.length}`);
+      // The budget this whole design exists to hit. fts5 snippet() was 1144 ms.
+      ok("and does it fast enough for a selection change", ms < 800, `${ms} ms`);
+      ok("every excerpt names a speaker", hit.excerpts.every((e) => e.speaker.length > 0));
+
+      const miss = await searchTranscript(sample, ["zzzz-not-in-any-transcript"]);
+      check("a genuine miss returns nothing", miss.excerpts, []);
+    } else {
+      console.log("  (no transcript to sample — skipped)");
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+section("focus: which of fifty terminals you land in");'''
+assert anchor in t
+t = t.replace(anchor, new)
+
+# Top-level await needs the script wrapped; simplest is an async IIFE at the end.
+t = t.replace(
+  'console.log(`\\n${checks - failures}/${checks} checks passed`);',
+  'console.log(`\\n${checks - failures}/${checks} checks passed`);'
+)
+p.write_text(t)
+print("patched")
+PY
+head -3 tsconfig.json && npx tsc --noEmit 2>&1 | head -8; echo "=== tsc ==="
+```
+
+```text
+patched
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "include": ["src/**/*", "raycast-env.d.ts"],
+src/lib/dev-check.ts(969,19): error TS1378: Top-level 'await' expressions are only allowed when the 'module' option is set to 'es2022', 'esnext', 'system', 'node16', 'node18', 'node20', 'nodenext', or 'preserve', and the 'target' option is set to 'es2017' or higher.
+src/lib/dev-check.ts(995,19): error TS1378: Top-level 'await' expressions are only allowed when the 'module' option is set to 'es2022', 'esnext', 'system', 'node16', 'node18', 'node20', 'nodenext', or 'preserve', and the 'target' option is set to 'es2017' or higher.
+src/lib/dev-check.ts(1002,20): error TS1378: Top-level 'await' expressions are only allowed when the 'module' option is set to 'es2022', 'esnext', 'system', 'node16', 'node18', 'node20', 'nodenext', or 'preserve', and the 'target' option is set to 'es2017' or higher.
+=== tsc ===
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:11:25Z)**_
+
+<think><details><summary>Thought Process</summary>
+The issue is that dev-check compiles to CommonJS which doesn't support top-level await, so I need to restructure the async code. I'm thinking through whether to wrap the async checks in a function and call it with `.then()`, or use an IIFE to handle the async block before the summary runs.
+
+I'll move the async preview checks into their own function and then call that function at the bottom, chaining the summary to run after the async work completes.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:11:25Z)**_
+
+Top-level await doesn't work under commonjs. Let me restructure the summary to run after the async checks.
+
+_**Agent (claude-opus-5 2026-07-27 05:12:11Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Wrap async checks and verify
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PY'
+import pathlib, re
+p = pathlib.Path("src/lib/dev-check.ts")
+t = p.read_text()
+
+start = t.index('// A file that does not exist must resolve, not reject')
+end = t.index('// ---------------------------------------------------------------------------\nsection("focus: which of fifty terminals you land in");')
+block = t[start:end]
+
+# Wrap the awaiting parts in a function. dev-check compiles to commonjs (the
+# sibling extension's tsconfig, kept for consistency), where top-level await is
+# not available — so the async assertions run before the summary rather than
+# being sprinkled through it.
+wrapped = '''/**
+ * The assertions that need I/O.
+ *
+ * Collected into one function because this file compiles to commonjs, where
+ * top-level await is unavailable. Called before the summary is printed.
+ */
+async function previewChecks(): Promise<void> {
+  // A file that does not exist must resolve, not reject: a transcript can be
+  // deleted between the search that found it and the selection that previews it.
+  const missing = await searchTranscript(join(tmpdir(), "agent-deck-nope.jsonl"), ["x"]);
+  check("a missing transcript yields no excerpts", missing.excerpts, []);
+  check("and does not claim it gave up", missing.gaveUp, false);
+
+  // Against a real transcript, when one exists.
+  const projects = join(homedir(), ".claude", "projects");
+  if (!existsSync(projects)) return;
+
+  let sample: string | undefined;
+  for (const b of readdirSync(projects)) {
+    try {
+      const f = readdirSync(join(projects, b)).find((n) => n.endsWith(".jsonl"));
+      if (f) {
+        sample = join(projects, b, f);
+        break;
+      }
+    } catch {
+      continue;
+    }
+  }
+  if (!sample) {
+    console.log("  (no transcript to sample — skipped)");
+    return;
+  }
+
+  const t0 = Date.now();
+  const hit = await searchTranscript(sample, ["the"], { maxHits: 5 });
+  const ms = Date.now() - t0;
+  ok("a common word finds excerpts in a real transcript", hit.excerpts.length > 0, `${hit.excerpts.length}`);
+  // The budget this whole design exists to hit. fts5 snippet() was 1144 ms.
+  ok("and does it fast enough for a selection change", ms < 800, `${ms} ms`);
+  ok("every excerpt names a speaker", hit.excerpts.every((e) => e.speaker.length > 0));
+
+  const miss = await searchTranscript(sample, ["zzzz-not-in-any-transcript"]);
+  check("a genuine miss returns nothing", miss.excerpts, []);
+}
+
+'''
+t = t[:start] + wrapped + t[end:]
+
+summary_old = '''// ---------------------------------------------------------------------------
+console.log(`\\n${checks - failures}/${checks} checks passed`);
+if (failures > 0) {
+  console.error(`${failures} FAILED`);
+  process.exitCode = 1;
+}'''
+summary_new = '''// ---------------------------------------------------------------------------
+void previewChecks()
+  .catch((e) => {
+    failures++;
+    console.error(`FAIL preview checks threw\\n  ${String(e)}`);
+  })
+  .finally(() => {
+    console.log(`\\n${checks - failures}/${checks} checks passed`);
+    if (failures > 0) {
+      console.error(`${failures} FAILED`);
+      process.exitCode = 1;
+    }
+  });'''
+assert summary_old in t
+t = t.replace(summary_old, summary_new)
+p.write_text(t)
+print("patched")
+PY
+npx tsc --noEmit 2>&1 | head -6; echo "=== tsc ==="; just verify 2>&1 | grep -E "^(FAIL|  expected|  actual|  [0-9]|[0-9]+/[0-9]+)" | head -12
+```
+
+```text
+patched
+=== tsc ===
+351/351 checks passed
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:12:27Z)**_
+
+<think><details><summary>Thought Process</summary>
+All 351 checks are passing, including the timing validation for the preview. Now I'm testing the end-to-end flow by searching for "herdr" in specstory, grabbing the top result, and verifying that the preview correctly extracts relevant excerpts from its transcript. I'm writing a quick test script to validate this works as expected.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:12:27Z)**_
+
+351 checks. Let me verify the real flow end-to-end: FTS finds a session, then the preview quotes it.
+
+_**Agent (claude-opus-5 2026-07-27 05:12:28Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Test preview against a real FTS hit
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension
+DB="file:$HOME/.specstory/sessions.db?mode=ro"
+SID=$(sqlite3 "$DB" "WITH h AS (SELECT rowid rid, agent, session_id sid, rank r FROM sessions_fts WHERE sessions_fts MATCH '\"herdr\"' ORDER BY rank LIMIT 5) SELECT h.sid FROM h JOIN sessions s ON s.agent=h.agent AND s.session_id=h.sid WHERE s.agent='claude' LIMIT 1;")
+echo "top FTS hit for 'herdr': $SID"
+FILE=$(find ~/.claude/projects -name "$SID.jsonl" -not -path "*/subagents/*" | head -1)
+echo "transcript: $(du -h "$FILE" 2>/dev/null | cut -f1)"
+node -e '
+const {searchTranscript,renderExcerpts}=require("./.build/verify/claude/preview.js");
+(async()=>{
+  for (const q of [["herdr"],["herdr","pane"],["zzznope"]]) {
+    const t0=Date.now();
+    const r=await searchTranscript(process.argv[1], q);
+    console.log(`\nquery=${JSON.stringify(q)} hits=${r.excerpts.length} ${Date.now()-t0}ms truncated=${r.truncated}`);
+    if(r.excerpts[0]) console.log("  ["+r.excerpts[0].speaker+"] "+r.excerpts[0].text.slice(0,170).replace(/\n/g," "));
+  }
+})();
+' "$FILE" 2>&1 | head -20
+```
+
+```text
+top FTS hit for 'herdr': 21e05dad-0a51-488b-8e7d-a334c884a5dc
+transcript: 1.3M
+
+query=["herdr"] hits=5 26ms truncated=true
+  [You] 我們現在針對 **herdr** 有 svibe 的類似 helper function 嗎？
+
+query=["herdr","pane"] hits=5 16ms truncated=true
+  [You] …6-05-13\_01-51-51Z-at-dot-config-television.md .specstory/history/2026-04-28\_08-57-29Z-tmux-crash-debug-image.md .specstory/history/2026-05-13\_10-12-42Z-at-backlog-lin
+
+query=["zzznope"] hits=0 55ms truncated=false
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:12:42Z)**_
+
+<think><details><summary>Thought Process</summary>
+The search is working well at 26ms for 5 results, and the first excerpt correctly shows the user's question with the bolded term and CJK characters preserved. The second query's top excerpt is pulling file paths from an @-mention expansion, which technically matches but isn't as useful as actual prose content. I should adjust the ranking to prioritize user and assistant messages over attachment records.
+
+Actually, that file list is the user's own message content, so it's honest even if not ideal. I could dedupe near-identical excerpts or prefer prose matches, but that's over-engineering at this point—five hits give enough context. Let me run the full test suite, commit this, and move on to the AI tools work.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 05:12:42Z)**_
+
+Works — 26 ms for 5 hits, CJK intact, terms bolded. Let me run the gate and commit.
+
+_**Agent (claude-opus-5 2026-07-27 05:16:45Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Run the full gate
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && npx ray lint --fix >/dev/null 2>&1; just check 2>&1 | grep -E "error|FAIL|checks passed|built extension" | tail -6`
+
+```text
+— errors: absent is not broken
+351/351 checks passed
+error  - run ESLint
+  71:3  error  'codexHistoryPath' is defined but never used  @typescript-eslint/no-unused-vars
+✖ 1 problem (1 error, 0 warnings)
+error: Recipe `lint` failed on line 20 with exit code 2
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+[This command modified 4 files you've previously read: ../Agent-Deck-Raycast-Extension/src/lib/agents/index.ts, ../Agent-Deck-Raycast-Extension/src/lib/dev-check.ts, ../Agent-Deck-Raycast-Extension/src/sessions.tsx, ../Agent-Deck-Raycast-Extension/src/lib/claude/preview.ts. Call Read before editing.]
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:18:59Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Remove unused import and rerun gate
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && sed -i '' 's/^  codexHistoryPath,$//' src/lib/agents/index.ts && npx ray lint --fix >/dev/null 2>&1; just check 2>&1 | grep -E "error|FAIL|checks passed|built extension" | tail -5`
+
+```text
+— errors: absent is not broken
+351/351 checks passed
+ready  - built extension successfully
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+[This command modified 1 file you've previously read: ../Agent-Deck-Raycast-Extension/src/lib/agents/index.ts. Call Read before editing.]
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:19:35Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit the preview feature
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && cat > pitfalls/the-match-preview-is-not-fts5-snippet.md <<'MDEOF'
+# The match preview is slow, or shows one useless fragment
+
+## Symptoms (grep this section)
+
+- Arrowing through results freezes for around a second per row.
+- The preview is a 12-word fragment that does not tell you what the session was.
+- Sessions found by prompt or title show no preview at all.
+
+## Cause
+
+The obvious implementation is fts5's `snippet()`, and it is wrong three ways.
+
+**Slow.** It reconstructs the matched document. Measured on the real index:
+**1144 ms** on a 7.36 MB body, against **20 ms** for the same `MATCH` without
+it. Bodies average 257 KB and reach 9.99 MB.
+
+**One fragment.** `snippet()` returns a single excerpt. "Which parts of this
+conversation matched" is a question one fragment cannot answer.
+
+**SpecStory only.** It works for rows in the SpecStory FTS index and nothing
+else. Sessions found through the prompt history or the filesystem readers —
+including every OpenCode session, which SpecStory does not index at all — get
+nothing.
+
+## Fix
+
+Read the session's own transcript instead: `src/lib/claude/preview.ts`.
+
+Streamed line by line with three bounds, because a transcript can be 34 MB and
+this runs on every selection change:
+
+1. **A substring test on the raw line before any `JSON.parse`.** Most lines fail
+   here, and this is where the speed comes from.
+2. `MAX_HITS = 5` — early exit.
+3. `MAX_BYTES = 12 MB` — a scan that hits it says so, rather than implying the
+   rest of the file held nothing.
+
+Measured on a 34 MB transcript: **15 ms** to find five hits with early exit,
+**230 ms** for a capped no-match scan. On a real 1.3 MB session matching a real
+query: **26 ms** for five excerpts.
+
+## Details worth keeping
+
+**Tokens are ANDed per LINE, not per file.** A session mentioning "raycast" in
+one message and "extension" in another matched the index legitimately, but two
+unrelated excerpts presented as "the match" is misleading. If the strict pass
+finds nothing, a second pass requires only the first token, so a genuine index
+hit never renders as "no preview".
+
+**Escape markdown before marking.** A transcript is full of backticks,
+underscores and asterisks; one unbalanced marker swallows the rest of the
+excerpt. Escaping inserts backslashes into the text, so the highlighter then has
+to match its tokens with optional backslashes between the characters.
+
+**Mark longest token first.** Otherwise "ray" splits a match that "raycast"
+already claimed.
+
+**A missing file resolves, it does not reject.** A transcript can be deleted
+between the search that found it and the selection that previews it, and a
+decoration must never take its row down with it.
+MDEOF
+git add -A && git -c user.name="Da-Wei Lee" commit -q -F - <<'MSG'
+Quote the conversation instead of a fragment of its index
+
+The search detail pane now shows several real excerpts of the matched
+conversation with the terms marked, read from the session's own transcript.
+On by default. 351 checks.
+
+fts5's snippet() was the obvious implementation and it was wrong three
+ways. Slow: 1144 ms on a 7.36 MB body against 20 ms for the same MATCH
+without it. Singular: one fragment, when the question is "which parts of
+this matched". And SpecStory-only, so sessions found through the prompt
+history or the filesystem readers got nothing at all — including every
+OpenCode session, since SpecStory does not index OpenCode.
+
+Streaming the transcript is faster than the index that found it, which is
+not the result I expected. The trick is a substring test on the raw line
+before any JSON.parse, so most lines cost a lowercase and an indexOf.
+Measured on a 34 MB transcript: 15 ms to five hits with early exit, 230 ms
+for a capped no-match scan. On a real 1.3 MB session with a real query,
+26 ms for five excerpts. That is why the preference flipped to on.
+
+Tokens are ANDed per LINE, not per file. A session mentioning "raycast" in
+one message and "extension" in another did match the index legitimately,
+but showing two unrelated excerpts as "the match" is misleading — so an
+excerpt always contains the whole query, with a looser second pass so a
+genuine hit never renders as "no preview".
+
+Escaping had to come before marking, and then the marker had to be taught
+about its own escaping: a transcript is full of backticks and underscores,
+escaping inserts backslashes into the text, and the highlighter now
+matches its tokens with optional backslashes between the characters.
+Longest token first, or "ray" splits a match "raycast" already claimed.
+
+dev-check's summary moved inside a .finally() so the async assertions run
+before it — this file compiles to commonjs and has no top-level await.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+MSG
+git log --oneline | head -2
+```
+
+```text
+efab5bb Quote the conversation instead of a fragment of its index
+54dec64 Write down what each trap cost, while the error text is still in scrollback
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:19:42Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #8 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:19:42Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #9 status
+```
+</details></tool-use>

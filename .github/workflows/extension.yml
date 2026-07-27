@@ -58,8 +58,14 @@ jobs:
 
       # `just` rather than inlining the four commands, so CI and the local gate
       # cannot drift apart.
-      - name: Install just
-        run: brew install just
+      #
+      # pueue itself, because `just verify` checks every mutation's flags against
+      # the real `pueue <sub> --help`. Without the binary those checks skip, and a
+      # wrong flag — which surfaces as a clap exit 2 at runtime, i.e. as a mystery
+      # — would sail through a green build. The daemon is never started; only the
+      # client's help output is read.
+      - name: Install just and pueue
+        run: brew install just pueue
 
       # ci, not install — this is also the proof that the committed lockfile
       # still resolves from a clean checkout, which the store requires.

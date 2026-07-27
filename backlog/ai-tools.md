@@ -1,6 +1,6 @@
 # AI tools
 
-**Status:** shipped · **Effort:** `[M]` · seven tools in `src/tools/`
+**Status:** shipped · **Effort:** `[M]` · eight tools in `src/tools/`
 
 ## What shipped
 
@@ -12,6 +12,7 @@ appear in root search; Raycast AI calls them, choosing by `description`.
 | `get-tasks` | `status()` + client-side filtering | — |
 | `get-task-log` | `status()` + `readLogText()` | — |
 | `get-groups` | `status()` + `summarizeGroups()` | — |
+| `create-group` | `mutate({op:"group-add"})` | Regular |
 | `add-task` | `mutate({op:"add"})` | Regular |
 | `kill-tasks` | `mutate({op:"kill"})` | Destructive |
 | `restart-failed` | `mutate({op:"restart"})` | Destructive when in place |
@@ -117,8 +118,16 @@ is *not* a gate here. A typo in `instructions` or a misspelled eval key fails
 silently, so the only way to know an example prompt works is to see it in the
 "Ask Pueue" list.
 
-Eval `input` doubles as the user-facing example prompt, so eight are shipped
-without any eval machinery behind them. The instructions carry the rules that
+Eval `input` doubles as the user-facing example prompt, so eleven are shipped
+without any eval machinery behind them. They name no group and no host: an
+example that says "the wf group on lab" is unreadable to anyone who is not the
+person who wrote it, and unusable to everyone else.
+
+`create-group` exists because of those examples. `pueue add --group nightly`
+fails outright when the group does not exist — `Group nightly doesn't exists.
+Use one of these: [...]` — so every "queue these five jobs into a new group"
+request dead-ended on the first call. One group per batch is pueue's idiom; it
+is the only unit that carries both a concurrency limit and a progress figure. The instructions carry the rules that
 should not have to be repeated in every prompt — read by default, ids are
 per-daemon, sample logs rather than reading twenty, prefer `successfulOnly`,
 never choose `inPlace` unprompted, and don't claim the user has no remotes when

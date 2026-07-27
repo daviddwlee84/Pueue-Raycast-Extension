@@ -493,6 +493,7 @@ check(
 
 console.log("\nargv flags exist in pueue --help (live check)");
 let helpChecked = 0;
+let helpSkipped = 0;
 for (const m of MUTATIONS) {
   const argv = argvFor(m);
   const sub = subcommandOf(argv);
@@ -502,13 +503,31 @@ for (const m of MUTATIONS) {
     help = execFileSync(PUEUE_BIN, [...sub, "--help"], { encoding: "utf8" });
   } catch {
     console.log(`  skip ${sub.join(" ")} — could not run --help`);
+    helpSkipped += 1;
     continue;
   }
   const missing = flags.filter((f) => !help.includes(f));
   check(`${m.op}: ${flags.join(" ") || "(no flags)"}`, missing, []);
   helpChecked += 1;
 }
-check("every mutation variant was checked", helpChecked, MUTATIONS.length);
+// Every variant was *reached*, whether or not a binary was there to check it
+// against. Asserting `helpChecked === MUTATIONS.length` instead conflated two
+// different things and failed on any machine without pueue installed — which is
+// every CI runner, so this gate had never once passed in CI.
+check(
+  "every mutation variant was reached",
+  helpChecked + helpSkipped,
+  MUTATIONS.length,
+);
+if (helpChecked === 0) {
+  // Loud, because the argv assertions above are the ones that catch a wrong
+  // flag, and a silent skip would let a clap exit-2 bug through a green build.
+  console.log(
+    "\n  !!   the live --help check did NOT run: no pueue binary found." +
+      "\n       argv flags are unverified against the real CLI in this run." +
+      "\n       Install pueue (brew install pueue) to make this gate mean something.",
+  );
+}
 
 console.log("\nlog output — pueue hides its own errors in the output field");
 // Captured verbatim from `pueue log 1 --json` on a stashed task (exit code 0).
