@@ -188,7 +188,7 @@
     {
       "name": "connections",
       "title": "Remote Connections",
-      "description": "Separate connections with ';'. Simplest form is just an SSH host you can already reach - everything runs over ssh, nothing to set up: local_ubuntu. Add a label with 'name | ssh-host', and the remote pueue path if it is not on the non-interactive PATH (a cargo install is not): 'lab | local_ubuntu | ~/.cargo/bin/pueue'. Advanced: a config path as the second field selects a forwarded socket instead.",
+      "description": "Separate connections with ';'. Simplest form is just an SSH host you can already reach - everything runs over ssh, nothing to set up: local_ubuntu. Add a label with 'name | ssh-host', and the remote pueue path if it is not on the non-interactive PATH (a cargo install is not): 'lab | local_ubuntu | ~/.cargo/bin/pueue'. Advanced: a config path as the second field selects a forwarded socket instead. Tip: paste rather than type. Raycast reloads the extension on every keystroke, so a half-typed host is briefly a real connection the extension tries to reach.",
       "type": "textfield",
       "required": false,
       "placeholder": "lab | local_ubuntu | ~/.cargo/bin/pueue ; gpu | gpu.example.com"
@@ -259,5 +259,34 @@
       "title": "Clean Finished Tasks",
       "description": "Remove finished tasks and their logs from the queue, optionally limited to one group, and optionally sparing the failures with `successfulOnly`. Nothing running or queued is affected. Prefer `successfulOnly` unless the user has said they are done investigating the failures. Always confirmed."
     }
-  ]
+  ],
+  "ai": {
+    "instructions": "Pueue is a task queue. A daemon holds tasks; tasks belong to groups; a group has its own parallelism limit and its own Running/Paused state. Task ids are PER-DAEMON. Id 6 on `lab` and id 6 on `Local` are different tasks, so always carry the `connection` from the result you read an id out of. Never guess a connection name — if one is rejected, the error lists the real ones. Default to reading. Do not queue, kill, restart, or clean anything unless the user asked for that specific change; 'have a look at', 'analyse', 'why did this fail' and 'give me an overview' are all read-only requests. To diagnose a failure, read the log — an exit code says that something failed, not why. When several tasks failed with the same command and the same exit code, read two or three logs rather than all of them, then say the rest match. Reading twenty logs to report one cause is a waste of the user's time. `finished` counts every task the daemon is done with, successful or not. A failed task is finished. Say 'succeeded' or 'failed' rather than 'done' when the distinction matters. Estimated times are an average of what has already finished, not a model. Present them as approximate, and say so when a group's tasks are obviously not comparable. When cleaning, prefer `successfulOnly` unless the user has said they are finished with the failures — cleaning deletes logs, and a log the user still needed cannot be recovered. `restart` without `inPlace` creates new tasks and leaves the originals with their logs. `inPlace` reuses the ids and overwrites those logs. Never choose `inPlace` on your own; it is only right when the user says the old output no longer matters. If only the `Local` connection is visible but the user expects remotes, say that Raycast does not pass extension preferences to AI tools and that opening any Pueue command once refreshes the copy the tools read. Do not tell them they have no remotes configured.",
+    "evals": [
+      {
+        "input": "@pueue Give me an overview of every connection, then explain why the failed tasks failed. Don't restart or change anything."
+      },
+      {
+        "input": "@pueue What's running right now, and how long has each one been going?"
+      },
+      {
+        "input": "@pueue Why did the tasks in the wf group fail? Read the logs — don't fix anything yet."
+      },
+      {
+        "input": "@pueue How far through is the wf group, and roughly when will it finish?"
+      },
+      {
+        "input": "@pueue Anything failed on lab today? Summarise the causes, grouping the ones that failed the same way."
+      },
+      {
+        "input": "@pueue Queue 'cargo build --release' in the wf group on lab"
+      },
+      {
+        "input": "@pueue Restart everything that failed in wf as new tasks, keeping the old logs"
+      },
+      {
+        "input": "@pueue Clean up the successful tasks but keep the failures so I can still read them"
+      }
+    ]
+  }
 }

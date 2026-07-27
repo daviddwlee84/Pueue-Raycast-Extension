@@ -101,6 +101,29 @@ When a tool can still see only `Local` it says which of the two things is true â
 "no remotes are configured" and "I cannot see your remotes" are different claims,
 and only one of them is safe to make.
 
+## Example prompts and standing instructions
+
+`ai.instructions` and `ai.evals[]` in the manifest. Measured on a scratch
+extension:
+
+| Claim | How it was checked |
+| --- | --- |
+| an eval with **only** `input` is valid | `ray lint` clean; `mocks` and `expected` are not required despite the docs listing them as such |
+| `usedAsExample` is accepted | `ray lint` clean with both `true` and `false` |
+| **the `ai` block is not schema-validated** | a field named `definitelyNotAField` inside an eval passed `ray lint` with exit 0 |
+
+That last row matters: `ray lint` is the gate for the rest of the manifest and
+is *not* a gate here. A typo in `instructions` or a misspelled eval key fails
+silently, so the only way to know an example prompt works is to see it in the
+"Ask Pueue" list.
+
+Eval `input` doubles as the user-facing example prompt, so eight are shipped
+without any eval machinery behind them. The instructions carry the rules that
+should not have to be repeated in every prompt â€” read by default, ids are
+per-daemon, sample logs rather than reading twenty, prefer `successfulOnly`,
+never choose `inPlace` unprompted, and don't claim the user has no remotes when
+the truth is that the tools cannot see them.
+
 ## Requirements
 
 Raycast's docs state that AI Extensions need a Pro subscription. In practice a

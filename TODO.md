@@ -69,6 +69,22 @@ Live at <https://daviddwlee84.github.io/Pueue-Raycast-Extension/>, bilingual
   restore it.
 - `[M]` **Frecency-sorted command history** for Add Task, via
   `useFrecencySorting`.
+- `[M]` **A Connections form, instead of the preference field.** Raycast reloads
+  the extension on every keystroke in a preference, and the connections field is
+  a single line holding structured data — so typing
+  `lab | david_ubuntu | ~/.cargo/bin/pueue` walks through 19 distinct connection
+  definitions, most of them pointing at hostnames like `l`, `dav`, `david_ub`.
+  Measured: each doomed host fails in 0.17-0.26 s (DNS, not the 5 s
+  ConnectTimeout), so it is flicker rather than a hang — but it is still a
+  subprocess per keystroke, and the practical advice is "paste, don't type",
+  which is a poor thing to have to say.
+
+  A `Connections` command with a real form would fix the typing, allow a "test
+  this connection" button, and could store to `LocalStorage` — which would also
+  retire the preference mirror the AI tools depend on
+  ([`backlog/ai-tools.md`](backlog/ai-tools.md)). The catch is migration: the
+  preference has to keep working, and two sources of truth for the same list is
+  exactly the kind of drift this codebase avoids elsewhere.
 - `[M]` **Remote profiles** — a `--profile` switcher with per-profile caching.
   Needs a real YAML dependency to read the `profiles:` block, which is why it
   isn't done already.

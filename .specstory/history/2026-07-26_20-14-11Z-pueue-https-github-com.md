@@ -44265,11 +44265,2399 @@ Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
 ```
 </details></tool-use>
 
-_**Agent (claude-opus-5 2026-07-26 21:47:33Z)**_
+_**Agent (claude-opus-5 2026-07-26 21:47:57Z)**_
 
 <tool-use data-tool-type="shell" data-tool-name="Bash"><details>
 <summary>Tool use: **Bash**</summary>
 Run the full gate
 
 `cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && just check 2>&1 | grep -E "error|FAIL|ready|checks passed|built" | tail -12`
+
+```text
+332/332 checks passed
+ready  - validate package.json file
+ready  - validate extension icons
+ready  - validate extension metadata
+error  - run ESLint
+  24:15  error  'LiveAgent' is defined but never used  @typescript-eslint/no-unused-vars
+✖ 1 problem (1 error, 0 warnings)
+error  - run Prettier 3.9.6
+  error  Code style issues found. Please run Prettier 3.9.6 (ray lint --fix).
+  error  Code style issues found. Please run Prettier 3.9.6 (ray lint --fix).
+  error  Code style issues found. Please run Prettier 3.9.6 (ray lint --fix).
+error: Recipe `lint` failed on line 20 with exit code 2
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
 </details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:48:39Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Remove unused import and rerun gate
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && sed -i '' 's/^import type { LiveAgent } from ".\/lib\/agents\/types";$//' src/focus-agent.tsx && npx ray lint --fix >/dev/null 2>&1; just check 2>&1 | grep -E "error|FAIL|checks passed|built extension" | tail -8`
+
+```text
+— errors: absent is not broken
+332/332 checks passed
+ready  - built extension successfully
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+[This command modified 4 files you've previously read: ../Agent-Deck-Raycast-Extension/src/lib/agents/match.ts, ../Agent-Deck-Raycast-Extension/src/focus-agent.tsx, ../Agent-Deck-Raycast-Extension/src/lib/dev-check.ts, ../../../.claude/projects/-Users-david-Documents-Program-Pueue-Raycast-Extension/memory/MEMORY.md. Call Read before editing.]
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:48:56Z)**_
+
+Full gate green — all four commands. Let me commit.
+
+_**Agent (claude-opus-5 2026-07-26 21:48:57Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit the four commands
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && git add -A && git -c user.name="Da-Wei Lee" commit -q -F - <<'MSG'
+Ship the four commands, and refuse to guess which terminal you meant
+
+Live Agents, the menu bar, and Focus Agent. `just check` green: typecheck,
+332 checks, lint, build.
+
+Focus Agent's matching moved into lib/agents/match.ts so the harness can
+reach it, and that was worth doing: this is the code that decides which of
+~50 terminals you land in, and getting it wrong is not a visual glitch, it
+is typing into somebody else's session.
+
+Tiers are ordered and the FIRST that produces anything wins. "deck" is an
+exact title on one pane, a substring of another's title, and an exact
+folder name on a third — collecting across tiers turns an unambiguous
+request into a three-way tie and the command then refuses to act. A tier
+with two hits also stops rather than widening: widening cannot resolve
+real ambiguity, only bury it. And a session-id prefix needs six characters,
+because two would match half the fleet by accident.
+
+The menu bar's constraints, each written where it bites: no badge API, so
+the count IS the title and undefined removes it — which is what lets the
+default stay quiet until an agent actually needs you. isLoading is a
+contract, not a hint. Raycast restores the item from a database on restart
+without re-running the command, so the fetch time travels inside the same
+cache entry as the data and a disabled row shows it. No confirmAlert,
+because it presents in the Raycast window and that window is closed while
+the menu is open — destructive items use ⌥ and feedback is showHUD.
+
+50 of 52 agents were idle on the machine this was built against, and a
+macOS menu does not scroll, so idle is off by default and sections
+collapse into a row that opens the list.
+
+Throughout, herdr's status is presented as DETECTED rather than known. It
+scrapes rendered terminal text — `herdr agent explain` answers with
+`rule: live_prompt_box … evidence: "❯\n"` — so the Explain action exists to
+make a wrong guess debuggable instead of mysterious.
+
+An agent with no pane id gets no Focus button anywhere. The Claude session
+registry knows a process exists but not which pane it is in, and
+`herdr agent focus` accepts nothing else, so the button would always fail.
+Not offering it beats offering it broken.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+MSG
+git log --oneline | head -4
+```
+
+```text
+d9701de Ship the four commands, and refuse to guess which terminal you meant
+8906e3f Make a search result and a running process the same object
+a86df3f Read the tools instead of the docs, and redact what they say
+c7f1552 Make every external tool optional, and prove it
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:49:02Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #6 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:49:02Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #7 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:51:01Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to organize the documentation efficiently—the pitfalls are the most valuable since they're symptom-titled and searchable, so I'll write all 14 of them together using a bash heredoc script rather than making individual tool calls. I'll handle the backlog entries, TODO, and README similarly to batch everything together.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:51:02Z)**_
+
+Now the knowledge harness — 14 pitfalls, backlog, TODO, README.
+
+_**Agent (claude-opus-5 2026-07-26 21:51:03Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Write the 14 pitfall documents
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && mkdir -p pitfalls backlog && python3 - <<'PYEOF'
+import pathlib
+
+P = pathlib.Path("pitfalls")
+
+files = {}
+
+files["fts5-snippet-costs-seconds-not-milliseconds.md"] = """# Search is instant until you move the selection, then it hangs
+
+## Symptoms (grep this section)
+
+- The list updates as fast as you can type, but arrowing down freezes Raycast for a second or more.
+- The freeze is worse on some rows than others, and the slow ones look no different.
+- `sqlite3` shows up in Activity Monitor burning CPU after you have stopped typing.
+
+## Cause
+
+`snippet()` reconstructs the matched document to find and mark the hit. Its cost
+scales with the size of that document, not with the size of the result.
+
+Measured against the real `~/.specstory/sessions.db` (470 sessions):
+
+| query | time |
+|---|---|
+| `MATCH '"raycast"*'`, rank only, one row | **20 ms** |
+| the same row, with `snippet(sessions_fts, 3, …)` | **1144 ms** |
+
+That row's body is 7.36 MB. Bodies in the table average **257 KB** and reach
+**9.99 MB**. So the ratio is 57x on a real row and gets worse on the largest.
+
+## Fix
+
+Never put `snippet()` on the typeahead path. In `src/lib/specstory/sql.ts` the
+rank query and the snippet query are separate functions for exactly this reason.
+
+1. The list runs `rankQuery()` only.
+2. The snippet runs per SELECTION, debounced, with its own shorter timeout
+   (`SNIPPET_TIMEOUT_MS = 2_000` in `src/lib/specstory/cli.ts`).
+3. A snippet timeout returns `undefined` rather than throwing — a decoration
+   must never take its row down with it.
+4. It is off by default. The `showSnippets` preference description carries the
+   measurement, so the person turning it on knows what they are buying.
+
+Look it up by `rowid`, never by `session_id`: `rowid` is fts5's real primary
+key, `session_id` is declared `UNINDEXED`, and the `session_id IN (…)` form is a
+scan that also re-returns the duplicate rows.
+"""
+
+files["one-session-appears-six-times-in-the-search-results.md"] = """# The same session shows up several times in one search
+
+## Symptoms (grep this section)
+
+- One conversation occupies four or five consecutive rows, identical in every way.
+- Asking for 30 results gets you 30 rows but only 11 distinct sessions.
+- The duplicates have the same title, folder and date, and behave identically.
+
+## Cause
+
+`sessions` has `PRIMARY KEY (agent, session_id)`. `sessions_fts` has no such
+constraint — it is an fts5 virtual table and one session can occupy several
+rows in it. Joining them fans a single session out into one row per FTS row.
+
+Measured on the real index: of 470 sessions, **81 have more than one FTS row**,
+distributed 46x2, 23x3, 6x4, 5x5 and **1x6**.
+
+## Fix
+
+`dedupeFtsRows()` in `src/lib/agents/merge.ts`, applied after ranking and before
+rendering.
+
+Two details that are easy to get backwards:
+
+- fts5's `rank` is **negative, and lower is better**. Keeping the best means
+  `Math.min`. `Math.max` keeps the WORST match and everything still appears to
+  work, which is why this is worth a test rather than a glance.
+- Keep the winning row's `rowid`, because that is what the snippet query looks
+  up by. Dropping it silently disables previews for every deduplicated session.
+
+Also ask the index for more rows than you intend to show. `createSpecstoryIndex`
+uses `limit * 3` for exactly this: requesting 30 returns fewer than 30 distinct
+sessions once the duplicates collapse.
+"""
+
+files["a-session-with-no-date-sorts-to-1970.md"] = """# A session shows "Invalid Date", or claims to be from 1970
+
+## Symptoms (grep this section)
+
+- A row's timestamp renders literally as `Invalid Date`.
+- A handful of sessions all claim `1/1/1970` and sit at the bottom of every sort.
+- Sorting by date puts a few blank-looking rows in a place that makes no sense.
+
+## Cause
+
+Not every row has a date. Measured on the real index: **7 of 470 rows have an
+empty `updated_at`**, and they are exactly the `project_id='unknown'` rows —
+`created_at`, `origin_cwd` and `slug` are empty on the same rows. They still
+have FTS bodies, so they are genuinely findable. They just have no date.
+
+Both obvious ways of handling that lie:
+
+\```js
+new Date("")   // Invalid Date — renders as the literal string "Invalid Date",
+               // and every comparison with it is false, so it sorts wherever
+               // the sort happens to leave it
+new Date(0)    // 1970-01-01 — sorts to the bottom and looks like real data
+\```
+
+## Fix
+
+`parseTs()` in `src/lib/agents/normalize.ts` returns `undefined` for an empty
+string, a null, a zero and an unparseable value. `AgentSession.updatedAt` is
+`Date | undefined`, never a sentinel.
+
+At the SQL boundary, `NULLIF` twice so the empty string becomes SQL `NULL`,
+which `sqlite3 -json` renders as JSON `null`:
+
+\```sql
+NULLIF(COALESCE(NULLIF(s.updated_at, ''), s.created_at), '') AS ts
+\```
+
+At the render boundary, `relativeTime(undefined)` returns `"date unknown"`.
+`compareHits()` and `byRecency()` both sort undated rows last within their band,
+and both fall through to the session id so the order is total and the list does
+not reshuffle between renders.
+"""
+
+files["the-claude-projects-directory-name-cannot-be-turned-back-into-a-path.md"] = """# A session opens the wrong folder
+
+## Symptoms (grep this section)
+
+- "Open the Folder" lands somewhere plausible but wrong.
+- A session from `~/.local/share/chezmoi` shows a folder of `-Users-you--local-share-chezmoi`.
+- Two unrelated projects group together, or one project splits in two.
+
+## Cause
+
+`~/.claude/projects/<dir>/<sessionId>.jsonl` names its directory after the
+absolute cwd with `/`, `.` **and** `_` all replaced by `-`. Three characters map
+onto one, so the mapping is many-to-one and **cannot be inverted**:
+
+\```
+/Users/dev/.local/share/chezmoi   ->  -Users-dev--local-share-chezmoi
+/Users/dev/zyc_friend_backup      ->  -Users-dev-zyc-friend-backup
+\```
+
+Given `-Users-dev-a-b`, the original could be `/Users/dev/a/b`, `/Users/dev/a.b`,
+`/Users/dev/a_b`, `/Users/dev.a/b`, and more. Any "un-mangling" produces a path
+that usually exists and is sometimes someone else's project.
+
+## Fix
+
+Never invert it. `src/lib/claude/paths.ts` treats the directory name as an
+opaque bucket and gets the real path from one of:
+
+1. The `cwd` field inside the transcript (`readTranscriptFacts`).
+2. The `project` field in `~/.claude/history.jsonl`, which is the real
+   unmangled cwd.
+3. SpecStory's `origin_cwd` column.
+
+To find one session's transcript, glob the filename across every bucket
+(`findTranscript`) rather than deriving the bucket from a cwd. Session ids are
+UUIDs, so the first hit is the only hit.
+"""
+
+files["there-is-no-summary-record-in-a-claude-transcript.md"] = """# Every session is titled with a bare UUID
+
+## Symptoms (grep this section)
+
+- Session titles are all eight hex characters, no words.
+- `grep '"type":"summary"' ~/.claude/projects/**/*.jsonl` returns nothing.
+- Code copied from a blog post or an older tool finds no titles at all.
+
+## Cause
+
+Claude Code used to write a `{"type":"summary"}` record. It does not any more.
+On CLI 2.1.220 there is **not one `type:"summary"` record anywhere** — a full
+scan of the capture machine found zero.
+
+The observed record types in one project, with counts:
+
+\```
+assistant 1372   user 814   ai-title 231   last-prompt 228   mode 228
+permission-mode 228   attachment 204   agent-name 198
+file-history-delta 87   system 42   file-history-snapshot 21
+queue-operation 20
+\```
+
+The title lives in `{"type":"ai-title","aiTitle":"…","sessionId":"…"}`.
+
+## Fix
+
+Read `ai-title`, and take the **LAST** one. It is appended once per turn, so the
+first is the title Claude guessed after the opening message — usually wrong by
+the end of a long session — and the last is current.
+
+There is a size problem attached: transcripts reach **31 MB** and there are
+**1455** of them, so reading a file to find its title is not viable in a list
+that renders per keystroke. `src/lib/claude/transcript.ts` reads a bounded HEAD
+(64 KB, for the cwd and the opening prompt) and a bounded TAIL (256 KB, scanned
+backwards for the current title), and never the middle.
+
+Also present and useful: `{"type":"agent-name","agentName":"…"}` for sessions
+that ran as a named subagent.
+"""
+
+files["herdr-agent-focus-only-accepts-a-pane-id.md"] = """# Focusing an agent returns agent_not_found
+
+## Symptoms (grep this section)
+
+\```
+{"error":{"code":"agent_not_found","message":"agent target term_65788df88be291 not found"},"id":"cli:agent:get"}
+{"error":{"code":"agent_not_found","message":"agent target f74e5601-6c65-4f16-8675-9de4bd73b8eb not found"},"id":"cli:agent:get"}
+\```
+
+- The agent is definitely in `herdr agent list`, with the id you passed.
+- Focusing works from the herdr navigator but not from a script.
+
+## Cause
+
+`herdr agent get|focus|read` accept a **`pane_id`** ("w3:p7") and nothing else.
+Verified against herdr 0.7.5: `terminal_id` fails, the agent session UUID fails,
+and the terminal title fails — all with `agent_not_found`, even though every one
+of them appears in that agent's own `herdr agent list` entry.
+
+## Fix
+
+Carry `paneId` on the domain object and treat its absence as "cannot be acted
+on". `toLiveAgent()` in `src/lib/herdr/wire.ts` returns `undefined` for an agent
+with no `pane_id`, because a row you can render but cannot act on is worse than
+no row.
+
+Agents from the Claude session registry never have one — that registry knows a
+process exists but not which pane it is in — so the UI hides Focus for them and
+offers the resume command instead. `requirePane()` in `src/lib/herdr/cli.ts` is
+the last line of defence and names the problem rather than passing a bad target.
+
+## Related
+
+`herdr agent focus` moves focus **inside** herdr's own session. It cannot raise
+the window that session is running in, so a successful focus with no window
+raise looks exactly like nothing happened. Follow it with
+`open -a <TerminalApp>`; the `terminalApp` preference is what supplies the app.
+"""
+
+files["a-dead-herdr-server-looks-like-zero-agents.md"] = """# Every agent disappeared, and nothing says why
+
+## Symptoms (grep this section)
+
+\```
+Error: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+\```
+
+- The list is empty and calm. No error, no toast.
+- `herdr agent list` in a terminal prints the line above instead of JSON.
+- The menu bar shows no count, which looks identical to a quiet machine.
+
+## Cause
+
+herdr normally speaks structured JSON on stdout, including for errors. With no
+server running it prints a bare Rust `Debug` string instead — and **the exit
+code does not reliably distinguish the two cases**, because a legitimate
+`agent_not_found` also exits non-zero while carrying a perfectly good JSON body.
+
+So the natural implementation — "exit 0 means parse, non-zero means error" —
+gets it backwards in both directions.
+
+## Fix
+
+Discriminate on **"did stdout parse as JSON"**, never on the exit code.
+`classifyHerdr()` in `src/lib/agents/errors.ts`:
+
+1. stdout is non-empty and does NOT parse -> `source-unreachable`, with a
+   message that names the fix.
+2. stdout parses and has an `.error` key -> classify by `error.code`.
+3. stdout parses with no `.error` -> success, whatever the exit code was.
+4. stdout empty and exit 0 -> success. Zero agents is a real answer.
+
+Health-check separately with `herdr status`, which prints
+`server: running, protocol 17`. `parseStatus()` reads the word, not the code.
+That separation is also what lets the capability model distinguish "herdr is not
+installed" (an install hint) from "herdr is installed and its server is down"
+(a structural error with a fix) — showing "install herdr" to someone who has
+herdr is the failure this prevents.
+"""
+
+files["two-live-processes-report-the-same-session-id.md"] = """# The agent count is one lower than the number of terminals
+
+## Symptoms (grep this section)
+
+- The menu bar says 4 agents; you can see 5 terminals running one.
+- Two panes are clearly on the same conversation and only one is listed.
+- An agent you just focused shows as idle while it is visibly working.
+
+## Cause
+
+`sessionId` is not a primary key for a running process. Two Claude Code
+processes can be attached to the same conversation, and both are real.
+
+Measured on the capture machine: `~/.claude/sessions/` held 49 files, all 49
+pids alive, but only **48 distinct sessionIds** — pids 21952 and 95663 both
+reported `1b31cf2b-…`, one `idle` and one `busy`.
+
+Keying live agents by session drops one of them, and which one you keep is
+whichever the Map happened to see last.
+
+## Fix
+
+`LiveAgent.handle` is `herdr:<paneId>` or `claude-pid:<pid>` — never the
+session. `SessionKey -> LiveAgent` is one-to-MANY:
+
+- `attachLive()` in `src/lib/agents/merge.ts` returns `Map<string, LiveAgent[]>`.
+- `SessionHit.live` is an array, and the search view renders `live ×2`.
+- `mergeLiveAgents()` tracks consumed registry entries **by handle**, not by
+  session, so grafting one registry row onto a herdr row does not swallow its
+  twin.
+
+The fixture in `src/lib/fixtures/claude-sessions.json` deliberately preserves
+the duplicate pair, and dev-check asserts both survive the merge.
+"""
+
+files["an-anthropic-base-url-proxy-makes-the-quota-meter-lie.md"] = """# The usage percentage is confidently wrong
+
+## Symptoms (grep this section)
+
+- A quota meter reads 12% while you know you have been hammering it all day.
+- `~/.claude/settings.local.json` contains `ANTHROPIC_BASE_URL`.
+- `grep -o '"model":"[^"]*"' ~/.claude/projects/**/*.jsonl | sort -u` lists a
+  model from another vendor.
+
+## Cause
+
+Claude Code honours `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN`. When they
+point at a local proxy, the account whose quota an Anthropic endpoint reports is
+not the account doing the work.
+
+Measured on the capture machine:
+
+\```
+ANTHROPIC_BASE_URL=http://localhost:4142
+ANTHROPIC_AUTH_TOKEN=dummy
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+\```
+
+and, over seven days of Claude Code's own transcripts:
+
+\```
+2248  "model":"claude-opus-4-8"
+ 733  "model":"claude-opus-5"
+   7  "model":"<synthetic>"
+   3  "model":"gemini-2.5-pro"
+\```
+
+Gemini responses recorded inside Claude Code transcripts. Whatever an Anthropic
+five-hour meter says, it is not a description of this machine's work.
+
+## Fix
+
+Detect and downgrade rather than hide. `quota/confidence.ts` (v0.3) reads the
+effective environment and tags every bucket `direct` / `proxied` / `unknown`; a
+`proxied` bucket renders greyed with the upstream named, and the detail says the
+meter describes the upstream account.
+
+Two supporting decisions:
+
+- The command is called **Agent Usage**, not Quota. It leads with tokens and
+  cost per model from local transcripts — always true, no auth, no network —
+  and treats provider quota as a secondary, confidence-tagged section.
+- No number at all beats a confidently drawn wrong one.
+"""
+
+files["the-same-repo-has-two-specstory-project-ids.md"] = """# One project appears twice in the grouping
+
+## Symptoms (grep this section)
+
+- The same repository shows up as two separate groups with the same name.
+- Filtering by project shows half the sessions you expect.
+- `SELECT DISTINCT project_id FROM sessions WHERE project_name = 'x'` returns two rows.
+
+## Cause
+
+SpecStory derives a project id two ways and both end up in the `sessions` table.
+A repository's `.specstory/.project.json` carries both:
+
+\```json
+{"workspace_id":"b1f0-5789-c7e2-3090","git_id":"f1dd-2f59-be9e-fc79", ...}
+\```
+
+Sessions recorded before the git id existed carry the workspace id; later ones
+carry the git id. Same directory, same repository, two `project_id` values.
+
+## Fix
+
+Never group or filter by `project_id`. Group by the normalized `origin_cwd`.
+
+`normalizeCwd()` in `src/lib/agents/normalize.ts` strips a trailing slash and
+folds `/private/tmp` to `/tmp` (they are the same directory on macOS).
+`groupByProject()` in `src/lib/agents/merge.ts` keys on that, falling back to
+`project_name` and then to "Unknown project".
+
+Note the word boundary in the `/private` regex: `/privateer` must not become
+`/er`. That has its own assertion.
+"""
+
+files["a-user-typed-search-string-is-not-an-fts5-expression.md"] = """# Searching for a flag name throws "no such column"
+
+## Symptoms (grep this section)
+
+\```
+Error: stepping, no such column: x
+Error: stepping, no such column: col
+Error: stepping, unterminated string
+Error: stepping, fts5: syntax error near ""
+Error: stepping, unknown special query:
+\```
+
+- Typing `-x` breaks the search.
+- Typing an opening quote breaks the search before you type the closing one.
+- Typing a word that ends in `AND` or `OR` breaks the search.
+
+## Cause
+
+A raw user string is not an FTS5 expression. All five errors above were captured
+verbatim from sqlite3 3.51 against the real index, by feeding it exactly what a
+person types:
+
+| you type | fts5 reads it as | result |
+|---|---|---|
+| `-x` | column filter on `x` | `no such column: x` |
+| `col:x` | column filter on `col` | `no such column: col` |
+| `foo"` | an unterminated phrase | `unterminated string` |
+| `a AND` | a dangling operator | `fts5: syntax error near ""` |
+| `*` | a special query | `unknown special query:` |
+
+Every one is reachable by typing normally. `-x` is a flag you are searching for;
+`col:x` is a struct tag; a lone `"` is the first keystroke of a phrase; and
+`AND` at the end of the string happens on the way to typing what follows it.
+
+## Fix
+
+`toFts5()` in `src/lib/specstory/fts.ts` quotes every token, which makes each a
+literal phrase and strips all operator meaning, then joins them (fts5 ANDs
+adjacent phrases implicitly).
+
+\```
+raycast extension  ->  "raycast" "extension"*
+-x                 ->  "x"*
+foo"               ->  "foo"""*
+\```
+
+Quoting does not narrow the search — `raycast extension` raw matched 55 rows,
+`"raycast" "extension"*` matched 58. The trailing `*` is the typeahead prefix
+and is dropped when the input ends in a space, which is the user signalling the
+word is finished.
+
+Edge case worth knowing: a lone `*` sanitized naively becomes `"*"*`, which fts5
+**accepts** and which matches 0 rows — worse than an error, because "no results"
+is indistinguishable from a genuine miss. Operator characters are stripped from
+token edges and tokens that empty out are dropped.
+
+A leading `/` is the escape hatch for raw FTS5. A syntax error there is a
+**non-structural** `ErrorDescriptor`: the list stays and the grammar is offered,
+because the user is mid-thought, not in trouble.
+"""
+
+files["node-sqlite-is-behind-a-flag-raycast-cannot-pass.md"] = """# `node:sqlite` throws ERR_UNKNOWN_BUILTIN_MODULE inside Raycast
+
+## Symptoms (grep this section)
+
+\```
+Error: No such built-in module: node:sqlite
+ERR_UNKNOWN_BUILTIN_MODULE
+\```
+
+- `import { DatabaseSync } from "node:sqlite"` works in your terminal and not in Raycast.
+- A native module (better-sqlite3) fails to load, or needs a prebuilt binary per architecture.
+
+## Cause
+
+Raycast's runtime is Node 22, where `node:sqlite` exists but is gated behind
+`--experimental-sqlite`. Raycast controls the argv of the process it starts, so
+there is nowhere to pass the flag. A native module would need a prebuilt binary
+committed into the extension bundle, which store review does not want.
+
+## Fix
+
+Shell out to `/usr/bin/sqlite3`. macOS ships 3.51 with `ENABLE_FTS5` and `-json`
+support, which is everything this extension needs. dev-check asserts the FTS5
+compile option against the real binary.
+
+**The probe list must reach `/usr/bin`.** On the capture machine that is the
+*only* sqlite3 — Homebrew does not install one by default — so a probe list that
+stops at the Homebrew prefixes finds nothing and disables search entirely.
+
+## Related
+
+Two things about `sqlite3 -json` that bite:
+
+- A zero-row result prints **NOTHING**, not `[]`. `JSON.parse("")` throws
+  `Unexpected end of JSON input`, so a search that legitimately matched nothing
+  renders as a broken database. `parseRows()` in `src/lib/specstory/sql.ts` is
+  the guard.
+- Open with `?mode=ro`, never `immutable=1`. The SpecStory database has a live
+  36 MB WAL; `immutable` tells SQLite the file cannot change, so it skips the
+  WAL and silently returns a snapshot missing the last few minutes of sessions.
+"""
+
+files["opencode-is-not-in-the-usual-probe-directories.md"] = """# OpenCode is installed but the extension cannot find it
+
+## Symptoms (grep this section)
+
+\```
+spawn opencode ENOENT
+\```
+
+- `which opencode` works in your terminal.
+- Every other tool resolves fine; only this one is missing.
+
+## Cause
+
+OpenCode installs itself to `~/.opencode/bin`, which is in none of the six
+conventional probe directories (`/opt/homebrew/bin`, `/usr/local/bin`,
+`~/.local/bin`, `~/.cargo/bin`, `/usr/bin`, `/bin`).
+
+Your shell finds it because your rc file adds that directory to PATH. Raycast
+runs under launchd, which never sources a shell rc, so PATH is roughly
+`/usr/bin:/bin` and nothing else exists.
+
+## Fix
+
+`PROBE_DIRS` in `src/lib/agents/probe.ts` includes `~/.opencode/bin`, and
+dev-check asserts it is reachable.
+
+More generally: the probe list is the one place this class of bug lives, so it
+is in a **pure** module with an injected `exists`, not buried in a file that
+imports `@raycast/api`. The sibling Pueue extension keeps its list in a
+Raycast-aware `binary.ts` and re-declares it inside dev-check with a comment
+admitting the duplication — that copy would already have drifted here, twice.
+"""
+
+files["specstory-does-not-index-opencode.md"] = """# OpenCode sessions never appear in search
+
+## Symptoms (grep this section)
+
+- Claude and Codex sessions are searchable; OpenCode's are not.
+- `sqlite3 ~/.specstory/sessions.db "SELECT agent, count(*) FROM sessions GROUP BY agent"`
+  lists claude, codex and gemini but no opencode.
+- `specstory list` shows nothing for OpenCode even though you use it daily.
+
+## Cause
+
+SpecStory does not support OpenCode. Its providers, from `specstory list --help`:
+
+\```
+antigravity, claude, codex, cursor, cursoride, deepseek, droid, gemini
+\```
+
+No opencode. On the capture machine SpecStory held 470 sessions and **zero**
+were OpenCode's, while `~/.local/share/opencode/opencode.db` held **93**.
+
+## Fix
+
+A separate index. `src/lib/opencode/cli.ts` reads `opencode.db` directly.
+
+Two things to know about that database:
+
+- It has **no FTS table**. So the index does metadata search (title, slug,
+  directory, via `LIKE`) well and does not pretend to full text — full text
+  would mean a `LIKE` scan over the `part` table's JSON blobs, which is the
+  whole 339 MB.
+- It carries real per-session `cost` and `tokens_input`/`tokens_output`/
+  `tokens_cache_read` columns, maintained by OpenCode itself. Nothing else here
+  has that, and it needs no auth, no network and no scan — it is where the v0.3
+  usage view starts.
+
+The `LIKE` patterns escape `%` and `_` and use `ESCAPE '\\\\'`. Without that,
+searching for `my_file` also matches `myXfile` — wrongness nobody reports,
+because it only ever returns too much.
+"""
+
+for name, body in files.items():
+    (P / name).write_text(body)
+    print(f"  {name}")
+print(f"\n{len(files)} pitfalls written")
+PYEOF
+```
+
+```text
+Exit code 1
+  File "<stdin>", line 449
+    Quoting does not narrow the search — `raycast extension` raw matched 55 rows,
+                                       ^
+SyntaxError: invalid character '—' (U+2014)
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:51:41Z)**_
+
+<think><details><summary>Thought Process</summary>
+I see the issue now — the triple quotes inside the string are prematurely closing the Python string literal. I need to switch to a different quoting strategy for that particular file to avoid the conflict.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:51:41Z)**_
+
+The `"""` inside my FTS example terminated the Python string early. Let me fix that one file.
+
+_**Agent (claude-opus-5 2026-07-26 21:51:42Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Write pitfalls batch 1
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && mkdir -p pitfalls && python3 - <<'PYEOF'
+import pathlib
+P = pathlib.Path("pitfalls")
+files = {}
+
+files["fts5-snippet-costs-seconds-not-milliseconds.md"] = '''# Search is instant until you move the selection, then it hangs
+
+## Symptoms (grep this section)
+
+- The list updates as fast as you can type, but arrowing down freezes Raycast for a second or more.
+- The freeze is worse on some rows than others, and the slow ones look no different.
+- `sqlite3` shows up in Activity Monitor burning CPU after you have stopped typing.
+
+## Cause
+
+`snippet()` reconstructs the matched document to find and mark the hit. Its cost
+scales with the size of that document, not with the size of the result.
+
+Measured against the real `~/.specstory/sessions.db` (470 sessions):
+
+| query | time |
+|---|---|
+| `MATCH` rank only, one row | **20 ms** |
+| the same row, with `snippet(sessions_fts, 3, ...)` | **1144 ms** |
+
+That row's body is 7.36 MB. Bodies in the table average **257 KB** and reach
+**9.99 MB**. So the ratio is 57x on a real row and gets worse on the largest.
+
+## Fix
+
+Never put `snippet()` on the typeahead path. In `src/lib/specstory/sql.ts` the
+rank query and the snippet query are separate functions for exactly this reason.
+
+1. The list runs `rankQuery()` only.
+2. The snippet runs per SELECTION, debounced, with its own shorter timeout
+   (`SNIPPET_TIMEOUT_MS = 2_000` in `src/lib/specstory/cli.ts`).
+3. A snippet timeout returns `undefined` rather than throwing — a decoration
+   must never take its row down with it.
+4. It is off by default. The `showSnippets` preference description carries the
+   measurement, so the person turning it on knows what they are buying.
+
+Look it up by `rowid`, never by `session_id`: `rowid` is fts5's real primary
+key, `session_id` is declared `UNINDEXED`, and the `session_id IN (...)` form is
+a scan that also re-returns the duplicate rows.
+'''
+
+files["one-session-appears-six-times-in-the-search-results.md"] = '''# The same session shows up several times in one search
+
+## Symptoms (grep this section)
+
+- One conversation occupies four or five consecutive rows, identical in every way.
+- Asking for 30 results gets you 30 rows but only 11 distinct sessions.
+- The duplicates have the same title, folder and date, and behave identically.
+
+## Cause
+
+`sessions` has `PRIMARY KEY (agent, session_id)`. `sessions_fts` has no such
+constraint — it is an fts5 virtual table and one session can occupy several
+rows in it. Joining them fans a single session out into one row per FTS row.
+
+Measured on the real index: of 470 sessions, **81 have more than one FTS row**,
+distributed 46x2, 23x3, 6x4, 5x5 and **1x6**.
+
+## Fix
+
+`dedupeFtsRows()` in `src/lib/agents/merge.ts`, applied after ranking and before
+rendering.
+
+Two details that are easy to get backwards:
+
+- fts5's `rank` is **negative, and lower is better**. Keeping the best means
+  `Math.min`. `Math.max` keeps the WORST match and everything still appears to
+  work, which is why this is worth a test rather than a glance.
+- Keep the winning row's `rowid`, because that is what the snippet query looks
+  up by. Dropping it silently disables previews for every deduplicated session.
+
+Also ask the index for more rows than you intend to show. `createSpecstoryIndex`
+uses `limit * 3` for exactly this: requesting 30 returns fewer than 30 distinct
+sessions once the duplicates collapse.
+'''
+
+files["a-session-with-no-date-sorts-to-1970.md"] = '''# A session shows "Invalid Date", or claims to be from 1970
+
+## Symptoms (grep this section)
+
+- A row's timestamp renders literally as `Invalid Date`.
+- A handful of sessions all claim `1/1/1970` and sit at the bottom of every sort.
+- Sorting by date puts a few blank-looking rows in a place that makes no sense.
+
+## Cause
+
+Not every row has a date. Measured on the real index: **7 of 470 rows have an
+empty `updated_at`**, and they are exactly the `project_id='unknown'` rows —
+`created_at`, `origin_cwd` and `slug` are empty on the same rows. They still
+have FTS bodies, so they are genuinely findable. They just have no date.
+
+Both obvious ways of handling that lie:
+
+\```js
+new Date("")   // Invalid Date — renders as the literal string "Invalid Date",
+               // and every comparison with it is false, so it sorts wherever
+               // the sort happens to leave it
+new Date(0)    // 1970-01-01 — sorts to the bottom and looks like real data
+\```
+
+## Fix
+
+`parseTs()` in `src/lib/agents/normalize.ts` returns `undefined` for an empty
+string, a null, a zero and an unparseable value. `AgentSession.updatedAt` is
+`Date | undefined`, never a sentinel.
+
+At the SQL boundary, `NULLIF` twice so the empty string becomes SQL `NULL`,
+which `sqlite3 -json` renders as JSON `null`:
+
+\```sql
+NULLIF(COALESCE(NULLIF(s.updated_at, ''), s.created_at), '') AS ts
+\```
+
+At the render boundary, `relativeTime(undefined)` returns `"date unknown"`.
+`compareHits()` and `byRecency()` both sort undated rows last within their band,
+and both fall through to the session id so the order is total and the list does
+not reshuffle between renders.
+'''
+
+files["the-claude-projects-directory-name-cannot-be-turned-back-into-a-path.md"] = '''# A session opens the wrong folder
+
+## Symptoms (grep this section)
+
+- "Open the Folder" lands somewhere plausible but wrong.
+- A session from `~/.local/share/chezmoi` shows a folder of `-Users-you--local-share-chezmoi`.
+- Two unrelated projects group together, or one project splits in two.
+
+## Cause
+
+`~/.claude/projects/<dir>/<sessionId>.jsonl` names its directory after the
+absolute cwd with `/`, `.` **and** `_` all replaced by `-`. Three characters map
+onto one, so the mapping is many-to-one and **cannot be inverted**:
+
+\```
+/Users/dev/.local/share/chezmoi   ->  -Users-dev--local-share-chezmoi
+/Users/dev/zyc_friend_backup      ->  -Users-dev-zyc-friend-backup
+\```
+
+Given `-Users-dev-a-b`, the original could be `/Users/dev/a/b`, `/Users/dev/a.b`,
+`/Users/dev/a_b`, `/Users/dev.a/b`, and more. Any "un-mangling" produces a path
+that usually exists and is sometimes someone else's project.
+
+## Fix
+
+Never invert it. `src/lib/claude/paths.ts` treats the directory name as an
+opaque bucket and gets the real path from one of:
+
+1. The `cwd` field inside the transcript (`readTranscriptFacts`).
+2. The `project` field in `~/.claude/history.jsonl`, which is the real
+   unmangled cwd.
+3. SpecStory's `origin_cwd` column.
+
+To find one session's transcript, glob the filename across every bucket
+(`findTranscript`) rather than deriving the bucket from a cwd. Session ids are
+UUIDs, so the first hit is the only hit.
+'''
+
+files["there-is-no-summary-record-in-a-claude-transcript.md"] = '''# Every session is titled with a bare UUID
+
+## Symptoms (grep this section)
+
+- Session titles are all eight hex characters, no words.
+- `grep '"type":"summary"' ~/.claude/projects/**/*.jsonl` returns nothing.
+- Code copied from a blog post or an older tool finds no titles at all.
+
+## Cause
+
+Claude Code used to write a `{"type":"summary"}` record. It does not any more.
+On CLI 2.1.220 there is **not one `type:"summary"` record anywhere** — a full
+scan of the capture machine found zero.
+
+The observed record types in one project, with counts:
+
+\```
+assistant 1372   user 814   ai-title 231   last-prompt 228   mode 228
+permission-mode 228   attachment 204   agent-name 198
+file-history-delta 87   system 42   file-history-snapshot 21
+queue-operation 20
+\```
+
+The title lives in `{"type":"ai-title","aiTitle":"...","sessionId":"..."}`.
+
+## Fix
+
+Read `ai-title`, and take the **LAST** one. It is appended once per turn, so the
+first is the title Claude guessed after the opening message — usually wrong by
+the end of a long session — and the last is current.
+
+There is a size problem attached: transcripts reach **31 MB** and there are
+**1455** of them, so reading a file to find its title is not viable in a list
+that renders per keystroke. `src/lib/claude/transcript.ts` reads a bounded HEAD
+(64 KB, for the cwd and the opening prompt) and a bounded TAIL (256 KB, scanned
+backwards for the current title), and never the middle.
+
+Also present and useful: `{"type":"agent-name","agentName":"..."}` for sessions
+that ran as a named subagent.
+'''
+
+for name, body in files.items():
+    (P / name).write_text(body)
+    print(f"  {name}")
+print(f"{len(files)} written (batch 1)")
+PYEOF
+```
+
+```text
+  fts5-snippet-costs-seconds-not-milliseconds.md
+  one-session-appears-six-times-in-the-search-results.md
+  a-session-with-no-date-sorts-to-1970.md
+  the-claude-projects-directory-name-cannot-be-turned-back-into-a-path.md
+  there-is-no-summary-record-in-a-claude-transcript.md
+5 written (batch 1)
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:52:18Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Write pitfalls batch 2
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PYEOF'
+import pathlib
+P = pathlib.Path("pitfalls")
+files = {}
+
+files["herdr-agent-focus-only-accepts-a-pane-id.md"] = '''# Focusing an agent returns agent_not_found
+
+## Symptoms (grep this section)
+
+\```
+{"error":{"code":"agent_not_found","message":"agent target term_65788df88be291 not found"},"id":"cli:agent:get"}
+{"error":{"code":"agent_not_found","message":"agent target f74e5601-6c65-4f16-8675-9de4bd73b8eb not found"},"id":"cli:agent:get"}
+\```
+
+- The agent is definitely in `herdr agent list`, with the id you passed.
+- Focusing works from the herdr navigator but not from a script.
+
+## Cause
+
+`herdr agent get|focus|read` accept a **`pane_id`** ("w3:p7") and nothing else.
+Verified against herdr 0.7.5: `terminal_id` fails, the agent session UUID fails,
+and the terminal title fails — all with `agent_not_found`, even though every one
+of them appears in that agent's own `herdr agent list` entry.
+
+## Fix
+
+Carry `paneId` on the domain object and treat its absence as "cannot be acted
+on". `toLiveAgent()` in `src/lib/herdr/wire.ts` returns `undefined` for an agent
+with no `pane_id`, because a row you can render but cannot act on is worse than
+no row.
+
+Agents from the Claude session registry never have one — that registry knows a
+process exists but not which pane it is in — so the UI hides Focus for them and
+offers the resume command instead. `requirePane()` in `src/lib/herdr/cli.ts` is
+the last line of defence and names the problem rather than passing a bad target.
+
+## Related
+
+`herdr agent focus` moves focus **inside** herdr's own session. It cannot raise
+the window that session is running in, so a successful focus with no window
+raise looks exactly like nothing happened. Follow it with
+`open -a <TerminalApp>`; the `terminalApp` preference is what supplies the app.
+'''
+
+files["a-dead-herdr-server-looks-like-zero-agents.md"] = '''# Every agent disappeared, and nothing says why
+
+## Symptoms (grep this section)
+
+\```
+Error: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+\```
+
+- The list is empty and calm. No error, no toast.
+- `herdr agent list` in a terminal prints the line above instead of JSON.
+- The menu bar shows no count, which looks identical to a quiet machine.
+
+## Cause
+
+herdr normally speaks structured JSON on stdout, including for errors. With no
+server running it prints a bare Rust `Debug` string instead — and **the exit
+code does not reliably distinguish the two cases**, because a legitimate
+`agent_not_found` also exits non-zero while carrying a perfectly good JSON body.
+
+So the natural implementation — "exit 0 means parse, non-zero means error" —
+gets it backwards in both directions.
+
+## Fix
+
+Discriminate on **"did stdout parse as JSON"**, never on the exit code.
+`classifyHerdr()` in `src/lib/agents/errors.ts`:
+
+1. stdout is non-empty and does NOT parse -> `source-unreachable`, with a
+   message that names the fix.
+2. stdout parses and has an `.error` key -> classify by `error.code`.
+3. stdout parses with no `.error` -> success, whatever the exit code was.
+4. stdout empty and exit 0 -> success. Zero agents is a real answer.
+
+Health-check separately with `herdr status`, which prints
+`server: running, protocol 17`. `parseStatus()` reads the word, not the code.
+That separation is also what lets the capability model distinguish "herdr is not
+installed" (an install hint) from "herdr is installed and its server is down"
+(a structural error with a fix) — showing "install herdr" to someone who has
+herdr is the failure this prevents.
+'''
+
+files["two-live-processes-report-the-same-session-id.md"] = '''# The agent count is one lower than the number of terminals
+
+## Symptoms (grep this section)
+
+- The menu bar says 4 agents; you can see 5 terminals running one.
+- Two panes are clearly on the same conversation and only one is listed.
+- An agent you just focused shows as idle while it is visibly working.
+
+## Cause
+
+`sessionId` is not a primary key for a running process. Two Claude Code
+processes can be attached to the same conversation, and both are real.
+
+Measured on the capture machine: `~/.claude/sessions/` held 49 files, all 49
+pids alive, but only **48 distinct sessionIds** — pids 21952 and 95663 both
+reported `1b31cf2b-...`, one `idle` and one `busy`.
+
+Keying live agents by session drops one of them, and which one you keep is
+whichever the Map happened to see last.
+
+## Fix
+
+`LiveAgent.handle` is `herdr:<paneId>` or `claude-pid:<pid>` — never the
+session. `SessionKey -> LiveAgent` is one-to-MANY:
+
+- `attachLive()` in `src/lib/agents/merge.ts` returns `Map<string, LiveAgent[]>`.
+- `SessionHit.live` is an array, and the search view renders `live x2`.
+- `mergeLiveAgents()` tracks consumed registry entries **by handle**, not by
+  session, so grafting one registry row onto a herdr row does not swallow its
+  twin.
+
+The fixture in `src/lib/fixtures/claude-sessions.json` deliberately preserves
+the duplicate pair, and dev-check asserts both survive the merge.
+'''
+
+files["an-anthropic-base-url-proxy-makes-the-quota-meter-lie.md"] = '''# The usage percentage is confidently wrong
+
+## Symptoms (grep this section)
+
+- A quota meter reads 12% while you know you have been hammering it all day.
+- `~/.claude/settings.local.json` contains `ANTHROPIC_BASE_URL`.
+- `grep -o '"model":"[^"]*"' ~/.claude/projects/**/*.jsonl | sort -u` lists a
+  model from another vendor.
+
+## Cause
+
+Claude Code honours `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN`. When they
+point at a local proxy, the account whose quota an Anthropic endpoint reports is
+not the account doing the work.
+
+Measured on the capture machine:
+
+\```
+ANTHROPIC_BASE_URL=http://localhost:4142
+ANTHROPIC_AUTH_TOKEN=dummy
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+\```
+
+and, over seven days of Claude Code's own transcripts:
+
+\```
+2248  "model":"claude-opus-4-8"
+ 733  "model":"claude-opus-5"
+   7  "model":"<synthetic>"
+   3  "model":"gemini-2.5-pro"
+\```
+
+Gemini responses recorded inside Claude Code transcripts. Whatever an Anthropic
+five-hour meter says, it is not a description of this machine's work.
+
+## Fix
+
+Detect and downgrade rather than hide. `quota/confidence.ts` (v0.3) reads the
+effective environment and tags every bucket `direct` / `proxied` / `unknown`; a
+`proxied` bucket renders greyed with the upstream named, and the detail says the
+meter describes the upstream account.
+
+Two supporting decisions:
+
+- The command is called **Agent Usage**, not Quota. It leads with tokens and
+  cost per model from local transcripts — always true, no auth, no network —
+  and treats provider quota as a secondary, confidence-tagged section.
+- No number at all beats a confidently drawn wrong one.
+'''
+
+files["the-same-repo-has-two-specstory-project-ids.md"] = '''# One project appears twice in the grouping
+
+## Symptoms (grep this section)
+
+- The same repository shows up as two separate groups with the same name.
+- Filtering by project shows half the sessions you expect.
+- `SELECT DISTINCT project_id FROM sessions WHERE project_name = 'x'` returns two rows.
+
+## Cause
+
+SpecStory derives a project id two ways and both end up in the `sessions` table.
+A repository's `.specstory/.project.json` carries both:
+
+\```json
+{"workspace_id":"b1f0-5789-c7e2-3090","git_id":"f1dd-2f59-be9e-fc79"}
+\```
+
+Sessions recorded before the git id existed carry the workspace id; later ones
+carry the git id. Same directory, same repository, two `project_id` values.
+
+## Fix
+
+Never group or filter by `project_id`. Group by the normalized `origin_cwd`.
+
+`normalizeCwd()` in `src/lib/agents/normalize.ts` strips a trailing slash and
+folds `/private/tmp` to `/tmp` (they are the same directory on macOS).
+`groupByProject()` in `src/lib/agents/merge.ts` keys on that, falling back to
+`project_name` and then to "Unknown project".
+
+Note the word boundary in the `/private` regex: `/privateer` must not become
+`/er`. That has its own assertion.
+'''
+
+for name, body in files.items():
+    (P / name).write_text(body)
+    print(f"  {name}")
+print(f"{len(files)} written (batch 2)")
+PYEOF
+```
+
+```text
+  herdr-agent-focus-only-accepts-a-pane-id.md
+  a-dead-herdr-server-looks-like-zero-agents.md
+  two-live-processes-report-the-same-session-id.md
+  an-anthropic-base-url-proxy-makes-the-quota-meter-lie.md
+  the-same-repo-has-two-specstory-project-ids.md
+5 written (batch 2)
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:53:09Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Write pitfalls batch 3 and index
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && python3 - <<'PYEOF'
+import pathlib
+P = pathlib.Path("pitfalls")
+DQ = chr(34)
+files = {}
+
+files["a-user-typed-search-string-is-not-an-fts5-expression.md"] = '''# Searching for a flag name throws "no such column"
+
+## Symptoms (grep this section)
+
+\```
+Error: stepping, no such column: x
+Error: stepping, no such column: col
+Error: stepping, unterminated string
+Error: stepping, fts5: syntax error near ""
+Error: stepping, unknown special query:
+\```
+
+- Typing `-x` breaks the search.
+- Typing an opening quote breaks the search before you type the closing one.
+- Typing a word that ends in `AND` or `OR` breaks the search.
+
+## Cause
+
+A raw user string is not an FTS5 expression. All five errors above were captured
+verbatim from sqlite3 3.51 against the real index, by feeding it exactly what a
+person types:
+
+| you type | fts5 reads it as | result |
+|---|---|---|
+| `-x` | column filter on `x` | `no such column: x` |
+| `col:x` | column filter on `col` | `no such column: col` |
+| a trailing quote | an unterminated phrase | `unterminated string` |
+| `a AND` | a dangling operator | `fts5: syntax error near ""` |
+| `*` | a special query | `unknown special query:` |
+
+Every one is reachable by typing normally. `-x` is a flag you are searching for;
+`col:x` is a struct tag; a lone quote is the first keystroke of a phrase; and
+`AND` at the end of the string happens on the way to typing what follows it.
+
+## Fix
+
+`toFts5()` in `src/lib/specstory/fts.ts` quotes every token, which makes each a
+literal phrase and strips all operator meaning, then joins them (fts5 ANDs
+adjacent phrases implicitly). A quote inside a token is escaped by doubling it,
+the same as in SQL.
+
+\```
+raycast extension  ->  QraycastQ QextensionQ*        (Q = a double quote)
+-x                 ->  QxQ*
+\```
+
+Quoting does not narrow the search — `raycast extension` raw matched 55 rows,
+the sanitized form matched 58. The trailing `*` is the typeahead prefix and is
+dropped when the input ends in a space, which is the user signalling the word is
+finished.
+
+Edge case worth knowing: a lone `*` sanitized naively becomes a quoted asterisk
+with a prefix marker, which fts5 **accepts** and which matches 0 rows — worse
+than an error, because "no results" is indistinguishable from a genuine miss.
+Operator characters are stripped from token edges and tokens that empty out are
+dropped.
+
+A leading `/` is the escape hatch for raw FTS5. A syntax error there is a
+**non-structural** `ErrorDescriptor`: the list stays and the grammar is offered,
+because the user is mid-thought, not in trouble.
+'''.replace("Q", DQ).replace(DQ + " = a double quote", "Q = a double quote")
+
+files["node-sqlite-is-behind-a-flag-raycast-cannot-pass.md"] = '''# node:sqlite throws ERR_UNKNOWN_BUILTIN_MODULE inside Raycast
+
+## Symptoms (grep this section)
+
+\```
+Error: No such built-in module: node:sqlite
+ERR_UNKNOWN_BUILTIN_MODULE
+\```
+
+- `import { DatabaseSync } from "node:sqlite"` works in your terminal and not in Raycast.
+- A native module (better-sqlite3) fails to load, or needs a prebuilt binary per architecture.
+
+## Cause
+
+Raycast's runtime is Node 22, where `node:sqlite` exists but is gated behind
+`--experimental-sqlite`. Raycast controls the argv of the process it starts, so
+there is nowhere to pass the flag. A native module would need a prebuilt binary
+committed into the extension bundle, which store review does not want.
+
+## Fix
+
+Shell out to `/usr/bin/sqlite3`. macOS ships 3.51 with `ENABLE_FTS5` and `-json`
+support, which is everything this extension needs. dev-check asserts the FTS5
+compile option against the real binary.
+
+**The probe list must reach `/usr/bin`.** On the capture machine that is the
+*only* sqlite3 — Homebrew does not install one by default — so a probe list that
+stops at the Homebrew prefixes finds nothing and disables search entirely.
+
+## Related
+
+Two things about `sqlite3 -json` that bite:
+
+- A zero-row result prints **NOTHING**, not an empty array. `JSON.parse("")`
+  throws `Unexpected end of JSON input`, so a search that legitimately matched
+  nothing renders as a broken database. `parseRows()` in
+  `src/lib/specstory/sql.ts` is the guard.
+- Open with `?mode=ro`, never `immutable=1`. The SpecStory database has a live
+  36 MB WAL; `immutable` tells SQLite the file cannot change, so it skips the
+  WAL and silently returns a snapshot missing the last few minutes of sessions.
+'''
+
+files["opencode-is-not-in-the-usual-probe-directories.md"] = '''# OpenCode is installed but the extension cannot find it
+
+## Symptoms (grep this section)
+
+\```
+spawn opencode ENOENT
+\```
+
+- `which opencode` works in your terminal.
+- Every other tool resolves fine; only this one is missing.
+
+## Cause
+
+OpenCode installs itself to `~/.opencode/bin`, which is in none of the six
+conventional probe directories (`/opt/homebrew/bin`, `/usr/local/bin`,
+`~/.local/bin`, `~/.cargo/bin`, `/usr/bin`, `/bin`).
+
+Your shell finds it because your rc file adds that directory to PATH. Raycast
+runs under launchd, which never sources a shell rc, so PATH is roughly
+`/usr/bin:/bin` and nothing else exists.
+
+## Fix
+
+`PROBE_DIRS` in `src/lib/agents/probe.ts` includes `~/.opencode/bin`, and
+dev-check asserts it is reachable.
+
+More generally: the probe list is the one place this class of bug lives, so it
+is in a **pure** module with an injected `exists`, not buried in a file that
+imports `@raycast/api`. The sibling Pueue extension keeps its list in a
+Raycast-aware `binary.ts` and re-declares it inside dev-check with a comment
+admitting the duplication — that copy would already have drifted here, twice.
+'''
+
+files["specstory-does-not-index-opencode.md"] = '''# OpenCode sessions never appear in search
+
+## Symptoms (grep this section)
+
+- Claude and Codex sessions are searchable; OpenCode's are not.
+- `sqlite3 ~/.specstory/sessions.db "SELECT agent, count(*) FROM sessions GROUP BY agent"`
+  lists claude, codex and gemini but no opencode.
+- `specstory list` shows nothing for OpenCode even though you use it daily.
+
+## Cause
+
+SpecStory does not support OpenCode. Its providers, from `specstory list --help`:
+
+\```
+antigravity, claude, codex, cursor, cursoride, deepseek, droid, gemini
+\```
+
+No opencode. On the capture machine SpecStory held 470 sessions and **zero**
+were OpenCode's, while `~/.local/share/opencode/opencode.db` held **93**.
+
+## Fix
+
+A separate index. `src/lib/opencode/cli.ts` reads `opencode.db` directly.
+
+Two things to know about that database:
+
+- It has **no FTS table**. So the index does metadata search (title, slug,
+  directory, via `LIKE`) well and does not pretend to full text — full text
+  would mean a `LIKE` scan over the `part` table's JSON blobs, which is the
+  whole 339 MB.
+- It carries real per-session `cost` and `tokens_input` / `tokens_output` /
+  `tokens_cache_read` columns, maintained by OpenCode itself. Nothing else here
+  has that, and it needs no auth, no network and no scan — it is where the v0.3
+  usage view starts.
+
+The `LIKE` patterns escape `%` and `_` and use an `ESCAPE` clause. Without that,
+searching for `my_file` also matches `myXfile` — wrongness nobody reports,
+because it only ever returns too much.
+'''
+
+files["herdr-agent-wait-hangs-forever.md"] = '''# A wait never returns and the command cannot be cancelled
+
+## Symptoms (grep this section)
+
+\```
+error: unexpected argument '--state' found
+\```
+
+- `herdr agent wait` sits there indefinitely with no output.
+- A Raycast command spins forever with no way to stop it.
+
+## Cause
+
+Two separate mistakes, both from writing the flags from memory instead of
+reading `herdr agent wait --help`:
+
+1. The flag is **`--until`**, not `--state`.
+2. `--timeout` is optional to herdr, and its own help says so plainly:
+   *"Without --timeout, waits indefinitely."*
+
+An indefinite wait is fine at a shell prompt where Ctrl-C exists. Inside a
+Raycast subprocess there is no Ctrl-C, so it is a hang the user cannot end.
+
+## Fix
+
+`argvFor()` in `src/lib/herdr/cli.ts` always emits `--timeout`, clamped to ten
+minutes, even though herdr treats it as optional. dev-check asserts both that
+`--until` is used and that `--state` never appears.
+
+The general rule this is an instance of: **read the tool's own `--help` before
+generating argv for it, and assert the generated argv against it.** The sibling
+Pueue extension cross-checks every long flag it emits against
+`pueue <sub> --help` at `just verify` time; herdr publishes a machine-readable
+schema, so here the equivalent check compares its `AgentStatus` enum against
+the union in `src/lib/agents/types.ts`.
+
+Two more flags found the same way, both on `herdr agent read`:
+`--format text` (the default carries SGR escapes, which render in a Raycast
+Detail as a literal `[38;5;242m`) and `--source recent` (stated explicitly
+rather than relying on the default staying put).
+'''
+
+for name, body in files.items():
+    (P / name).write_text(body)
+    print(f"  {name}")
+
+readme = '''# Pitfalls
+
+One file per trap, titled by the **symptom you would search for** — not by the
+root cause, which you do not know yet when you are looking.
+
+Every file opens with a `## Symptoms (grep this section)` block containing
+verbatim error text, so `grep -r "<the error>" pitfalls/` finds the right one.
+
+| Symptom | File |
+|---|---|
+| Search hangs when you move the selection | [fts5-snippet-costs-seconds-not-milliseconds.md](fts5-snippet-costs-seconds-not-milliseconds.md) |
+| One session appears several times | [one-session-appears-six-times-in-the-search-results.md](one-session-appears-six-times-in-the-search-results.md) |
+| `Invalid Date`, or a session from 1970 | [a-session-with-no-date-sorts-to-1970.md](a-session-with-no-date-sorts-to-1970.md) |
+| A session opens the wrong folder | [the-claude-projects-directory-name-cannot-be-turned-back-into-a-path.md](the-claude-projects-directory-name-cannot-be-turned-back-into-a-path.md) |
+| Every session is titled with a bare UUID | [there-is-no-summary-record-in-a-claude-transcript.md](there-is-no-summary-record-in-a-claude-transcript.md) |
+| `agent_not_found` when focusing | [herdr-agent-focus-only-accepts-a-pane-id.md](herdr-agent-focus-only-accepts-a-pane-id.md) |
+| Every agent disappeared, silently | [a-dead-herdr-server-looks-like-zero-agents.md](a-dead-herdr-server-looks-like-zero-agents.md) |
+| The agent count is one too low | [two-live-processes-report-the-same-session-id.md](two-live-processes-report-the-same-session-id.md) |
+| A usage percentage that cannot be right | [an-anthropic-base-url-proxy-makes-the-quota-meter-lie.md](an-anthropic-base-url-proxy-makes-the-quota-meter-lie.md) |
+| One project appears twice | [the-same-repo-has-two-specstory-project-ids.md](the-same-repo-has-two-specstory-project-ids.md) |
+| `no such column` when searching | [a-user-typed-search-string-is-not-an-fts5-expression.md](a-user-typed-search-string-is-not-an-fts5-expression.md) |
+| `ERR_UNKNOWN_BUILTIN_MODULE` for sqlite | [node-sqlite-is-behind-a-flag-raycast-cannot-pass.md](node-sqlite-is-behind-a-flag-raycast-cannot-pass.md) |
+| `spawn opencode ENOENT` | [opencode-is-not-in-the-usual-probe-directories.md](opencode-is-not-in-the-usual-probe-directories.md) |
+| OpenCode sessions are not searchable | [specstory-does-not-index-opencode.md](specstory-does-not-index-opencode.md) |
+| A wait that never returns | [herdr-agent-wait-hangs-forever.md](herdr-agent-wait-hangs-forever.md) |
+
+## Adding one
+
+Write it the moment you pay for it, while you still have the error text in your
+scrollback. The title is the symptom; the first section is the verbatim error;
+then `## Cause` and `## Fix`. If a measurement is what settled it, put the
+number in — "it was slow" ages badly, "1144 ms against 20 ms" does not.
+'''
+(P / "README.md").write_text(readme)
+print("  README.md")
+PYEOF
+ls pitfalls/ | wc -l
+```
+
+```text
+  a-user-typed-search-string-is-not-an-fts5-expression.md
+  node-sqlite-is-behind-a-flag-raycast-cannot-pass.md
+  opencode-is-not-in-the-usual-probe-directories.md
+  specstory-does-not-index-opencode.md
+  herdr-agent-wait-hangs-forever.md
+  README.md
+      16
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:53:15Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to verify that the fts5 entry didn't get corrupted by my string replacement, then move on to documenting the backlog, TODO items, and updating the README.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:53:15Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check the Q-substitution didn't mangle text
+
+`cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && sed -n '38,52p' pitfalls/a-user-typed-search-string-is-not-an-fts5-expression.md`
+
+```text
+literal phrase and strips all operator meaning, then joins them (fts5 ANDs
+adjacent phrases implicitly). A quote inside a token is escaped by doubling it,
+the same as in S"L.
+
+```
+raycast extension  ->  "raycast" "extension"*        (Q = a double quote)
+-x                 ->  "x"*
+```
+
+"uoting does not narrow the search — `raycast extension` raw matched 55 rows,
+the sanitized form matched 58. The trailing `*` is the typeahead prefix and is
+dropped when the input ends in a space, which is the user signalling the word is
+finished.
+
+Edge case worth knowing: a lone `*` sanitized naively becomes a quoted asterisk
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:53:31Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to fix the text corruption from my earlier substitution hack by rewriting the file with a bash heredoc using a quoted delimiter to prevent any interpolation.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:53:31Z)**_
+
+My `Q` substitution corrupted real words (`SQL` → `S"L`). Rewriting that file properly.
+
+_**Agent (claude-opus-5 2026-07-26 21:53:31Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Rewrite the fts5 pitfall cleanly and check for corruption
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && cat > pitfalls/a-user-typed-search-string-is-not-an-fts5-expression.md <<'MDEOF'
+# Searching for a flag name throws "no such column"
+
+## Symptoms (grep this section)
+
+\```
+Error: stepping, no such column: x
+Error: stepping, no such column: col
+Error: stepping, unterminated string
+Error: stepping, fts5: syntax error near ""
+Error: stepping, unknown special query:
+\```
+
+- Typing `-x` breaks the search.
+- Typing an opening quote breaks the search before you type the closing one.
+- Typing a word that ends in `AND` or `OR` breaks the search.
+
+## Cause
+
+A raw user string is not an FTS5 expression. All five errors above were captured
+verbatim from sqlite3 3.51 against the real index, by feeding it exactly what a
+person types:
+
+| you type | fts5 reads it as | result |
+|---|---|---|
+| `-x` | column filter on `x` | `no such column: x` |
+| `col:x` | column filter on `col` | `no such column: col` |
+| `foo"` | an unterminated phrase | `unterminated string` |
+| `a AND` | a dangling operator | `fts5: syntax error near ""` |
+| `*` | a special query | `unknown special query:` |
+
+Every one is reachable by typing normally. `-x` is a flag you are searching for;
+`col:x` is a struct tag; a lone `"` is the first keystroke of a phrase; and
+`AND` at the end of the string happens on the way to typing what follows it.
+
+## Fix
+
+`toFts5()` in `src/lib/specstory/fts.ts` quotes every token, which makes each a
+literal phrase and strips all operator meaning, then joins them (fts5 ANDs
+adjacent phrases implicitly). A `"` inside a token is escaped by doubling it,
+the same as in SQL.
+
+\```
+raycast extension  ->  "raycast" "extension"*
+-x                 ->  "x"*
+foo"               ->  "foo"""*
+\```
+
+Quoting does not narrow the search — `raycast extension` raw matched 55 rows,
+the sanitized form matched 58. The trailing `*` is the typeahead prefix and is
+dropped when the input ends in a space, which is the user signalling the word is
+finished.
+
+Edge case worth knowing: a lone `*` sanitized naively becomes `"*"*`, which fts5
+**accepts** and which matched 0 of 470 rows — worse than an error, because "no
+results" is indistinguishable from a genuine miss. Operator characters are
+stripped from token edges and tokens that empty out are dropped entirely.
+
+A leading `/` is the escape hatch for raw FTS5. A syntax error there is a
+**non-structural** `ErrorDescriptor`: the list stays on screen and the grammar
+is offered, because the user is mid-thought, not in trouble.
+MDEOF
+grep -c 'S"L\|"uoting' pitfalls/*.md | grep -v ':0' || echo "no corruption anywhere"
+```
+
+```text
+no corruption anywhere
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:54:52Z)**_
+
+Now the backlog, TODO and README.
+
+_**Agent (claude-opus-5 2026-07-26 21:54:53Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Write the backlog notes
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && mkdir -p backlog
+
+cat > backlog/README.md <<'MDEOF'
+# Backlog
+
+Things that are **not decided**, with enough thinking already done that picking
+one up does not start from zero.
+
+Each note answers three questions in this order:
+
+1. **What** it would be.
+2. **Why it is not done** — the specific reason, not "no time".
+3. **What would have to be true** for it to become worth doing.
+
+The third is the one that earns the file. An item whose preconditions are
+written down can be re-evaluated in a minute when the world changes; one without
+them gets re-argued from scratch every time it comes up.
+
+Items here are indexed from `TODO.md` with a `P?` marker, meaning the shape is
+undecided rather than merely unscheduled.
+
+| Note | One line |
+|---|---|
+| [herdr-event-subscription.md](herdr-event-subscription.md) | Replace 1-minute polling with a push channel |
+| [local-usage-index.md](local-usage-index.md) | Token and cost rollup from transcripts, incrementally |
+| [statusline-shim.md](statusline-shim.md) | The only way to get real Claude rate limits, and why not |
+| [oauth-usage-endpoint.md](oauth-usage-endpoint.md) | Rejected, with all three reasons |
+| [cursor-and-gemini-live-state.md](cursor-and-gemini-live-state.md) | The agents we can find but not watch |
+| [store-publishing.md](store-publishing.md) | What is left before this can be submitted |
+MDEOF
+
+cat > backlog/herdr-event-subscription.md <<'MDEOF'
+# herdr event subscription
+
+**Status:** P? · **Effort:** [L]
+
+## What
+
+Replace the menu bar's 1-minute poll with a subscription to herdr's event
+stream, so an agent going from `working` to `blocked` updates the menu bar
+immediately instead of up to a minute later.
+
+herdr's schema already describes it: `herdr api schema --json` contains a
+`schemas.subscription_event` family alongside `schemas.request` and
+`schemas.event`, with the same `$defs.AgentStatus`. Protocol 17.
+
+## Why it is not done
+
+Three reasons, in order of weight.
+
+**Raycast has no persistent process.** A menu-bar command runs on its interval,
+renders, and unloads. There is nothing to hold a socket open between ticks. A
+subscription would need a helper process outside Raycast that maintains the
+connection and writes state to a file the extension polls — at which point the
+extension is still polling, just a cheaper file.
+
+**Polling is already cheap.** `herdr agent list` measured **52 ms** for 52
+agents. At one minute that is 0.09% of a core. The problem being solved is
+latency, not cost, and the latency ceiling is Raycast's minimum interval anyway.
+
+**herdr's status is screen-scraped.** It infers state from rendered terminal
+text (`rule: live_prompt_box, evidence: "❯\n"`), so its own detection lags a
+real change by however long its detection loop takes. Pushing that faster does
+not make it more correct.
+
+## What would have to be true
+
+- Raycast gains a way to keep a background process alive across menu-bar ticks
+  (a real daemon entry point, not `LaunchType.Background`), **or**
+- the user already runs a herdr-adjacent daemon we can piggyback on, and writing
+  a state file from it is a change they want anyway, **and**
+- the 1-minute ceiling is measurably annoying in practice — which needs a week
+  of using v0.1 before it is worth believing.
+
+## Prior art in the sibling
+
+`Pueue-Raycast-Extension/backlog/socket-transport.md` is the same shape: the
+transport seam exists so that a socket implementation is a swap rather than a
+rewrite. `LiveAgentSource` here plays that role.
+MDEOF
+
+cat > backlog/local-usage-index.md <<'MDEOF'
+# Local token and cost index
+
+**Status:** P? · **Effort:** [L]
+
+## What
+
+Tokens and cost per model per day, computed from local transcripts. No auth, no
+network, correct under a proxy — the number that is always true, and the lead
+figure for the v0.3 **Agent Usage** command.
+
+Sources, all already read for other reasons:
+
+- `~/.claude/projects/**/*.jsonl` — `assistant` records carry
+  `message.usage.{input_tokens, output_tokens, cache_creation_input_tokens,
+  cache_read_input_tokens}` and `message.model`.
+- `~/.codex/sessions/**/rollout-*.jsonl`.
+- `opencode.db` — already has `cost` and `tokens_*` columns per session, so it
+  needs no scan at all.
+
+## Why it is not done
+
+**A naive scan is not viable.** Measured on the capture machine: 24 hours of
+Claude transcripts is 121 files / 222 MB / **4.4 s** to parse; seven days is 804
+files / 355 MB, where `grep` alone took **26 s**. That is not a view you open.
+
+So it needs an incremental index — `{path, size, mtimeMs, byteOffset, totals}`
+per file in `environment.supportPath`, appending only from the recorded offset —
+and that is a real piece of work with its own correctness problems (a truncated
+final line, a file rewritten rather than appended, a clock going backwards).
+
+**Dedupe is not obvious.** Streaming produces several `assistant` records for
+one response. CodexBar dedupes on `message.id + requestId`; that needs verifying
+against current transcripts rather than copying.
+
+## What would have to be true
+
+- v0.3 is actually being built, i.e. v0.1 and v0.2 have shipped and been used.
+- A day of measurement confirms the incremental index stays under ~200 ms warm.
+- The numbers reproduce a known-good baseline. One exists: over 24 hours the
+  capture machine had 25 518 usage records, 6 019 068 input / 47 291 258 output
+  / 559 337 485 cache-creation / 7 831 624 379 cache-read tokens, across
+  `claude-opus-4-8` (16 349), `claude-opus-5` (9 120),
+  `claude-haiku-4-5-20251001` (26), `<synthetic>` (20) and `gemini-2.5-pro` (3).
+  The index is correct when it reproduces that from the same window.
+
+## Note
+
+`codexbar cost --provider claude --json` already does this and is the v0.3
+primary. This note is the fallback for when CodexBar is not installed — which is
+the normal case, not the exception.
+MDEOF
+
+cat > backlog/statusline-shim.md <<'MDEOF'
+# Statusline shim for real rate limits
+
+**Status:** P? · **Effort:** [M] · **Leaning: no**
+
+## What
+
+Claude Code pushes its real rate-limit state to the **statusline command's
+stdin**, and nowhere else:
+
+\```json
+{"rate_limits":{"five_hour":{"used_percentage":42,"resets_at":1785096102},
+                "seven_day":{"used_percentage":18,"resets_at":1785596102}}}
+\```
+
+`resets_at` is epoch **seconds**. This is the same data `/usage` shows, and it
+is the only fully accurate source that needs no credentials.
+
+The shim would wrap the user's existing statusline command so it tees that JSON
+to a cache file before passing stdin through, and the extension would read the
+file.
+
+## Why it is not done
+
+**There is no file to poll.** Verified in claude-hud's own source, which is the
+statusline on the capture machine:
+
+\```
+// Usage comes only from Claude Code's official stdin rate_limits fields.
+\```
+
+It parses them and does not persist them. So this genuinely is the only local
+route, and that is the strongest argument *for* it — the arguments against are
+about cost, not availability.
+
+**It is a cross-repo change to a `modify_` chezmoi template.**
+`~/.claude/settings.json` is generated by
+`dot_claude/modify_settings.json.tmpl`, which *modifies* the live file rather
+than owning it — because Claude Code rewrites that file at runtime. Inserting a
+wrapper through template logic that must survive those rewrites is fragile in a
+way that is hard to test.
+
+**It sits on the hot path of every statusline render, in every session.** With
+~49 live sessions on the capture machine, a bug in the shim breaks the
+statusline everywhere at once — for a feature that is decorative.
+
+**It would not help here.** `ANTHROPIC_BASE_URL` points at a local proxy, so
+whatever `rate_limits` arrives describes the upstream account, not this
+machine's work. See
+[`pitfalls/an-anthropic-base-url-proxy-makes-the-quota-meter-lie.md`](../pitfalls/an-anthropic-base-url-proxy-makes-the-quota-meter-lie.md).
+
+## What would have to be true
+
+- The proxy is gone, so the number would mean something, **and**
+- CodexBar is still not installed, so there is no simpler route, **and**
+- the shim can be written as a **separate statusline entry** rather than a
+  wrapper around the existing one, so a failure degrades to "no usage data"
+  instead of "no statusline".
+MDEOF
+
+cat > backlog/oauth-usage-endpoint.md <<'MDEOF'
+# The OAuth usage endpoint
+
+**Status:** Rejected · **Effort:** [M]
+
+Kept as a note rather than deleted, because it is the obvious idea and will be
+suggested again. Three independent reasons, any one of which is sufficient.
+
+## What it would be
+
+\```
+GET https://api.anthropic.com/api/oauth/usage
+Authorization: Bearer <access_token>
+anthropic-beta: oauth-2025-04-20
+\```
+
+Returns `five_hour`, `seven_day`, `seven_day_opus` and `seven_day_sonnet`
+buckets with `utilization` and `resets_at`. It is what several community tools
+use.
+
+## Why not
+
+**1. The token is in the Keychain, and reading it prompts.**
+`~/.claude/.credentials.json` does not exist on a current install — verified
+absent. The credentials live in a Keychain item with service
+`Claude Code-credentials`, and reading it means
+`security find-generic-password -s "Claude Code-credentials" -w`, which triggers
+an ACL prompt. From a launchd process, that prompt is attributed to Raycast,
+appears without obvious context, and is **remembered if denied**. A first run
+that opens a system security dialog is a first run people quit.
+
+**2. It is aggressively rate-limited per token.** Community reports describe
+429s after a handful of requests. A menu bar refreshing every minute is exactly
+the shape that trips it, and being rate-limited out of your rate-limit display
+is a poor joke.
+
+**3. It measures the wrong account.** With `ANTHROPIC_BASE_URL` and
+`ANTHROPIC_AUTH_TOKEN` set, the OAuth token is a leftover login, not a
+description of what is being consumed. Seven days of transcripts on the capture
+machine contained `gemini-2.5-pro` responses.
+
+## What would have to be true
+
+All three would have to change: credentials readable without a prompt, a
+documented rate limit compatible with a 1-minute refresh, and no proxy. If they
+did, `codexbar` would still be the better route — it already implements this
+path, plus 15 other providers, and is one dependency instead of one endpoint
+plus its auth.
+MDEOF
+
+cat > backlog/cursor-and-gemini-live-state.md <<'MDEOF'
+# Live state for Cursor and Gemini
+
+**Status:** P? · **Effort:** [M]
+
+## What
+
+Both are visible in **search** and invisible in **live state**. Closing that gap
+means either a per-agent process detector, or waiting for herdr to report them.
+
+## Why it is not done
+
+**Cursor has no data on this machine to build against.** `~/.cursor/chats/`
+contains **zero** `store.db` files, and SpecStory's index holds zero `cursor` or
+`cursoride` rows despite supporting both. Writing a reader with no sample is
+writing a guess. The `AgentKind` union includes `"cursor"` so the plumbing is
+ready; nothing behind it is.
+
+**Gemini has one session, total.** One row in the SpecStory index. Not enough to
+tell a shape from a coincidence.
+
+**herdr already covers the case properly when it is installed.** Its integration
+list names copilot, devin, droid, kimi, kilo, hermes, qodercli, cursor and
+mastracode alongside claude and codex. `herdr integration status` on the capture
+machine showed cursor at `current (v1)`. So for a herdr user this gap closes by
+installing an integration, not by writing code here.
+
+The remaining gap is narrow: agents that are running **outside herdr** and are
+**not Claude Code** (which has its own registry). That is a small set, and
+detecting it means `pgrep` plus a parent-chain walk — the approach
+`agent-sessions.py` takes in the author's dotfiles, which is ~200 lines of
+process archaeology per agent.
+
+## What would have to be true
+
+- Real Cursor or Gemini sessions exist on a machine to test against, **and**
+- they are being run outside herdr often enough to matter, **and**
+- a `pgrep`-based detector can distinguish them without the false positives the
+  tmux-based version already documents (`pane_current_command` reports `zsh`,
+  not the agent, because the agent is a child).
+MDEOF
+
+cat > backlog/store-publishing.md <<'MDEOF'
+# Publishing to the Raycast Store
+
+**Status:** P? · **Effort:** [M]
+
+## What
+
+Submit to the raycast/extensions repository.
+
+## Why it is not done
+
+**The optional-dependency story has to be proven, not just designed.** Every
+external tool is optional by construction and dev-check asserts the
+all-absent case — but a store reviewer runs this on a machine with no herdr, no
+SpecStory, no CodexBar and possibly no coding agent at all. That path needs to
+be walked by hand, not merely asserted. See the checklist below.
+
+**Screenshots need a machine with plausible content.** The capture machine's
+sessions are real work with real repository names in the titles; the search view
+is a screenshot of exactly the thing that must not be published.
+
+## Checklist
+
+- [x] `platforms: ["macOS"]` (required once a menu-bar command exists)
+- [x] MIT `LICENSE` plus `license` in the manifest
+- [x] `author` is a registered Raycast username
+- [x] `metadata/` exists so "Save to Metadata" appears
+- [x] Fixtures redacted, asserted by dev-check
+- [x] `package-lock.json` committed
+- [ ] `just preflight` passes (the vendored store-readiness script)
+- [ ] Screenshots, on a machine with synthetic sessions
+- [ ] `just store-export` allowlist verified — `ray publish` copies the
+      **directory**, not the git index, so `docs/`, `.specstory/`, `.build/`
+      and `scripts/` must be excluded explicitly
+- [ ] Every optional tool removed by hand, one at a time and then all at once,
+      from Raycast root search (**not** the `ray develop` console, which
+      inherits your PATH)
+- [ ] `docs/` written in en + zh-TW
+
+## Prior art for requiring a pre-installed binary
+
+Brew, Colima, OrbStack and Yabai extensions all require software the store does
+not ship. The precedent is established; the difference here is that Agent Deck
+requires **nothing** — every tool is an enhancement — which should make review
+easier rather than harder, provided the no-tools path actually works.
+MDEOF
+ls backlog/ && echo "--- backlog written ---"
+```
+
+```text
+cursor-and-gemini-live-state.md
+herdr-event-subscription.md
+local-usage-index.md
+oauth-usage-endpoint.md
+README.md
+statusline-shim.md
+store-publishing.md
+--- backlog written ---
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:55:30Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Write TODO.md
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && cat > TODO.md <<'MDEOF'
+# TODO
+
+Effort tags: `[S]` under an hour · `[M]` an afternoon · `[L]` a day or more.
+`P?` means the shape is undecided and there is a note in [`backlog/`](backlog/).
+
+## Next
+
+- [ ] `[M]` **Walk every command from Raycast root search.** Not the
+      `ray develop` console — that inherits your interactive PATH and hides the
+      launchd trap entirely. Anything only tested there is untested.
+- [ ] `[M]` **Remove each optional tool by hand**, one at a time and then all at
+      once, and confirm the app still lists live Claude agents and searches
+      transcripts. dev-check asserts this against a fake filesystem; this is the
+      real one.
+- [ ] `[S]` Replace `assets/extension-icon.png` — the scaffold's placeholder is
+      rejected by review.
+- [ ] `[S]` Confirm the `terminalApp` preference actually raises the right app
+      after a focus. herdr's host on the capture machine is Alacritty.
+
+## v0.2 — act on it
+
+- [ ] `[M]` **Measure herdr's reconcile latency before writing `optimistic.ts`.**
+      Run `herdr agent prompt <pane> "hi"`, poll `herdr agent list` until it
+      reports `working`, five trials, record min/median/max. Repeat for
+      `working -> idle`. Those two numbers become `RECONCILE_DELAY_MS` and
+      `RECONCILE_SETTLE_MS`, with the measurement in the comment above them.
+      **Do not copy 400/1500 from the sibling Pueue extension** — that is
+      pueued's update loop. herdr detects state by scraping rendered terminal
+      text, which is a different mechanism and will be slower and noisier.
+- [ ] `[M]` Send a prompt / send keys / rename, behind `act()` and the
+      `confirmDestructive` preference.
+- [ ] `[M]` Resume into a new herdr tab: `herdr tab create --cwd <path> --focus`
+      then run the command in the new pane. **Unverified** — creating a tab is a
+      state change that has not been tried. If the created tab does not expose a
+      pane id, fall back to copying the command and focusing.
+- [ ] `[S]` peon integration: `peon status` parses in ~40 lines, and
+      `volume` / `notifications` / `toggle` map onto menu items.
+- [ ] `[M]` pueue `agent-wakeup` scheduling for a quota-blocked agent. Note the
+      `agent-wakeup` group **does not exist** — the action must create it with
+      `pueue group add agent-wakeup` and `pueue parallel -g agent-wakeup 1`.
+- [ ] `[S]` The review inbox: `herdr pane list` filtered to a non-empty
+      `.tokens.review`. Ships dark — **0 panes carry it today**, so there is
+      nothing to look at until the flag starts being used.
+
+## v0.3 — usage
+
+- [ ] `[M]` `codexbar usage --provider <p> --source cli --json` as the primary
+      source, with the not-installed case as a first-class capability hint.
+- [ ] `[L]` `P?` Local token and cost index — see
+      [`backlog/local-usage-index.md`](backlog/local-usage-index.md).
+- [ ] `[S]` `quota/confidence.ts` — tag every bucket `direct` / `proxied` /
+      `unknown` from the effective environment.
+
+## Docs
+
+- [ ] `[M]` MkDocs site, en + `.zh-TW.md` siblings, matching the sibling repo's
+      `mkdocs-static-i18n` suffix layout.
+- [ ] `[S]` `docs/prior-art.md` — ccusage is cost-only; Threadlens,
+      claude-history and raycast-claude-sessions are search-only; ClaudeCast is
+      remote-control-only; CodeIsland is a notch app that identifies the
+      terminal but not the pane. None has a menu bar, and none joins a search
+      result to a live process.
+- [ ] `[S]` `docs/data-sources.md` — the exact files and schemas read, so
+      someone can verify the extension is not doing anything surprising.
+
+## Later
+
+- [ ] `[L]` `P?` herdr event subscription —
+      [`backlog/herdr-event-subscription.md`](backlog/herdr-event-subscription.md).
+- [ ] `[M]` `P?` Cursor and Gemini live state —
+      [`backlog/cursor-and-gemini-live-state.md`](backlog/cursor-and-gemini-live-state.md).
+- [ ] `[M]` `P?` Store publishing —
+      [`backlog/store-publishing.md`](backlog/store-publishing.md).
+- [ ] `[M]` OpenCode full text. Its database has no FTS table, so this means
+      either a `LIKE` scan over `part.data` (339 MB) or building a side index.
+- [ ] `[S]` Subagent transcripts (`<sessionId>/subagents/agent-*.jsonl`) are
+      currently skipped. They are not separately resumable, so including them
+      would show one conversation as dozens of rows — but they are searchable
+      content that is currently invisible.
+
+## Deferred, with notes
+
+- **Statusline shim for real Claude rate limits** —
+  [`backlog/statusline-shim.md`](backlog/statusline-shim.md). It is the only
+  fully accurate local source and it is still probably not worth it.
+
+## Won't do
+
+- **The OAuth `/api/oauth/usage` endpoint.** Three independent reasons, each
+  sufficient, recorded in
+  [`backlog/oauth-usage-endpoint.md`](backlog/oauth-usage-endpoint.md):
+  the token is in the Keychain so reading it opens a security prompt attributed
+  to Raycast from a launchd process and remembered if denied; community reports
+  of per-token 429s after a handful of requests, which a 1-minute menu bar
+  would trip; and with a proxy in front of Claude Code it measures the wrong
+  account anyway. If all three changed, `codexbar` would still be the better
+  route — one dependency instead of one endpoint plus its auth.
+
+- **Un-mangling `~/.claude/projects/<dir>` back into a path.** `/`, `.` and `_`
+  all map to `-`, so the mapping is many-to-one and irreversible. Any inversion
+  produces a path that usually exists and is sometimes someone else's project.
+  Read `cwd` from inside the file instead. See
+  [`pitfalls/the-claude-projects-directory-name-cannot-be-turned-back-into-a-path.md`](pitfalls/the-claude-projects-directory-name-cannot-be-turned-back-into-a-path.md).
+
+- **`node:sqlite` or a native SQLite module.** The first is behind
+  `--experimental-sqlite` on Node 22 and Raycast controls the argv; the second
+  needs a prebuilt binary per architecture inside the bundle. `/usr/bin/sqlite3`
+  ships with macOS, has FTS5, and is one `execFile` away.
+
+- **Grouping by SpecStory's `project_id`.** One repository can have two of them
+  (workspace-derived and git-derived), which splits a single project into two
+  piles that look like unrelated repos. Group by `origin_cwd`.
+
+- **A fuzzy matcher for Focus Agent.** With ~50 agents running, a fuzzy match on
+  a short string is a coin flip, and the cost of being wrong is typing into
+  somebody else's session. Ordered exact-first tiers, and an ambiguous result is
+  handed back rather than guessed at.
+MDEOF
+wc -l TODO.md
+```
+
+```text
+     117 TODO.md
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:56:13Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Write README and run the gate
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && cat > README.md <<'MDEOF'
+# Agent Deck
+
+Find any past AI coding session by what was said in it, see which agents are
+running or waiting on you, and jump straight back into either.
+
+A Raycast extension for macOS. Claude Code, Codex, OpenCode and Gemini CLI.
+
+## The problem
+
+Two, and they are the same problem from different ends.
+
+**"I solved this before, but where?"** You remember running a similar session.
+You do not remember which agent, which directory, or which of a thousand session
+ids — so you cannot resume it, and you do it again from scratch.
+
+**"Which agent needs me right now?"** Fifty terminals, two of them waiting on an
+answer, and no surface that tells you which two.
+
+## What makes it different
+
+Every existing tool does one half. This one connects them: **a search result and
+a running process are the same object.** Find a session by remembering what you
+said in it, and if something is running that conversation right now, one
+keystroke puts you in that terminal pane.
+
+On the machine this was built against, all 52 live agents' session ids resolved
+in both the search index and Claude Code's own transcripts. The join is not a
+heuristic — it is the same identifier on both sides.
+
+## Nothing is required
+
+herdr, SpecStory, sqlite3, CodexBar, peon and pueue are all **optional**. A
+missing one falls back if a fallback exists, and otherwise shows the feature
+disabled with a copyable install hint. Nothing crashes and no error appears
+merely because software is not installed.
+
+With every optional tool absent, Agent Deck still lists running Claude Code
+agents and searches your transcripts — those paths are plain filesystem reads of
+`~/.claude/sessions`, `~/.claude/projects` and `~/.codex/sessions`.
+
+Press `⌘⇧I` in any view to see exactly what was found and what was not.
+
+| Tool | What it adds | Without it |
+|---|---|---|
+| [herdr](https://github.com/ogulcancelik/herdr) | Live agents across every CLI, and focusing a terminal pane | Claude Code's own session registry — Claude only, and cannot focus |
+| [SpecStory](https://specstory.com) | Full-text search of what was **said**, across agents | Your prompt history and session titles |
+| `sqlite3` | Reading the SpecStory and OpenCode indexes | Filesystem search only. macOS ships one at `/usr/bin/sqlite3` |
+| [CodexBar](https://github.com/steipete/CodexBar) | Provider quota (v0.3) | Local token and cost totals |
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| **Agents Menu Bar** | Blocked-first agent state. Quiet until one is waiting on you |
+| **Search Agent Sessions** | Full-text search across every agent, with live sessions tagged |
+| **Live Agents** | Every running agent, its terminal output, and one keystroke to focus |
+| **Focus Agent** | Type a name, land in the terminal. No window |
+
+## Install
+
+Not on the Raycast Store yet — see
+[`backlog/store-publishing.md`](backlog/store-publishing.md).
+
+\```sh
+git clone https://github.com/daviddwlee84/Agent-Deck-Raycast-Extension
+cd Agent-Deck-Raycast-Extension
+npm install && npm run dev
+\```
+
+Then open a command from Raycast root search. Leave `npm run dev` running.
+
+## A note on status
+
+herdr detects whether an agent is idle, working or blocked by **reading the
+rendered terminal** — `herdr agent explain` will tell you the rule and the
+evidence it used. It is a good guess that lags a real change slightly, not
+ground truth. The UI says "detected", and the Explain action exists so a wrong
+guess is debuggable rather than mysterious.
+
+## Development
+
+\```sh
+just check      # typecheck, verify, lint, build — the pre-commit gate
+just verify     # the assertions alone (332 of them, no test runner)
+just fixtures   # re-capture test fixtures from the live tools, redacting as it goes
+\```
+
+There is no test runner. `src/lib/dev-check.ts` is a plain script that `tsc`
+compiles and `node` runs, which works only because every module it imports is
+free of `@raycast/api`. That import discipline is asserted by the harness
+itself, not merely intended.
+
+`ray build` bundles but does **not** typecheck. `just check` runs `tsc --noEmit`
+separately for that reason.
+
+## Knowledge
+
+- [`pitfalls/`](pitfalls/) — one file per trap, titled by the symptom you would
+  search for, each opening with the verbatim error text. Fifteen of them, every
+  one paid for once.
+- [`backlog/`](backlog/) — undecided items, each answering *what*, *why not*,
+  and *what would have to be true*.
+- [`TODO.md`](TODO.md) — the index, including a **Won't do** section that
+  records the reasoning rather than leaving it to be re-argued.
+
+## License
+
+MIT
+MDEOF
+just check 2>&1 | grep -E "error|FAIL|checks passed|built extension" | tail -6
+```
+
+```text
+— errors: absent is not broken
+332/332 checks passed
+ready  - built extension successfully
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:56:31Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit the knowledge harness
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && git add -A && git -c user.name="Da-Wei Lee" commit -q -F - <<'MSG'
+Write down what each trap cost, while the error text is still in scrollback
+
+Fifteen pitfalls, six backlog notes, TODO.md and a README.
+
+The pitfalls are titled by the SYMPTOM, not the cause — you do not know the
+cause yet when you are searching. Each opens with a grep-able block of the
+verbatim error, so `grep -r "no such column" pitfalls/` lands on the right
+file. Every one was paid for during this build:
+
+  20 ms vs 1144 ms      snippet() on a 7.36 MB body
+  81 of 470             sessions with duplicate FTS rows, worst case 6
+  7 of 470              rows with no date at all, all project_id='unknown'
+  49 files, 48 ids      two live pids sharing one sessionId
+  agent_not_found       for a terminal_id, and for a session UUID
+  zero bytes            what `sqlite3 -json` prints for zero rows
+  --state               the flag that does not exist; it is --until
+
+TODO.md has a **Won't do** section, and it is the part worth keeping. Five
+entries, each with the reasoning rather than the verdict — the OAuth usage
+endpoint with all three independent reasons, un-mangling the projects
+directory, node:sqlite, grouping by SpecStory's project_id, and a fuzzy
+matcher for Focus Agent. Without the reasoning these get re-argued from
+scratch every few months; with it, they get re-evaluated in a minute when
+one of the preconditions changes.
+
+Backlog notes answer what / why-not / what-would-have-to-be-true, in that
+order. The third question is what earns the file. The statusline shim note
+is the clearest case: it is the ONLY fully accurate local source for
+Claude's rate limits, and it is still probably not worth it, and the note
+says exactly what would have to change.
+
+One correction to my own work while writing these: a scripted substitution
+mangled real words in a draft (SQL became S"L). Rewritten by hand.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+MSG
+git log --oneline | head -5 && echo && git ls-files | wc -l && echo "files tracked"
+```
+
+```text
+54dec64 Write down what each trap cost, while the error text is still in scrollback
+d9701de Ship the four commands, and refuse to guess which terminal you meant
+8906e3f Make a search result and a running process the same object
+a86df3f Read the tools instead of the docs, and redact what they say
+c7f1552 Make every external tool optional, and prove it
+
+     171
+files tracked
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:56:37Z)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="TaskUpdate"><details>
+<summary>Tool use: **TaskUpdate**</summary>
+
+```text
+Updated task #7 status
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:56:50Z)**_
+
+<think><details><summary>Thought Process</summary>
+Everything's committed, so let me verify the core logic actually works by running a smoke test—I'll compile the facade and execute a search from Node to confirm the join functions end-to-end, though I'm hitting a snag since the facade imports from @raycast/api which won't run headlessly.
+
+The dev-check already validates against the real database and herdr source, so those pieces are solid. The React and Raycast integration genuinely needs someone testing from the actual Raycast root search. What I can do is run the store build with `just dist` to ensure everything typechecks properly, then do a final sweep for any placeholder assets or leftover metadata that shouldn't ship.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:56:59Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Run the store build and summarize repo shape
+
+```bash
+cd /Users/david/Documents/Program/Agent-Deck-Raycast-Extension && just dist 2>&1 | tail -4
+echo "=== repo shape ==="
+echo "src:      $(find src -name '*.ts' -o -name '*.tsx' | wc -l | tr -d ' ') files, $(cat src/**/*.ts src/**/*.tsx src/*.tsx 2>/dev/null | wc -l | tr -d ' ') lines"
+echo "pitfalls: $(ls pitfalls/*.md | wc -l | tr -d ' ')"
+echo "backlog:  $(ls backlog/*.md | wc -l | tr -d ' ')"
+echo "fixtures: $(ls src/lib/fixtures | wc -l | tr -d ' ')"
+echo "=== placeholder icon still there? ==="
+ls -la assets/ 2>&1 | tail -3
+```
+
+```text
+info  - compiled entry points
+info  - generated extension's TypeScript definitions
+info  - checked TypeScript
+ready  - built extension successfully
+=== repo shape ===
+src:      29 files, 9610 lines
+pitfalls: 16
+backlog:  7
+fixtures: 10
+=== placeholder icon still there? ===
+.rw-r--r--@ 6.9k david 27 Jul 04:57 extension-icon.png
+.rw-r--r--@  412 david 27 Jul 04:57 menu-bar-icon.svg
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-26 21:57:20Z)**_
+
+<think><details><summary>Thought Process</summary>
+Everything's building successfully with typechecking included. I've reached a good stopping point with v0.1 complete and ready to test — the next phase needs the user to validate it from Raycast's root search. I should give them clear instructions on how to run it, though I'm deciding whether to start the dev server for them or just explain the command they need.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-26 21:57:25Z)**_
+
+v0.1 is code-complete and gated. `just dist` (the build that actually typechecks) passes.
+
+## 現況
+
+`../Agent-Deck-Raycast-Extension` — 5 commits, 29 個 source files / ~9.6k 行, 332 checks 全綠。
+
+| | |
+|---|---|
+| **Agents Menu Bar** | blocked-first，沒人等你時完全安靜（title 是 `undefined` 而非 `0`） |
+| **Search Agent Sessions** | 跨 agent 全文搜尋，正在跑的 session 標 `live` |
+| **Live Agents** | 狀態分組 + terminal 輸出 detail + 一鍵 focus |
+| **Focus Agent** | 打名字直接跳，no-view |
+
+支援 Claude Code / Codex / OpenCode / Gemini，四個獨立的 session index。
+
+## 需要你做的（我做不到的部分）
+
+**從 Raycast root search 實測**，不是 `ray develop` 的 console。console 繼承你的互動式 PATH，會完全蓋掉 launchd 的問題——只在那裡測過等於沒測。
+
+```
+cd ../Agent-Deck-Raycast-Extension && npm run dev
+```
+
+然後開 Raycast，搜尋 "Search Agent Sessions"。
+
+三個值得特別確認的：
+
+1. **搜 `-x`** — 應該出現語法提示，不是 crash、不是 toast。這是最容易 regress 的一條。
+2. **把 herdr 移開再測** — 應該 fallback 到 `~/.claude/sessions`（約 49 個 agent）+ 一個「herdr 沒裝」的提示；然後把 herdr 放回去但**停掉 server**，這時應該是 structural error + 修復方法，**不該**顯示「請安裝 herdr」。這兩種狀態的區分是整個 capability model 的重點。
+3. **`terminalApp` preference** — focus 之後有沒有真的把 Alacritty 拉到前景。herdr 只能在自己 session 內移動焦點，抬不起視窗。
+
+## 兩件我刻意沒做
+
+**v0.2 的 mutation 全是 stub**，因為 herdr 的 reconcile 延遲還沒量。不能抄 Pueue extension 的 400/1500ms——那是 pueued 的 update loop；herdr 是 scrape 終端機畫面判斷狀態，機制不同。量法寫在 TODO.md 裡了。
+
+**icon 還是 scaffold 的 placeholder**，送 store 會被退。
+
+`TODO.md` 有 **Won't do** 一節，記的是理由不是結論——OAuth usage endpoint 被拒的三個獨立原因、為什麼不 un-mangle projects 目錄、為什麼 Focus Agent 不做 fuzzy match。`pitfalls/` 15 篇都以**症狀**命名並用逐字錯誤訊息開頭，`grep -r "no such column" pitfalls/` 會直接命中。

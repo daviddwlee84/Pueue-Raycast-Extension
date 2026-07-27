@@ -55,12 +55,20 @@ This is the single most likely "it's broken" report, and it isn't a bug in the e
 Mention the extension in Raycast AI with `@pueue`, or run **Ask Pueue** from root search:
 
 ```text
-@pueue what's failing on lab?
-@pueue why did task 6 fail?
-@pueue how far through is the wf group?
-@pueue queue 'cargo build --release' in the wf group on lab
-@pueue restart everything that failed in wf
+@pueue Give me an overview of every connection, then explain why the failed
+       tasks failed. Don't restart or change anything.
+@pueue Why did the tasks in the wf group fail? Read the logs — don't fix
+       anything yet.
+@pueue How far through is the wf group, and roughly when will it finish?
+@pueue Queue 'cargo build --release' in the wf group on lab
+@pueue Clean up the successful tasks but keep the failures
 ```
+
+These and three more ship as example prompts, so they appear in the **Ask Pueue**
+list rather than having to be remembered. `ai.instructions` carries the rules
+that shouldn't need repeating: read by default, task ids are per-daemon, sample
+a few logs rather than reading twenty identical ones, prefer keeping failures
+when cleaning, and never restart in place unprompted.
 
 Seven tools: `get-tasks`, `get-task-log`, `get-groups` read; `add-task`,
 `kill-tasks`, `restart-failed`, `clean-tasks` write. **Every writing tool
