@@ -84212,3 +84212,732 @@ info  - checked TypeScript
 ready  - built extension successfully
 ```
 </details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 05:59:29Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit and push
+
+```bash
+git add -A && git commit -q -F - <<'EOF'
+Stop the AI queueing tasks at the filesystem root
+
+Your question, answered by measuring it: `pueue add` with no
+`--working-directory` inherits the **client's** current directory, and the client
+is a subprocess of Raycast. Spawned the way the transport spawns it, the task
+comes back with
+
+    path: "/"
+
+So "queue 'make clean', 'make build' and 'make test'" would have run all three
+at the filesystem root. Not a broken example — a broken tool, and one that fails
+in the worst way, because the error looks like the build is broken rather than
+like the directory is wrong.
+
+The two view commands already got this right: Add Task has a directory picker
+defaulting to $HOME, and Quick Add falls back to $HOME explicitly. The tool was
+the only path that let pueue decide. `lib/last-used.ts` now holds the one answer
+and all three use it.
+
+Verified the remote case is different and already correct: over ssh the pueue
+client runs on the far side in its login shell, so pueue's own default is the
+remote $HOME — sensible, and not something we could compute from here. That
+connection deliberately still passes nothing.
+
+The batch examples now name a directory, which is the honest fix: this is a real
+constraint of the tool, so the examples should teach it rather than work around
+it. The tool also shows the directory in the confirmation whether or not the
+model chose one — labelled "(last used — nobody chose)" when it didn't — and
+reports it back. And it only remembers a directory the caller actually picked,
+so one unspecified submission cannot become the default for every later one.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+EOF
+git log --oneline -1 && git push origin main 2>&1 | tail -2
+```
+
+```text
+a5f4760 Stop the AI queueing tasks at the filesystem root
+To https://github.com/daviddwlee84/Pueue-Raycast-Extension.git
+   db1eaa1..a5f4760  main -> main
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 06:01:39Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Watch CI
+
+`sleep 120; gh run list --workflow=extension.yml -L 2 2>&1`
+
+```text
+completed	success	Stop the AI queueing tasks at the filesystem root	extension	main	push	30241312560	51s	2026-07-27T05:59:31Z
+completed	success	Point the lockfile at npmjs.org, and stop the local gate being weaker…	extension	main	push	30239859765	44s	2026-07-27T05:28:51Z
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 06:01:56Z)**_
+
+You caught a real bug, not just an unclear example. Pushed as `a5f4760`; CI green.
+
+## The answer, measured
+
+Neither home nor anywhere sensible. `pueue add` without `--working-directory` inherits **the client's** cwd — and the client is a subprocess of Raycast. Spawning it the way the transport does:
+
+```
+id 11  command echo cwd-probe  ->  path: /
+```
+
+So `make clean && make build && make test` would have run **at the filesystem root**. And it fails in the worst possible way: the error looks like the build is broken, not like the directory is wrong.
+
+## Why the tool had this and the UI didn't
+
+Both view commands already got it right — Add Task has a directory picker defaulting to `$HOME`, Quick Add falls back to `$HOME` explicitly. The AI tool was the only submission path that let pueue decide. That's now one shared answer in `lib/last-used.ts`, used by all three.
+
+I also checked the remote case separately, and it's already correct for a different reason: over ssh the pueue client runs on the far side in its login shell, so pueue's own default is the **remote `$HOME`** — sensible, and not something we could compute locally. That connection deliberately still passes nothing.
+
+## On your actual question — should path-dependent commands be examples?
+
+Yes, but they have to *teach* the constraint rather than dodge it. Working directory is a real property of a pueue task; an example that hides it teaches the wrong habit. So the batch prompts now name one:
+
+```text
+@pueue In ~/data, queue 'python process.py <file>' once per file for
+       a.csv, b.csv and c.csv
+@pueue Make a group called nightly that runs 2 at a time, then queue
+       'make clean', 'make build' and 'make test' into it, all in
+       ~/projects/app, each waiting for the one before
+```
+
+That second one also demonstrates `after` chaining, which matters here — parallelism 2 would otherwise run all three at once.
+
+Three more guards, since a good default isn't enough when a sentence is the input:
+
+- The confirmation **always** shows the directory, labelled `(last used — nobody chose)` when the model didn't pick one. That's the only place a wrong directory can be caught.
+- `ai.instructions` now says to always set it for `make`/`npm`/`cargo`/`git`, and to **ask** rather than fall back to a previous project's path.
+- The tool only remembers a directory the caller actually chose — otherwise one unspecified submission would silently become the default for every later one.
+
+---
+
+_**User (2026-07-27 09:23:14Z)**_
+
+我們 agent skills 的repo是不是還沒commit?
+
+---
+
+_**Agent (claude-opus-5 2026-07-27 09:23:42Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to check the current state of the skill changes I made in the agent-skills directory — I updated it twice with the shortcuts fix and the CI=true finding but never committed. They're asking if it's committed yet, which sounds like they want me to go ahead and commit it. Let me review the diff and push the changes.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 09:23:44Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check the agent-skills repo state
+
+`cd ~/Documents/Program/agent-skills && git status --short && echo "=== branch/remote" && git branch --show-current && git remote -v | head -2 && echo "=== ahead/behind" && git status -sb | head -1 && echo "=== recent commits" && git log --oneline -6`
+
+```text
+ M skills/local/raycast-extension-dev/SKILL.md
+ M skills/local/raycast-extension-dev/references/ui-patterns.md
+=== branch/remote
+main
+origin	https://github.com/daviddwlee84/agent-skills.git (fetch)
+origin	https://github.com/daviddwlee84/agent-skills.git (push)
+=== ahead/behind
+## main...origin/main
+=== recent commits
+de4b150 feat(raycast-extension-dev): new skill for building and shipping Raycast extensions
+dcf06be feat(ci): gate SKILL.md frontmatter parsing before publish
+00f35e3 fix(skills): quote descriptions that broke YAML frontmatter parsing
+9b662bc docs(skills): link reference files instead of naming them
+39d7eef feat(pueue-job-queue): document remote daemons; fix wait.py silent success
+86dd9ef feat(long-running-jobs): new skill for waiting on jobs that outlive a turn
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 09:24:03Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to verify the vendored copy in the extension repo matches the source before committing to avoid drift, and I should also check that the CI gate for SKILL.md frontmatter parsing still passes — though since I only edited body text, it should be fine.
+
+Looking for the CI check script and gate, then I'll commit with a conventional message. The user asked about committing the repo, and since it's a personal skills repo that's already in sync with origin and all prior commits are pushed, I'll commit and push together rather than leaving it in an ambiguous state — that matches the repo's workflow and their intent.
+
+Let me verify the gate passes first so I don't push something broken.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 09:24:03Z)**_
+
+Yes — I left it uncommitted last turn. Let me verify it against the repo's own gate first:
+
+_**Agent (claude-opus-5 2026-07-27 09:24:04Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Find the skills repo gate
+
+`cd ~/Documents/Program/agent-skills && ls .github/workflows/ 2>/dev/null && echo "=== gate" && cat .github/workflows/*.yml 2>/dev/null | grep -A 12 "jobs:" | head -30`
+
+```text
+docs.yml
+validate.yml
+=== gate
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+--
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pin the same YAML parser `npx skills` uses, so CI agrees with the CLI
+      # instead of with whatever yq the runner image happens to ship.
+      - name: Install the js yaml parser
+        run: npm install --no-save --no-package-lock yaml@2
+
+      - name: Lint SKILL.md frontmatter
+        run: NODE_PATH="$PWD/node_modules" ./scripts/lint-frontmatter.sh --parser node skills
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 09:25:06Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Run the frontmatter gate
+
+`cd ~/Documents/Program/agent-skills && (npm ls yaml >/dev/null 2>&1 || npm install --no-save --no-package-lock yaml@2 >/dev/null 2>&1); NODE_PATH="$PWD/node_modules" ./scripts/lint-frontmatter.sh --parser node skills 2>&1 | tail -8`
+
+```text
+ok    skills/vendor/product-planning/gstack-openclaw-office-hours/SKILL.md
+ok    skills/vendor/product-planning/gstack-openclaw-retro/SKILL.md
+ok    skills/vendor/skill-creator/SKILL.md
+ok    skills/vendor/streamlit-to-marimo/SKILL.md
+ok    skills/vendor/web-accessibility-audit/SKILL.md
+ok    skills/vendor/web-performance-audit/SKILL.md
+
+checked 63 SKILL.md (parser: node) — 0 failed, 0 warned
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 09:25:16Z)**_
+
+Gate green. Confirming the vendored copy hasn't drifted, then committing:
+
+_**Agent (claude-opus-5 2026-07-27 09:25:17Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check source against the vendored copy
+
+```bash
+S=~/Documents/Program/agent-skills/skills/local/raycast-extension-dev
+V=/Users/david/Documents/Program/Pueue-Raycast-Extension/.agents/skills/raycast-extension-dev
+for f in SKILL.md references/ui-patterns.md; do
+  if diff -q "$S/$f" "$V/$f" >/dev/null; then echo "same    $f"; else echo "DIFFERS $f"; fi
+done
+```
+
+```text
+same    SKILL.md
+same    references/ui-patterns.md
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 09:25:37Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit the skill updates
+
+```bash
+cd ~/Documents/Program/agent-skills && git add skills/local/raycast-extension-dev && git commit -q -F - <<'EOF'
+docs(raycast-extension-dev): record the shortcuts and CI checks nothing warns about
+
+Two traps found by building an extension, neither of which any tool reports.
+
+**Shortcuts.** `ray lint` fails on ⌘K and ⌘P, so those are safe by being
+enforced. But Raycast also injects a Debug section into every action panel while
+an extension is in development — ⌘R, ⇧⌘S, ⇧⌘D, ⇧⌘X, ⌘⌥D — and those pass lint,
+pass typecheck, and silently win over the extension's own binding. A detail-pane
+toggle on ⇧⌘D did nothing on the developer's machine and worked fine everywhere
+else, which is a hard thing to diagnose from a bug report.
+
+The reference now separates the three sets and gives the real key combinations
+behind every `Keyboard.Shortcut.Common.*`. Two are routinely guessed wrong:
+`Remove` is ⌃X, not ⌘⌫, and `Duplicate` is ⌘D, not ⇧⌘D. Both were wrong in a
+shipped README for months, because nothing checks documentation against
+bindings.
+
+**`ray lint` runs more checks under CI=true.** Locally five steps, in CI seven —
+`validate package-lock.json` and `validate other lock files` appear only there.
+The local gate is a subset of the remote one, which is backwards, and nothing
+announces the difference. The check that bites: every `resolved` URL must be
+registry.npmjs.org, so a global npm registry pointing at a mirror produces a
+lockfile the store rejects. Put CI=true in the lint recipe so they cannot
+diverge.
+EOF
+git log --oneline -2 && git status --short
+```
+
+```text
+26fe5b4 docs(raycast-extension-dev): record the shortcuts and CI checks nothing warns about
+de4b150 feat(raycast-extension-dev): new skill for building and shipping Raycast extensions
+?? node_modules/
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 09:25:53Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to clean up the untracked `node_modules/` directory I created for the linter since their CI will install it fresh anyway. It's showing as untracked rather than gitignored, so I should remove it before deciding whether to push this to the public repo.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 09:26:02Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Clean the temp install and push
+
+`cd ~/Documents/Program/agent-skills && rm -rf node_modules && git status --short && echo "(clean)" && git push origin main 2>&1 | tail -2`
+
+```text
+(clean)
+To https://github.com/daviddwlee84/agent-skills.git
+   de4b150..26fe5b4  main -> main
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 09:27:00Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check the skills repo CI
+
+`sleep 45; cd ~/Documents/Program/agent-skills && gh run list -L 2 2>&1`
+
+```text
+completed	success	docs(raycast-extension-dev): record the shortcuts and CI checks nothi…	Validate	main	push	30253933685	14s	2026-07-27T09:26:06Z
+completed	success	feat(raycast-extension-dev): new skill for building and shipping Rayc…	Docs	main	push	30217222940	49s	2026-07-26T19:36:57Z
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 09:27:14Z)**_
+
+Right, it wasn't — committed and pushed now as `26fe5b4`, and the repo's Validate workflow is green.
+
+Before committing I checked three things:
+
+- **Their frontmatter gate** — ran `lint-frontmatter.sh --parser node skills` the way CI does: 63 SKILL.md, 0 failed, 0 warned. I only touched body prose, but that repo gates on frontmatter parsing specifically, so it was worth confirming rather than assuming.
+- **Drift against the vendored copy** in `.agents/` — identical for both files, so the two won't disagree.
+- **Conventional Commits**, matching the repo's existing history (`docs(raycast-extension-dev): …`).
+
+One tidy-up: running the linter needed `yaml@2`, which left an untracked `node_modules/` — not gitignored there, so I removed it rather than leave it lying in your working tree.
+
+Both findings are now recorded in one place: the three separate shortcut sets (only ⌘K/⌘P are enforced; the dev-mode Debug bindings silently win and nothing catches them; and the `Common.*` keys that get guessed wrong), and `ray lint` running two extra lockfile checks only under `CI=true`.
+
+---
+
+_**User (2026-07-27 12:35:41Z)**_
+
+`running the linter needed yaml@2, which left an untracked node_modules/ — not gitignored there` -> 幫我補到該project中
+
+---
+
+_**Agent (claude-opus-5 2026-07-27 12:36:03Z)**_
+
+<think><details><summary>Thought Process</summary>
+I need to check what's currently in the `.gitignore` file for the agent-skills repo before adding `node_modules/`.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 12:36:05Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Check the skills repo gitignore
+
+`cd ~/Documents/Program/agent-skills && ls -a | head -20 && echo "=== .gitignore" && cat .gitignore 2>/dev/null || echo "(no .gitignore)"`
+
+```text
+=== .gitignore
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[codz]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py.cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+#   For a library or package, you might want to ignore these files since the code is
+#   intended to run in multiple environments; otherwise, check them in:
+# .python-version
+
+# pipenv
+#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
+#   However, in case of collaboration, if having platform-specific dependencies or dependencies
+#   having no cross-platform support, pipenv may install dependencies that don't work, or not
+#   install all needed dependencies.
+#Pipfile.lock
+
+# UV
+#   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
+#   This is especially recommended for binary packages to ensure reproducibility, and is more
+#   commonly ignored for libraries.
+#uv.lock
+
+# poetry
+#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
+#   This is especially recommended for binary packages to ensure reproducibility, and is more
+#   commonly ignored for libraries.
+#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
+#poetry.lock
+#poetry.toml
+
+# pdm
+#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
+#   pdm recommends including project-wide configuration in pdm.toml, but excluding .pdm-python.
+#   https://pdm-project.org/en/latest/usage/project/#working-with-version-control
+#pdm.lock
+#pdm.toml
+.pdm-python
+.pdm-build/
+
+# pixi
+#   Similar to Pipfile.lock, it is generally recommended to include pixi.lock in version control.
+#pixi.lock
+#   Pixi creates a virtual environment in the .pixi directory, just like venv module creates one
+#   in the .venv directory. It is recommended not to include this directory in version control.
+.pixi
+
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.envrc
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# PyCharm
+#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
+#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
+#  and can be added to the global gitignore or merged into this file.  For a more nuclear
+#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
+#.idea/
+
+# Abstra
+# Abstra is an AI-powered process automation framework.
+# Ignore directories containing user credentials, local state, and settings.
+# Learn more at https://abstra.io/docs
+.abstra/
+
+# Visual Studio Code
+#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
+#  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
+#  and can be added to the global gitignore or merged into this file. However, if you prefer, 
+#  you could uncomment the following to ignore the entire vscode folder
+# .vscode/
+
+# Ruff stuff:
+.ruff_cache/
+
+# PyPI configuration file
+.pypirc
+
+# Cursor
+#  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
+#  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
+#  refer to https://docs.cursor.com/context/ignore-files
+.cursorignore
+.cursorindexingignore
+
+# Marimo
+marimo/_static/
+marimo/_lsp/
+__marimo__/
+
+# Claude Code runtime state (settings.json + plans/ ARE committed; these
+# lock/state files are per-process and shouldn't be).
+.claude/scheduled_tasks.lock
+.claude/scheduled_tasks.json
+
+# Pueue test-fixture leftovers — earlier conftest.py had a bug where an
+# unset PUEUE_TEST_DIR resolved to repo root and let pueued drop its
+# daemon state (shared_secret, TLS certs) here. Even with the fix, keep
+# this guard so a regression can't slip secrets into a commit.
+/state/
+/config/pueue.yml
+
+# skill-creator eval workspace (throwaway; contains copyrighted fetched lyrics)
+skills/local/chordpro-workspace/
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 12:36:24Z)**_
+
+<think><details><summary>Thought Process</summary>
+The .gitignore follows a Python template but is missing Node dependencies entirely, even though the project uses npm for the validation workflow. I need to add a Node section with a comment explaining why it's necessary, keeping the same style as the rest of the file.
+
+I'll add `node_modules/` and `npm-debug.log*` to catch the typical npm noise, but skip `package-lock.json` since the CI explicitly avoids creating it and including it would be wrong for a repo that might add real Node dependencies later. I'll place this near the end with the other project-specific entries, then verify it works by creating `node_modules/` and confirming `git status` stays clean.
+</details></think>
+
+_**Agent (claude-opus-5 2026-07-27 12:36:24Z)**_
+
+No Node section at all — it's the Python template plus project-specific notes, yet CI itself installs an npm package. Adding it in the file's own style:
+
+_**Agent (claude-opus-5 2026-07-27 12:36:25Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Add the npm section to gitignore
+
+```bash
+cd ~/Documents/Program/agent-skills && python3 - <<'PY'
+p='.gitignore'
+s=open(p).read()
+old = '''# skill-creator eval workspace (throwaway; contains copyrighted fetched lyrics)
+skills/local/chordpro-workspace/'''
+new = '''# skill-creator eval workspace (throwaway; contains copyrighted fetched lyrics)
+skills/local/chordpro-workspace/
+
+# npm. This is a Python repo with one npm dependency: scripts/lint-frontmatter.sh
+# needs the same `yaml` parser `npx skills` uses, so running the CI gate locally
+#
+#     npm install --no-save --no-package-lock yaml@2
+#     NODE_PATH="$PWD/node_modules" ./scripts/lint-frontmatter.sh --parser node skills
+#
+# leaves a node_modules/ behind. The flags keep package.json and the lockfile out
+# of the way, but not this.
+node_modules/
+npm-debug.log*'''
+assert s.count(old)==1
+s=s.replace(old,new)
+open(p,'w').write(s)
+print('ok')
+PY
+tail -14 .gitignore
+```
+
+```text
+ok
+
+# skill-creator eval workspace (throwaway; contains copyrighted fetched lyrics)
+skills/local/chordpro-workspace/
+
+# npm. This is a Python repo with one npm dependency: scripts/lint-frontmatter.sh
+# needs the same `yaml` parser `npx skills` uses, so running the CI gate locally
+#
+#     npm install --no-save --no-package-lock yaml@2
+#     NODE_PATH="$PWD/node_modules" ./scripts/lint-frontmatter.sh --parser node skills
+#
+# leaves a node_modules/ behind. The flags keep package.json and the lockfile out
+# of the way, but not this.
+node_modules/
+npm-debug.log*
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 12:36:35Z)**_
+
+Now prove it actually works — reproduce the exact situation that caused it:
+
+_**Agent (claude-opus-5 2026-07-27 12:37:00Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Reproduce and verify the ignore
+
+`cd ~/Documents/Program/agent-skills && npm install --no-save --no-package-lock yaml@2 >/dev/null 2>&1 && echo "node_modules present: $([ -d node_modules ] && echo yes)" && echo "=== git status:" && git status --short && echo "--- (only .gitignore should appear)" && echo "=== and the gate still runs:" && NODE_PATH="$PWD/node_modules" ./scripts/lint-frontmatter.sh --parser node skills 2>&1 | tail -2`
+
+```text
+node_modules present: yes
+=== git status:
+ M .gitignore
+--- (only .gitignore should appear)
+=== and the gate still runs:
+
+checked 63 SKILL.md (parser: node) — 0 failed, 0 warned
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 12:37:18Z)**_
+
+<tool-use data-tool-type="shell" data-tool-name="Bash"><details>
+<summary>Tool use: **Bash**</summary>
+Commit and push the gitignore
+
+```bash
+cd ~/Documents/Program/agent-skills && git add .gitignore && git commit -q -F - <<'EOF'
+chore: ignore node_modules from the frontmatter linter
+
+This is a Python repo, so .gitignore is the Python template plus a few
+project-specific notes — with no npm section at all. But the validate workflow
+installs one npm package:
+
+    npm install --no-save --no-package-lock yaml@2
+
+pinned deliberately, so CI agrees with the parser `npx skills` uses rather than
+with whatever yq the runner image ships. Anyone reproducing the gate locally
+therefore ends up with an untracked node_modules/ in their working tree. The
+--no-save and --no-package-lock flags keep package.json and the lockfile out of
+the way; nothing was keeping this out.
+
+Verified by reinstalling and confirming `git status` stays clean.
+EOF
+git log --oneline -1 && git status --short && echo "(clean)" && git push origin main 2>&1 | tail -2
+```
+
+```text
+d869148 chore: ignore node_modules from the frontmatter linter
+(clean)
+To https://github.com/daviddwlee84/agent-skills.git
+   26fe5b4..d869148  main -> main
+Shell cwd was reset to /Users/david/Documents/Program/Pueue-Raycast-Extension
+```
+</details></tool-use>
+
+_**Agent (claude-opus-5 2026-07-27 12:37:32Z)**_
+
+Added and pushed as `d869148`.
+
+The gap was structural rather than an oversight: that `.gitignore` is GitHub's **Python** template plus a few project-specific notes, with no npm section anywhere — yet the repo does have exactly one npm dependency, because `validate.yml` pins `yaml@2` so CI agrees with the parser `npx skills` uses instead of the runner's yq. So anyone reproducing the gate locally gets an untracked `node_modules/`.
+
+I kept it to `node_modules/` and `npm-debug.log*`. Notably **not** `package.json` / `package-lock.json` — the workflow's `--no-save --no-package-lock` already keeps those from appearing, and ignoring them would be wrong if the repo ever gains real Node dependencies.
+
+Verified rather than assumed: reinstalled `yaml@2`, confirmed `git status` stayed clean, and re-ran the gate (63 SKILL.md, 0 failed). The comment records the two commands, so the next person who hits it knows where the directory came from.
