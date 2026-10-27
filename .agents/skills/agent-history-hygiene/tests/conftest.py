@@ -21,6 +21,69 @@ SCRIPTS_DIR = SKILL_ROOT / "scripts"
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 
 
+# --- detect-private-key-safe PEM builders ----------------------------------
+# pre-commit's `detect-private-key` greps its BLACKLIST as plain substrings and
+# honours NO allowlist mechanism -- not `<!-- gitleaks:allow -->`, not
+# .github/secret_scanning.yml. `npx skills add` materialises this whole skill
+# (tests included) into the consumer's repo at `.agents/skills/<name>/`, which
+# is inside their own hook's scan scope. So a literal `BEGIN <TYPE> PRIVATE
+# KEY` anywhere in a file we SHIP fails `git commit` in every downstream repo
+# that runs that hook -- with no marker they can add to the file to stop it.
+#
+# Tests therefore assemble the headers at runtime, the same split-literal trick
+# `assets/redact_secrets.py` already uses for its OpenVPN token. Enforced by
+# tests/test_shipped_file_hygiene.py. Do not inline these back into a literal.
+_PK = "PRIVATE" + " KEY"
+
+# The version digits are separate names, not inline literals: CPython folds
+# `"PuTTY-User-" + "Key-File-2"` at compile time, which would put the intact
+# BLACKLIST entry into tests/__pycache__/*.pyc even though the .py is clean.
+# Splitting at the digit works because the truncated prefixes are not
+# themselves BLACKLIST entries.
+_PUTTY_KEY_FILE_VERSION = 2
+_OPENVPN_STATIC_KEY_VERSION = 1
+
+#: PuTTY private-key header (BLACKLIST entry with no "PRIVATE KEY" text).
+PUTTY_HEADER = f"PuTTY-User-Key-File-{_PUTTY_KEY_FILE_VERSION}"
+#: OpenVPN static-key header (likewise).
+OPENVPN_HEADER = (
+    f"-----BEGIN OpenVPN Static key V{_OPENVPN_STATIC_KEY_VERSION}-----"
+)
+
+
+def pem_header(kind: str = "RSA") -> str:
+    """`-----BEGIN <kind> PRIVATE KEY-----`, assembled at runtime."""
+    return f"-----BEGIN {kind} {_PK}-----"
+
+
+def pem_footer(kind: str = "RSA") -> str:
+    """`-----END <kind> PRIVATE KEY-----`, assembled at runtime."""
+    return f"-----END {kind} {_PK}-----"
+
+
+def pem_block(kind: str = "RSA", body: str = "fake material") -> str:
+    """A full fake PEM block, header + body + footer, newline-terminated."""
+    return f"{pem_header(kind)}\n{body}\n{pem_footer(kind)}\n"
+
+
+#: Fixture placeholders expanded when a corpus fixture is staged, so the
+#: fixture file on disk carries no BLACKLIST substring either. Mirrors the
+#: existing `__SYNTHETIC_STRIPE_WEBHOOK_SECRET__` treatment.
+#: Length of the Stripe webhook secret body. A named constant on purpose:
+#: CPython constant-folds `"a" * 32` at compile time, which would bake a live
+#: `stripe-webhook-secret` shape into tests/__pycache__/*.pyc -- and a
+#: downstream user who runs pytest inside their repo would find gitleaks
+#: firing on a build artifact. A name defeats the fold.
+_WHSEC_BODY_LEN = 32
+
+FIXTURE_PLACEHOLDERS = {
+    "__SYNTHETIC_PEM_BEGIN__": pem_header(),
+    "__SYNTHETIC_PEM_END__": pem_footer(),
+    "__SYNTHETIC_PEM_HEADER_OPENSSH__": pem_header("OPENSSH"),
+    "__SYNTHETIC_STRIPE_WEBHOOK_SECRET__": "whsec_" + "a" * _WHSEC_BODY_LEN,
+}
+
+
 def _load_redact_secrets_module():
     """Import assets/redact_secrets.py as a module despite the shebang."""
     script_path = ASSETS_DIR / "redact_secrets.py"
@@ -85,6 +148,8 @@ def tmp_git_repo(tmp_path: Path, assets_dir: Path):
     subprocess.run(
         [
             "git",
+            "-c",
+            "core.hooksPath=/dev/null",
             "-c",
             "user.email=test@example.com",
             "-c",

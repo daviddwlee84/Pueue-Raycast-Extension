@@ -19,6 +19,8 @@ from pathlib import Path
 
 import pytest
 
+from conftest import FIXTURE_PLACEHOLDERS
+
 pytestmark = pytest.mark.skipif(
     shutil.which("gitleaks") is None,
     reason="gitleaks binary not on PATH",
@@ -26,9 +28,10 @@ pytestmark = pytest.mark.skipif(
 
 
 # Fixtures carry an inline `<!-- gitleaks:allow -->` marker so a repo-root or
-# downstream gitleaks scan skips them by default. Strip it before staging so the
-# secret bytes are byte-identical to the shape the rules expect and the
-# assertions below still fire. No-op for lines without the marker
+# downstream gitleaks scan skips them by default. Strip it before staging and
+# expand provider-scanner-sensitive placeholders so the secret bytes have the
+# exact shape the rules expect and the assertions below still fire. No-op for
+# lines without the marker
 # (clean.md / example_shapes.md), which must keep their must-not-fire behavior.
 _GITLEAKS_MARKER_RE = re.compile(r"[ \t]*<!--[ ]?gitleaks:allow[ ]?-->")
 
@@ -39,7 +42,17 @@ def _stage_fixture_at(repo: Path, fixture_path: Path, dest_rel: str) -> None:
     dest = repo / dest_rel
     dest.parent.mkdir(parents=True, exist_ok=True)
     text = fixture_path.read_text(encoding="utf-8")
+    for placeholder, value in FIXTURE_PLACEHOLDERS.items():
+        text = text.replace(placeholder, value)
     dest.write_text(_GITLEAKS_MARKER_RE.sub("", text), encoding="utf-8")
+    subprocess.run(["git", "add", "--", dest_rel], cwd=repo, check=True)
+
+
+def _stage_text_at(repo: Path, dest_rel: str, text: str) -> None:
+    """Write synthetic runtime-only content and stage it at one exact path."""
+    dest = repo / dest_rel
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(text, encoding="utf-8")
     subprocess.run(["git", "add", "--", dest_rel], cwd=repo, check=True)
 
 
@@ -125,6 +138,77 @@ class TestRealAnthropicFixture:
         findings = _run_gitleaks_staged(tmp_git_repo)
         rule_ids = {f["RuleID"] for f in findings}
         assert rule_ids & {"anthropic-api-key", "anthropic-api-key-strict"}
+
+
+class TestSentinelBesideLiveKey:
+    """A redaction sentinel must not shield a live key sharing its line.
+
+    Regression guard for the path-scoped allowlist. At `regexTarget = "line"`
+    the tolerated `[REDACTED:...]`/`REDACTED` text allowlisted the WHOLE line,
+    so a live credential printed beside a redacted one was silently accepted
+    inside every agent-artifact directory. `regexTarget = "match"` compares the
+    finding's own bytes instead, so only the inert placeholder is suppressed.
+    """
+
+    @pytest.mark.parametrize(
+        "dest",
+        [
+            ".specstory/history/2026-09-02_00-00-00Z-session.md",
+            ".claude/plans/mixed.md",
+        ],
+    )
+    def test_live_key_still_fires_next_to_a_sentinel(
+        self, tmp_git_repo, fixtures_dir: Path, dest: str
+    ):
+        _stage_fixture_at(
+            tmp_git_repo, fixtures_dir / "sentinel_beside_live_key.md", dest
+        )
+        findings = _run_gitleaks_staged(tmp_git_repo)
+        rule_ids = {f["RuleID"] for f in findings}
+        assert "openai-project-key" in rule_ids, (
+            f"A live key sharing a line with a [REDACTED:...] sentinel in {dest} "
+            "was allowlisted. The path-scoped allowlist must stay "
+            'regexTarget = "match"; at "line" scope the sentinel covers its '
+            "line-mates."
+        )
+
+
+class TestSourcegraphCommitOidAllowlist:
+    """A Sourcegraph keyword must not turn transcript Git OIDs into secrets."""
+
+    # High-entropy 40-hex, built at runtime so this shipped test file does not
+    # itself trip the upstream sourcegraph-access-token rule.
+    COMMIT_OID = "0123456789abcdef" * 2 + "01234567"
+
+    def test_bare_commit_oid_is_allowed_inside_agent_artifacts(self, tmp_git_repo):
+        _stage_text_at(
+            tmp_git_repo,
+            ".specstory/history/sourcegraph-scan.md",
+            f"# Session\n\nsourcegraph scanner output for commit {self.COMMIT_OID}\n",
+        )
+        findings = _run_gitleaks_staged(tmp_git_repo)
+        assert "sourcegraph-access-token" not in {f["RuleID"] for f in findings}
+
+    def test_bare_commit_oid_still_fires_outside_agent_artifacts(self, tmp_git_repo):
+        _stage_text_at(
+            tmp_git_repo,
+            "src/sourcegraph-scan.md",
+            f"sourcegraph candidate {self.COMMIT_OID}\n",
+        )
+        findings = _run_gitleaks_staged(tmp_git_repo)
+        assert "sourcegraph-access-token" in {f["RuleID"] for f in findings}
+
+    def test_real_sourcegraph_shape_still_fires_inside_agent_artifacts(
+        self, tmp_git_repo
+    ):
+        token = "sgp_" + self.COMMIT_OID
+        _stage_text_at(
+            tmp_git_repo,
+            ".claude/plans/sourcegraph-token.md",
+            f"sourcegraph token {token}\n",
+        )
+        findings = _run_gitleaks_staged(tmp_git_repo)
+        assert "sourcegraph-access-token" in {f["RuleID"] for f in findings}
 
 
 class TestExampleShapesFixture:
@@ -269,6 +353,26 @@ class TestLocalCredentials:
         assert not missing, (
             f"Local-credential leak in .specstory/history/ was incorrectly "
             f"allowlisted: {sorted(missing)}. Check condition=AND."
+        )
+
+
+class TestPrivateKeyFixture:
+    """The PEM fixture must fire once its `__SYNTHETIC_PEM_*__` placeholders
+    are expanded -- that expansion is what keeps the fixture ON DISK free of a
+    detect-private-key BLACKLIST substring, so this is the test that would
+    catch the placeholders silently failing to expand."""
+
+    def test_private_key_rule_fires(self, tmp_git_repo, fixtures_dir: Path):
+        _stage_fixture_at(
+            tmp_git_repo, fixtures_dir / "private_key.md", "src/leaks.md"
+        )
+        findings = _run_gitleaks_staged(tmp_git_repo)
+        assert findings, (
+            "private_key.md produced no findings -- the __SYNTHETIC_PEM_*__ "
+            "placeholders probably did not expand"
+        )
+        assert any("private-key" in f["RuleID"] for f in findings), (
+            f"Expected a private-key rule; got {sorted({f['RuleID'] for f in findings})}"
         )
 
 

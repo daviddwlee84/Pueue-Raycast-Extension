@@ -24,13 +24,34 @@ useDefault = true
     '''sk-[a-zA-Z0-9]{3,8}\.\.\.''',
   ]
 
-# Path-scoped allowlist: inside agent artifact dirs, tolerate explicit
-# example/demo markers without unlocking real leaks. Both the path AND a
-# regex must match, so a real `sk-ant-api03-<95 chars>AA` still fires.
+# Shared redaction sentinel: `[REDACTED:<rule-id>]` is what redact_secrets.py
+# writes AND what SpecStory >= 2.4.0 writes natively (its binary carries the
+# format string `[REDACTED:%s]`). Allowlisting it keeps the two layers
+# idempotent -- neither re-flags the other's output, so pre-commit stops
+# rewriting transcripts on every commit.
+#
+# regexTarget = "match" on purpose: at "line" scope a line holding both a
+# placeholder and a live key would be allowlisted wholesale. Matching the
+# finding's own bytes means only an inert placeholder is ever suppressed.
 [[allowlists]]
-  description = "Example/demo keys inside agent transcripts and plan files"
-  # Both path and regex must match, otherwise any .md under these dirs
-  # gets allowlisted wholesale (gitleaks v8 defaults to OR semantics).
+  description = "Shared [REDACTED:<rule-id>] sentinel (ours + SpecStory native)"
+  regexTarget = "match"
+  regexes = [
+    '''\[REDACTED:[A-Za-z0-9._-]+\]''',
+  ]
+
+# The upstream sourcegraph-access-token rule deliberately accepts any bare
+# 40-hex value when a `sourcegraph` keyword appears in the scanned fragment.
+# Agent transcripts routinely contain both the rule name (from scanner output)
+# and full Git commit OIDs, so archival history otherwise produces hundreds of
+# false positives. Scope the exception to this one rule AND artifact paths AND
+# the finding's exact Secret bytes. A real `sgp_...` token does not match the
+# bare-hex regex and still fires; the same 40-hex value outside artifacts also
+# still fires. Omitting regexTarget uses gitleaks' Secret target, which excludes
+# the rule's trailing delimiter from Match.
+[[allowlists]]
+  description = "Bare Git commit OIDs in agent artifacts are not Sourcegraph tokens"
+  targetRules = ["sourcegraph-access-token"]
   condition   = "AND"
   paths = [
     '''\.specstory/history/.*\.md$''',
@@ -40,7 +61,39 @@ useDefault = true
     '''\.specify/.*\.md$''',
     '''\.codex/.*\.md$''',
   ]
-  regexTarget = "line"
+  regexes = [
+    '''(?i)^[a-f0-9]{40}$''',
+  ]
+
+# Path-scoped allowlist: inside agent artifact dirs, tolerate explicit
+# example/demo markers without unlocking real leaks.
+#
+# regexTarget = "match" is load-bearing, NOT cosmetic. At "line" scope a single
+# line holding BOTH a placeholder and a live credential -- e.g. a partially
+# redacted env dump like
+#   ANTHROPIC_API_KEY=[REDACTED:anthropic-api-key] GITHUB_TOKEN=ghp_<live>
+# -- was allowlisted wholesale, so the live token never fired. Transcripts
+# produce exactly that shape whenever a tool echoes a multi-value line.
+# Matching the finding's OWN bytes means only an inert placeholder is ever
+# suppressed; a real credential beside one still fires.
+#
+# `condition = "AND"` stays required: it is what keeps `paths` from
+# allowlisting these directories wholesale (gitleaks v8 allowlists default to
+# OR between path and regex). Match-scoping and AND are both load-bearing --
+# AND keeps the directory from being blanket-trusted, match-scoping keeps a
+# tolerated placeholder from covering the rest of its line.
+[[allowlists]]
+  description = "Example/demo keys inside agent transcripts and plan files"
+  condition   = "AND"
+  paths = [
+    '''\.specstory/history/.*\.md$''',
+    '''\.claude/plans/.*\.md$''',
+    '''\.cursor/(plans|rules)/.*\.md$''',
+    '''\.opencode/plans/.*\.md$''',
+    '''\.specify/.*\.md$''',
+    '''\.codex/.*\.md$''',
+  ]
+  regexTarget = "match"
   regexes = [
     '''example[-_]?(key|token|secret)''',
     '''\bREDACTED\b''',
