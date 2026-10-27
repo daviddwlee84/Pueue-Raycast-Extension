@@ -1,111 +1,212 @@
 # Transcript & session discovery
 
-How `find-session.sh` locates "the session you are in right now" across
-the fragmented landscape of coding-agent artifacts.
+How `find-session.sh` proves that one SpecStory Markdown file and one Claude Code
+JSONL belong to the same session in the current git worktree.
 
-## The core problem
+## Runtime prerequisites
 
-Several agents can be running in parallel against the same repository —
-one Claude Code window, a background subagent, a Cursor window, plus
-VS Code with the SpecStory extension auto-saving. Each writes into its
-own directory using its own naming convention. There is no canonical
-"current session" pointer; the best you can do is pick the freshest
-artifact tied to `$PWD` and verify.
+- `iconv` is required for control-safe, valid UTF-8 TSV/JSON path output.
+- `python3` is required **only** when exact Claude JSONL validation is requested
+  (`--format claude|both`). SpecStory-only TSV and JSON remain Python-free.
+- Missing conditional dependencies return `status=dependency_error`, exit 6.
 
-## Claude Code session layout
+## Exact by default
 
-Claude Code stores each session as a JSON-lines file inside a
-project-scoped directory:
-
-```
-~/.claude/projects/<slug>/<session-uuid>.jsonl
-```
-
-The slug is the absolute working directory with `/` replaced by `-`, no
-other transformation. For `$PWD=/Volumes/Data/Program/Personal/agent-skills`
-the slug is `-Volumes-Data-Program-Personal-agent-skills` (leading dash
-included). The UUID is the Claude session ID surfaced in `/status`.
-
-Heuristic: **the newest `.jsonl` in that directory is the active
-session's transcript.** This breaks if you spawn a subagent that writes
-into the same project dir and then stop interacting with the parent — the
-subagent's JSONL wins by mtime. In practice the user knows which session
-they're working in; the heuristic is fine for the "commit my chat" flow.
-
-## SpecStory history layout
-
-SpecStory writes one Markdown file per conversation:
-
-```
-<repo-root>/.specstory/history/<timestamp>.md
-```
-
-The timestamp is UTC ISO-8601-ish (e.g. `2026-04-24_05-05-10Z.md`). The
-VS Code extension auto-saves continuously (controlled by
-`specstory.autoSave`) so the file grows during the conversation. The CLI
-(`specstory run claude`, `specstory sync claude -s <uuid>`) emits a new
-file per session explicitly.
-
-Heuristic: **the newest `.md` in `.specstory/history/` is the active
-transcript.** Same caveat as Claude — parallel sessions produce multiple
-fresh files; mtime wins.
-
-## `find-session.sh` output shape
-
-TSV by default (two columns per line, tab-separated):
-
-```
-specstory_path      <abs path or empty>
-claude_session_uuid <uuid or empty>
-claude_jsonl_path   <abs path or empty>
-```
-
-`--json` emits a single-line JSON object. The script NEVER fails (always
-exits 0) so agents can pipe it into downstream commands without
-`set -e` explosions when a session isn't present.
-
-## When the heuristic breaks
-
-1. **Multiple concurrent agents in the same repo.** If you care which is
-   "yours", open the session picker in your IDE (Claude Code's `/status`;
-   SpecStory's session list) and grep for the UUID directly.
-2. **Subagent writes a newer file than the parent.** After a long
-   subagent run, the parent session's JSONL may look stale. The
-   `--format=specstory` and `--format=claude` flags let you isolate one
-   dimension.
-3. **Repository renamed on disk.** Claude's slug is frozen at session
-   start — if you `mv` the repo mid-session, the slug stops matching
-   `$PWD`. Restart the agent to get a fresh session/slug pair.
-4. **Worktrees.** `git worktree` directories have their own `$PWD` and
-   thus their own slug. SpecStory stores per-worktree history too (it
-   keys off `.specstory/history/` inside each worktree root).
-
-## SpecStory CLI integration (optional)
-
-If the user runs `specstory` directly:
+There is no reliable implicit "current session" pointer. Multiple sessions can
+write under one checkout, and branch switches do not move those files. Therefore
+`find-session.sh` requires at least one exact selector:
 
 ```bash
-# Start a wrapped Claude Code session that auto-logs into .specstory/history/
-specstory run claude
+# Canonical lowercase UUID from Claude Code /status
+bash scripts/find-session.sh \
+  --session-id 01234567-89ab-4cde-8fab-0123456789ab
 
-# Sync a specific Claude session's JSONL into SpecStory's Markdown format
-specstory sync claude -s <uuid>
+# Explicit rendered alias; relative paths resolve from the git root
+bash scripts/find-session.sh \
+  --specstory-path '.specstory/history/2026-08-28_08-00-00Z.md'
 
-# List Claude sessions SpecStory knows about
-specstory list claude
+# Strongest form: both selectors must agree
+bash scripts/find-session.sh \
+  --session-id 01234567-89ab-4cde-8fab-0123456789ab \
+  --specstory-path '.specstory/history/2026-08-28_08-00-00Z.md'
 ```
 
-When the VS Code extension is the source of truth (most common), the CLI
-commands are unnecessary — the extension already wrote the file. Only
-use `specstory sync` when you want to force-refresh a transcript for a
-session whose files haven't auto-saved.
+Empty `--flag=` values, uppercase/noncanonical UUIDs, and exact selectors mixed
+with `--newest` are argument errors. Invalid explicit selector values are never
+echoed into stdout, stderr, or candidate lists.
+
+`--newest` is an explicit compatibility heuristic. It independently picks the
+newest SpecStory Markdown and root-slug Claude JSONL by mtime and reports
+`confidence=heuristic`; it does not prove that the files belong together. Never
+use it for exact staging or hooks.
+
+## Git-root anchoring and path safety
+
+Discovery starts with `git rev-parse --show-toplevel`. Calling from a nested
+subdirectory is equivalent to calling from the worktree root, and relative
+`--specstory-path` values are interpreted from that root.
+
+An exact rendered path must be a nonsymlink regular Markdown direct child of the
+canonical in-repository `.specstory/history/`. A symlinked `.specstory` /
+`history` root, final-component symlink, nested file, outside path, control-byte
+path, or non-UTF-8 path fails closed. Only **discovered, already-valid ambiguity
+matches** appear as candidates; an invalid explicit path is never reflected.
+
+## Claude Code JSONL identity proof
+
+Claude Code normally stores raw sessions under:
+
+```
+~/.claude/projects/<launch-directory-slug>/<session-uuid>.jsonl
+```
+
+The slug replaces every non-alphanumeric character in the launch path with `-`.
+A session launched from `repo/apps/service` therefore has a different store from
+one launched at `repo/`, even though both belong to the same worktree.
+
+Exact mode does not assume the root-derived slug. It searches project stores for
+the exact lowercase `<uuid>.jsonl` filename, rejects final symlinks, then parses
+every record. A candidate proves identity only when:
+
+- every JSONL record is valid UTF-8 JSON object data;
+- `sessionId` exactly equals the selected UUID; and
+- at least one record's `cwd`, canonicalized with
+  `git -C <cwd> rev-parse --show-toplevel`, equals the current worktree root.
+
+Malformed interior, complete, or final records all fail closed—even an
+unterminated record that an active writer might later finish. Quiesce the writer
+and retry; the resolver does not guess whether more bytes could repair JSON.
+If one session file contains matching records whose `cwd` values resolve to two
+different git roots, it is a mismatch rather than proof for either worktree.
+Multiple valid JSONL candidates for one UUID/worktree are ambiguous.
+
+## SpecStory v2.1 rendered prologue
+
+SpecStory 2.10 emits Markdown v2.1 with this fixed structure:
+
+```markdown
+<!-- Generated by SpecStory, Markdown v2.1.0 -->
+
+# 2026-08-28 08:00:00Z
+
+<!-- Claude Code Session 01234567-89ab-4cde-8fab-0123456789ab (2026-08-28 08:00:00Z) -->
+```
+
+With `--local-time-zone`, the title/marker timestamp may carry an offset such as
+`-0700`; the parser validates the nonempty title position, not UTC-only text. It
+reads a fixed 8 KiB byte prefix, checks the real line-1 generator and exact
+line-5 lowercase UUID marker, and requires exactly one marker in the first eight
+prologue lines. It never reads an unbounded newline-free body line, and a marker
+copied into the conversation body cannot impersonate metadata.
+
+One UUID can have multiple rendered aliases. `--session-id` then returns
+`status=ambiguous`, reports only those valid direct-child candidates, exits 4,
+and requires `--specstory-path`.
+
+Render one known raw session explicitly with:
+
+```bash
+specstory sync claude -s 01234567-89ab-4cde-8fab-0123456789ab
+```
+
+## SpecStory 2.10 scoping: checkout path, not branch
+
+Verified behavior in SpecStory 2.10:
+
+- Rendered output discovery is scoped to the checkout path containing
+  `.specstory/history/`, not the branch name.
+- Raw Claude discovery is also path-scoped; exact mode canonicalizes embedded
+  launch-directory `cwd` values back to the worktree root.
+- Switching branches in one checkout exposes the same session pool.
+- Separate worktrees have separate roots and rendered history directories.
+- Prefer **worktree first, wrapper/session second**, with one wrapper/session per
+  change stream.
+- `EnterWorktree` does not rebind an already-running SpecStory watcher; restart
+  the wrapper in the target worktree.
+
+## Structured output and exits
+
+TSV starts with:
+
+```text
+status	resolved
+confidence	exact
+source	session-id+specstory-path
+specstory_path	/absolute/worktree/.specstory/history/session.md
+claude_session_uuid	01234567-89ab-4cde-8fab-0123456789ab
+claude_jsonl_path	/absolute/home/.claude/projects/<slug>/<uuid>.jsonl
+```
+
+`--json` emits the same fields plus `candidates`. Both formats reject C0 control
+bytes and invalid UTF-8 before rendering; JSON additionally escapes quotes and
+backslashes. Diagnostics go to stderr; `--quiet` suppresses diagnostics without
+hiding structured stdout.
+
+| Exit | Meaning |
+|---:|---|
+| 0 | Requested exact artifacts resolved, or explicit heuristic succeeded |
+| 1 | Invalid/missing/empty arguments |
+| 2 | Not inside a git repository |
+| 3 | Requested artifact not found |
+| 4 | Multiple valid exact candidates |
+| 5 | Path, prologue, JSONL, symlink, or identity mismatch |
+| 6 | Required runtime dependency missing |
+
+## Exact post-session handoff
+
+The default lifecycle does **not** stage a live transcript. While the recorder
+runs, stage only feature paths. After explicit user commit authorization,
+`queue-agent-commit.sh` records the exact UUID, direct-child SpecStory path, and
+exactly one of `--plan PATH` / `--no-plan`; it neither reads nor stages the
+artifact. Read
+[`post-session-finalization.md`](./post-session-finalization.md) before queueing.
+
+After child exit 0 and one exact sync, the finalizer repeats discovery with both
+UUID and path, fingerprints the transcript around validation, rejects an open
+writer when `lsof` can prove one, and then calls
+`stage-agent-artifacts.sh --session-only` with the queued plan policy.
+
+Before adding artifacts, staging acquires the real per-worktree index lock,
+copies the current index to an alternate index, rejects unmerged candidates,
+proves the queued staged feature tree, batch-checks ignores/addability, and runs
+one exact `git add` against the alternate index. With `--sanitize-index`, it:
+
+1. captures exact stage-0 modes/object ids and the pre-sanitize tree;
+2. runs `redact_secrets.py --fix-index --files ...` only in that explicit
+   noncanonical index;
+3. runs `--check-index` as a clean postcondition; and
+4. returns exit 10 when bytes changed so rotation can occur before commit.
+
+With `--materialize-sanitized`, the script clean-hashes each live artifact
+through Git's filters and requires it to match the pre-sanitize staged blob
+before `checkout-index` writes the exact sanitized version. A changed live
+generation aborts before worktree materialization or real-index publication.
+The alternate index is atomically published only after success.
+
+`--check-staged` is validation-only: it never acquires or mutates an index. It
+requires the selected feature and every selected exact artifact to have a real
+diff in the effective `GIT_INDEX_FILE`. The generated commit hook uses this mode,
+so normal and temporary `commit -a`/`--only` indexes are validated as-is.
+
+The no-selector invocation remains broad branch-wide compatibility mode. It
+classifies one NUL porcelain snapshot, including unstaged deletions and paired
+rename/copy records, and never treats an origin record or code conflict as a
+feature diff. Broad mode is not valid for post-session finalization.
+
+## History boundary
+
+Discovery/staging proof binds one checkout, attached branch, parent, and index
+tree. While its recorder is active—and until the finalizer proves the ordinary
+commit—do not commit, rebase/update-base, integrate, or retire that worktree.
+Actual rebase state is `rebase-merge` or `rebase-apply`; a stale `REBASE_HEAD`
+file alone is not an active rebase.
 
 ## Cross-reference
 
+- [`post-session-finalization.md`](./post-session-finalization.md) — lifecycle,
+  states, authorization, recovery, and rebase boundary.
 - [`pre-commit-redaction-stack.md`](./pre-commit-redaction-stack.md) —
-  how the located session files get scanned / redacted at commit time.
-- [`../scripts/find-session.sh`](../scripts/find-session.sh) — the
-  script implementing these heuristics.
-- [`../scripts/stage-agent-artifacts.sh`](../scripts/stage-agent-artifacts.sh)
-  — the caller that uses `find-session.sh --format=specstory` to locate
-  the current transcript for `--session-only` staging.
+  alternate-index sanitation and validation-only hooks.
+- [`../scripts/find-session.sh`](../scripts/find-session.sh) — exact resolver.
+- [`../scripts/stage-agent-artifacts.sh`](../scripts/stage-agent-artifacts.sh) —
+  locked alternate-index transaction.

@@ -1,45 +1,64 @@
 # Pre-commit hooks for a project bootstrapped by agent-history-hygiene.
 #
-# Installed by `bootstrap-project.sh`. The redact-agent-secrets hook is a
-# PINNED REMOTE hook provided by the agent-skills repo -- fixes propagate with
-# `pre-commit autoupdate` (bumps the `rev:` below), so there is no vendored
-# scripts/redact_secrets.py to drift out of date.
+# Pre-commit validates staged agent artifacts and never rewrites the index or
+# working tree. The post-session finalizer performs sanctioned redaction only
+# after the transcript recorder has exited.
+#
+# The checker is pinned to the immutable published ahh-v2.0.1 release. Update
+# the pin deliberately when a later compatible release is approved; do not run
+# broad pre-commit autoupdate here.
 #
 # artifact-dirs.txt still feeds the gitleaks allowlist (.gitleaks.toml) and
-# stage-agent-artifacts.sh; the redact hook's own `files:` default lives in the
-# hook repo's .pre-commit-hooks.yaml (override here only if you must).
+# stage-agent-artifacts.sh. The exported checker owns its staged-index scope;
+# do not add consumer `files:` or `exclude:` gates here.
 #
 # See https://pre-commit.com
 
 repos:
-  # Auto-redact leaked secrets in agent artifacts BEFORE gitleaks runs.
-  # If a file is rewritten pre-commit surfaces "files were modified by this
-  # hook" and you `git add` + recommit -- same UX as end-of-file-fixer.
+  # Validation-only staged-index check. Redaction is the post-session
+  # finalizer's responsibility after the recorder is quiescent.
   - repo: https://github.com/daviddwlee84/agent-skills
-    rev: ahh-v1.1.0
+    rev: ahh-v2.0.1
     hooks:
-      - id: redact-agent-secrets
-        # Override the default artifact-dir scope only if needed, e.g.:
-        # files: ^(\.specstory/history|\.claude/plans|\.cursor/plans|\.cursor/rules|\.opencode/plans|\.specify|\.codex)/.*\.md$
+      - id: check-agent-artifact-secrets
+        # The exported hook always runs and scans the complete effective index.
 
   # Gitleaks -- block commit when unallowlisted secrets are detected.
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.22.1
+    rev: v8.30.1
     hooks:
       # Prefer system-installed gitleaks to avoid Go toolchain build issues.
       - id: gitleaks-system
         pass_filenames: false
 
-  # Standard pre-commit hygiene. Feel free to trim per project needs.
+  # Standard pre-commit hygiene. Generic mutators must not rewrite archival
+  # transcripts, plans, rules, or installed skill trees. Detection hooks above
+  # intentionally retain full coverage of those roots.
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
       - id: detect-private-key
+        # NOTE: this hook honours no allowlist mechanism -- not
+        # `<!-- gitleaks:allow -->`, not .github/secret_scanning.yml. It greps
+        # its BLACKLIST (`BEGIN <TYPE> PRIVATE KEY`, `PuTTY-User-Key-File-N`,
+        # `BEGIN OpenVPN Static key V<N>`) as plain byte substrings, and it scans
+        # everything you stage -- including skills installed under
+        # `.agents/skills/` or `.claude/skills/`.
+        #
+        # agent-history-hygiene ships clean: its test suite builds those headers
+        # at runtime, so nothing it installs trips this hook. If you see
+        #   Private key found: .agents/skills/agent-history-hygiene/tests/...
+        # you are on a pre-2026-08-28 copy -- run `npx skills@latest update`
+        # rather than adding an exclude. As a stopgap only, uncomment:
+        # exclude: (^|/)agent-history-hygiene/tests/
       - id: check-added-large-files
         args: ['--maxkb=2048']
+        # Session histories intentionally exceed ordinary source-file limits.
+        # Keep every other agent root, plan, and installed skill subject to this gate.
+        exclude: '^\.specstory/history(?:/|$)'
       - id: check-merge-conflict
       - id: end-of-file-fixer
-        exclude: ^\.specstory/
+        exclude: '^(?:\.agents|\.claude|\.codex|\.cursor|\.opencode|\.specify|\.specstory)(?:/|$)'
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
-        exclude: ^\.specstory/
+        exclude: '^(?:\.agents|\.claude|\.codex|\.cursor|\.opencode|\.specify|\.specstory)(?:/|$)'

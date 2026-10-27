@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# scan-staged.sh — run gitleaks on the current staged diff with
-# agent-friendly exit codes.
+# scan-staged.sh — run gitleaks on the effective staged index with
+# agent-friendly exit codes and secret-safe output.
 #
 # Bash 3.2 compatible (stock macOS).
 
@@ -10,54 +10,84 @@ usage() {
   cat <<'EOF'
 Usage: scan-staged.sh [OPTIONS]
 
-Scan the staged diff for secrets using `gitleaks git --staged`. Intended
-as the "last line of defense" wrapper agents call before `git commit` so
-they can branch on structured exit codes.
+Check newly staged secret reachability with `gitleaks git --staged`. The
+inherited GIT_INDEX_FILE is honored, including an existing alternate-index
+transaction. Modified files are diff-scanned with commit-scoped config and
+.gitleaksignore semantics; unchanged parent lines and history are not re-audited.
+A selected new/untracked file is scanned as a full staged addition.
 
 Options:
-  --redact           Pass --redact to gitleaks (default: off; findings
-                     print the literal secret for debugging).
-  --no-redact        Explicit opt-out of --redact (overrides --redact).
+  --redact           Mask secret fields in gitleaks' report (default). This
+                     changes scanner output only; it never edits files or the
+                     Git index.
+  --no-redact        Disable gitleaks output masking. The wrapper still never
+                     emits Secret or Match fields.
   --config PATH      Path to .gitleaks.toml (default: repo root if present).
-  --verbose          Print gitleaks' own output to stderr.
+  --verbose          Print bounded wrapper progress; scanner output remains
+                     suppressed because it may contain secret material.
   --help, -h         Show this help and exit.
 
 Output (stdout):
-  - If clean: no output.
-  - If leaks found: one JSON object per line with the finding details.
+  - If no newly staged findings: no output. This is not a full-index/history
+    clean guarantee; pre-existing secrets require remediation/history audit.
+  - If findings are found: one secret-free JSON object per finding.
 
 Exit codes:
-  0   clean — no secrets found
-  10  leaks found (and redacted if --redact was passed)
-  20  leaks found, not redacted (caller must rotate + re-stage)
+  0   no newly staged gitleaks findings
+  10  leaks found; gitleaks output masking was enabled (default)
+  20  leaks found; gitleaks output masking was explicitly disabled
   30  gitleaks binary not installed
-  40  gitleaks error (bad config, unreadable repo, etc.)
+  40  gitleaks execution/report error (including malformed JSON)
   1   invalid arguments
   2   not inside a git repo
 EOF
 }
 
-log()  { printf '%s\n' "$*" >&2; }
-die()  { printf 'error: %s\n' "$*" >&2; exit "${2:-1}"; }
+log() { printf '%s\n' "$*" >&2; }
+die() { printf 'error: %s\n' "$1" >&2; exit "${2:-1}"; }
 
-REDACT=0
+REDACT=1
 CONFIG=""
 VERBOSE=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --redact)     REDACT=1; shift ;;
-    --no-redact)  REDACT=0; shift ;;
-    --config)     CONFIG="${2:-}"; shift 2 ;;
-    --config=*)   CONFIG="${1#--config=}"; shift ;;
-    --verbose)    VERBOSE=1; shift ;;
-    --help|-h)    usage; exit 0 ;;
-    -*)           die "unknown flag: $1 (try --help)" 1 ;;
-    *)            die "unexpected positional arg: $1 (try --help)" 1 ;;
+    --redact)
+      REDACT=1
+      shift
+      ;;
+    --no-redact)
+      REDACT=0
+      shift
+      ;;
+    --config)
+      [ $# -ge 2 ] || die "--config requires a path" 1
+      [ -n "$2" ] || die "--config requires a non-empty path" 1
+      CONFIG="$2"
+      shift 2
+      ;;
+    --config=*)
+      CONFIG="${1#--config=}"
+      [ -n "$CONFIG" ] || die "--config requires a non-empty path" 1
+      shift
+      ;;
+    --verbose)
+      VERBOSE=1
+      shift
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    -*)
+      die "unknown flag (try --help)" 1
+      ;;
+    *)
+      die "unexpected positional argument (try --help)" 1
+      ;;
   esac
 done
 
-# Check prerequisites.
 if ! command -v gitleaks >/dev/null 2>&1; then
   log "gitleaks not installed. Install hints:"
   log "  macOS:   brew install gitleaks"
@@ -65,21 +95,45 @@ if ! command -v gitleaks >/dev/null 2>&1; then
   exit 30
 fi
 
-if ! git rev-parse --show-toplevel >/dev/null 2>&1; then
+if ! repo_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
   die "not inside a git repo" 2
 fi
-cd "$(git rev-parse --show-toplevel)"
 
-# Auto-discover config if not specified.
+# A relative alternate-index path is relative to the caller's directory. Make
+# it absolute before changing to the repository root; an absolute inherited
+# path (the stage-agent-artifacts transaction) passes through byte-for-byte.
+if [ -n "${GIT_INDEX_FILE:-}" ]; then
+  case "$GIT_INDEX_FILE" in
+    /*) ;;
+    *) GIT_INDEX_FILE="$(pwd -P)/$GIT_INDEX_FILE"; export GIT_INDEX_FILE ;;
+  esac
+fi
+cd "$repo_root"
+
 if [ -z "$CONFIG" ] && [ -f ".gitleaks.toml" ]; then
   CONFIG=".gitleaks.toml"
 fi
 
-report_path="$(mktemp -t gitleaks-report.XXXXXX.json)"
-trap 'rm -f "$report_path"' EXIT
+report_path="$(mktemp "${TMPDIR:-/tmp}/gitleaks-report.XXXXXX")" || \
+  die "could not create a private report file" 40
+safe_path="$(mktemp "${TMPDIR:-/tmp}/gitleaks-safe.XXXXXX")" || {
+  rm -f "$report_path"
+  die "could not create a private output file" 40
+}
+cleanup_private_files() {
+  rm -f "$report_path" "$safe_path"
+}
+exit_for_signal() {
+  local signal_number="$1"
+  trap - EXIT HUP INT TERM
+  cleanup_private_files
+  exit $((128 + signal_number))
+}
+trap 'cleanup_private_files' EXIT
+trap 'exit_for_signal 1' HUP
+trap 'exit_for_signal 2' INT
+trap 'exit_for_signal 15' TERM
 
-# Assemble the command. Post v8.19.0 `gitleaks git --staged` replaces the
-# deprecated `gitleaks protect --staged`.
 cmd=(gitleaks git --staged
      --report-format json
      --report-path "$report_path"
@@ -87,89 +141,109 @@ cmd=(gitleaks git --staged
 [ -n "$CONFIG" ] && cmd+=(--config "$CONFIG")
 [ "$REDACT" = "1" ] && cmd+=(--redact)
 
-# Capture gitleaks' own exit code — with `--exit-code 0` it returns 0
-# whether leaks are found or not, so a non-zero exit means the tool itself
-# failed (config error, unreadable repo, etc.).
-stderr_capture="$(mktemp -t gitleaks-stderr.XXXXXX)"
-trap 'rm -f "$report_path" "$stderr_capture"' EXIT
+[ "$VERBOSE" = "1" ] && \
+  log "Running staged-diff gitleaks gate; scanner stdout/stderr are suppressed."
 
 gl_rc=0
-if [ "$VERBOSE" = "1" ]; then
-  "${cmd[@]}" >&2 2>>"$stderr_capture" || gl_rc=$?
-else
-  "${cmd[@]}" >/dev/null 2>"$stderr_capture" || gl_rc=$?
-fi
-
+"${cmd[@]}" >/dev/null 2>/dev/null || gl_rc=$?
 if [ "$gl_rc" -ne 0 ]; then
-  log "gitleaks failed to run (exit $gl_rc). Tail of its stderr:"
-  tail -n 20 "$stderr_capture" >&2 || true
+  log "gitleaks failed to run (exit $gl_rc); scanner diagnostics suppressed."
   exit 40
 fi
 
-# Gitleaks writes an empty file when truly clean, or `[]` when the report
-# format is JSON and there are zero findings. Normalize both to "clean".
+# Gitleaks may leave a zero-byte file when clean. Every non-empty report must
+# be validated as a JSON list before anything is emitted.
 if [ ! -s "$report_path" ]; then
   exit 0
 fi
-
-finding_count=0
-if command -v python3 >/dev/null 2>&1; then
-  finding_count=$(python3 - "$report_path" <<'PY'
-import json, sys
-try:
-    with open(sys.argv[1], encoding="utf-8") as f:
-        data = json.load(f)
-except (json.JSONDecodeError, OSError):
-    print(0)
-    sys.exit(0)
-print(len(data) if isinstance(data, list) else 0)
-PY
-)
-else
-  # Fallback: grep for a non-empty array. `[]` → 0, anything else → non-zero.
-  case "$(tr -d '[:space:]' < "$report_path")" in
-    ""|"[]") finding_count=0 ;;
-    *)        finding_count=1 ;;
-  esac
+if ! command -v python3 >/dev/null 2>&1; then
+  log "python3 is required to validate the gitleaks JSON report."
+  exit 40
 fi
 
-if [ "$finding_count" -eq 0 ]; then
+json_rc=0
+python3 - "$report_path" "$safe_path" <<'PY' >/dev/null 2>/dev/null || json_rc=$?
+import json
+import os
+import re
+import sys
+
+MAX_REPORT_BYTES = 16 * 1024 * 1024
+report_path, safe_path = sys.argv[1:]
+
+try:
+    if os.path.getsize(report_path) > MAX_REPORT_BYTES:
+        raise ValueError("oversized")
+    with open(report_path, "rb") as source:
+        raw = source.read()
+    data = json.loads(raw.decode("utf-8"))
+except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+    raise SystemExit(3)
+
+if not isinstance(data, list) or any(not isinstance(item, dict) for item in data):
+    raise SystemExit(3)
+
+safe_findings = []
+for finding in data:
+    path = finding.get("File")
+    if not isinstance(path, str) or not path or len(path) > 4096:
+        raise SystemExit(3)
+    if path.startswith("/") or path.endswith("/") or "\x00" in path:
+        raise SystemExit(3)
+    if any(ord(char) < 32 or ord(char) == 127 for char in path):
+        raise SystemExit(3)
+    components = path.split("/")
+    if any(component in ("", ".", "..") for component in components):
+        raise SystemExit(3)
+
+    rule_id = finding.get("RuleID")
+    if not isinstance(rule_id, str) or re.fullmatch(
+        r"[A-Za-z0-9._-]{1,80}", rule_id
+    ) is None:
+        rule_id = "unknown"
+
+    line = finding.get("StartLine")
+    if isinstance(line, bool) or not isinstance(line, int) or not (0 < line < 2**31):
+        line = None
+
+    commit = finding.get("Commit") or "STAGED"
+    if not isinstance(commit, str) or re.fullmatch(
+        r"(?:STAGED|[0-9A-Fa-f]{7,64})", commit
+    ) is None:
+        commit = "STAGED"
+
+    safe_findings.append(
+        {"rule_id": rule_id, "file": path, "line": line, "commit": commit}
+    )
+
+try:
+    with open(safe_path, "w", encoding="utf-8", newline="\n") as target:
+        for finding in safe_findings:
+            target.write(json.dumps(finding, ensure_ascii=True, separators=(",", ":")))
+            target.write("\n")
+except OSError:
+    raise SystemExit(3)
+PY
+
+if [ "$json_rc" -ne 0 ]; then
+  log "gitleaks returned malformed or unsafe non-list JSON."
+  exit 40
+fi
+
+if [ ! -s "$safe_path" ]; then
   exit 0
 fi
 
-# Re-emit each finding as its own JSON object (one per line) for ergonomic
-# agent consumption. Findings file is a JSON *array*; slice it into lines
-# using python3 — avoid adding a jq dependency.
-if command -v python3 >/dev/null 2>&1; then
-  python3 - "$report_path" <<'PY'
-import json, sys
-with open(sys.argv[1], encoding="utf-8") as f:
-    data = json.load(f)
-for finding in data:
-    # Keep only the most useful fields; caller can re-open the raw report.
-    slim = {
-        "rule_id": finding.get("RuleID"),
-        "file": finding.get("File"),
-        "line": finding.get("StartLine"),
-        "commit": finding.get("Commit") or "STAGED",
-        "match": finding.get("Match"),
-    }
-    print(json.dumps(slim, ensure_ascii=False))
-PY
-else
-  # Fallback: dump the raw array.
-  cat "$report_path"
-fi
+while IFS= read -r finding || [ -n "$finding" ]; do
+  printf '%s\n' "$finding"
+done < "$safe_path"
 
 if [ "$REDACT" = "1" ]; then
-  log "gitleaks found leaks AND --redact was passed."
-  log "  NOTE: gitleaks --redact only masks the CLI output, it does NOT"
-  log "        rewrite files. Use redact_secrets.py --fix (or the pre-commit"
-  log "        redact-agent-secrets hook) to actually scrub the artifacts."
+  log "gitleaks found leaks; scanner output masking was enabled."
+  log "NOTE: --redact masks output only; it never changes files or the Git index."
   exit 10
-else
-  log "gitleaks found leaks. See JSON findings on stdout."
-  log "Next: rotate the secret at the provider, then run redact_secrets.py --fix,"
-  log "      then re-stage and re-run this check. DO NOT \`git push --force\`."
-  exit 20
 fi
+
+log "gitleaks found leaks; output masking was explicitly disabled."
+log "The wrapper still omitted Secret and Match fields from public output."
+exit 20
